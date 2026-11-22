@@ -360,6 +360,7 @@ func refuseRemappedInputs(ctx context.Context, client ShellyClient, config *Devi
 //
 // A cover write that changes invert_directions owes a restart whether or not the answer says so:
 // the Cover reference states that changing it requires a reboot (reversesCover, from the live read).
+// That is known before the request, so it is recorded before it: a lost answer must not lose it.
 func (a *ConfigApplier) applyGen2Sections(ctx context.Context, setter Gen2ConfigClient, apiConfig map[string]interface{}, result *ApplyResult, reversesCover bool) error {
 	// The MQTT and Wi-Fi passwords stay out of every error, log line and failure, whichever section fails.
 	var secret string
@@ -375,6 +376,9 @@ func (a *ConfigApplier) applyGen2Sections(ctx context.Context, setter Gen2Config
 	for _, section := range gen2WritesOf(apiConfig) {
 		leaves := gen2Leaves(section.key, section.body)
 
+		if reversesCover && section.key == gen2CoverKey {
+			a.markGen2RestartOwed(section.method, "a changed motor direction needs a restart", result)
+		}
 		restart, err := setter.CallConfigSetter(ctx, section.method, section.params)
 		if err != nil {
 			if secret != "" {
@@ -420,8 +424,6 @@ func (a *ConfigApplier) applyGen2Sections(ctx context.Context, setter Gen2Config
 
 		if restart {
 			a.markGen2RestartOwed(section.method, section.method+" asked for a restart", result)
-		} else if reversesCover && section.key == gen2CoverKey {
-			a.markGen2RestartOwed(section.method, "a changed motor direction needs a restart", result)
 		}
 	}
 	return nil

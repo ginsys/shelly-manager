@@ -331,6 +331,59 @@ func TestApplyDesiredConfig_Gen2SafetyReverseNeedsAllowedMove(t *testing.T) {
 	})
 }
 
+// The page says the safety switch works only when in_mode is single. Enabling it is refused under
+// any other effective mode, which is the requested in_mode when set and the live one otherwise;
+// a read back would confirm the enable and the switch would still do nothing.
+func TestApplyDesiredConfig_Gen2EnablingSafetyNeedsInputModeSingle(t *testing.T) {
+	cases := map[string]struct {
+		live    string
+		desired *RollerConfig
+		refused bool
+	}{
+		"live dual, no mode asked":     {"dual", &RollerConfig{SafetyMode: StringPtr("while_closing")}, true},
+		"live single, no mode asked":   {"single", &RollerConfig{SafetyMode: StringPtr("while_closing")}, false},
+		"live dual, single asked":      {"dual", &RollerConfig{SafetyMode: StringPtr("while_closing"), InputMode: StringPtr("single")}, false},
+		"live single, dual asked":      {"single", &RollerConfig{SafetyMode: StringPtr("while_closing"), InputMode: StringPtr("dual")}, true},
+		"live dual, disabling":         {"dual", &RollerConfig{SafetyMode: StringPtr("disabled")}, false},
+		"live dual, action alone":      {"dual", &RollerConfig{SafetyAction: StringPtr("pause")}, false},
+		"live dual, other mode toggle": {"dual", &RollerConfig{ObstacleMode: StringPtr("while_closing")}, false},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			svc, _ := newGen2Service(t, &DeviceConfiguration{Roller: tc.desired})
+			dev := fakeGen2DeviceWithCover()
+			dev.doc["cover:0"].(map[string]interface{})["in_mode"] = tc.live
+
+			result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SNSW-102P16EU")
+
+			if tc.refused {
+				require.Error(t, err)
+				assert.True(t, errors.Is(err, ErrUnsupportedSettings))
+				assert.Contains(t, err.Error(), "roller.safety_mode")
+				assert.Empty(t, dev.calls)
+				return
+			}
+			require.NoError(t, err)
+			assert.True(t, result.ConfigApplied)
+		})
+	}
+}
+
+// The restart for a changed direction is known before the request, so it is recorded before it:
+// a write whose answer is lost may have landed, and the next apply then sees the stored value and
+// owes nothing.
+func TestApplyDesiredConfig_Gen2RecordsTheDirectionRestartBeforeTheWrite(t *testing.T) {
+	svc, repo := newGen2Service(t, &DeviceConfiguration{Roller: &RollerConfig{MotorDirection: StringPtr("reversed")}})
+	dev := fakeGen2DeviceWithCover()
+	dev.refuse = errors.New("no answer")
+
+	result, _ := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SNSW-102P16EU")
+
+	require.NotNil(t, result)
+	assert.True(t, result.ApplyResult.RequiresReboot, "owed although the write got no answer")
+	assert.True(t, repo.devices[1].PendingReboot)
+}
+
 // A roller setting with no Cover key is named, and nothing is written.
 func TestApplyDesiredConfig_Gen2RefusesRollerSettingsWithNoCoverKey(t *testing.T) {
 	cases := map[string]struct {
