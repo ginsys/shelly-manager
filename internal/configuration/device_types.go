@@ -16,6 +16,8 @@ var deviceTypeNames = map[string]string{
 	"SHSW-PM": "Shelly 1PM",
 	"SHSW-25": "Shelly 2.5",
 	"SHIX3-1": "Shelly i3",
+	"SHDM-1":  "Shelly Dimmer",
+	"SHDM-2":  "Shelly Dimmer 2",
 }
 
 // SupportedDeviceTypeInfos lists the models a device-type template can name, in the converter's order.

@@ -84,6 +84,26 @@ describe('ConfigEditor', () => {
     expect(getConfigSchema).toHaveBeenCalledWith(undefined, 7, undefined)
   })
 
+  it('gives the light section a lamp icon, not the fallback', async () => {
+    vi.mocked(getConfigSchema).mockResolvedValue({
+      type: 'object',
+      'x-device-type': 'SHDM-1',
+      'x-apply-supported': true,
+      properties: {
+        light: {
+          type: 'object',
+          title: 'Light Settings',
+          properties: { lights: { type: 'array', title: 'Lights', items: { type: 'object', properties: {} } } },
+        },
+      },
+    } as ConfigSchema)
+    const wrapper = mountEditor({})
+    await flushPromises()
+    const header = wrapper.find('[data-section="light"] .section-header')
+    expect(header.find('.section-title').text()).toBe('Light Settings')
+    expect(header.find('.section-icon').text()).toBe('💡')
+  })
+
   it('says in plain text that a section apply never writes is not applied', async () => {
     const wrapper = mountEditor({})
     await flushPromises()

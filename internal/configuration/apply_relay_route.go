@@ -25,19 +25,27 @@ func unsupportedRelayValues(channel int, relay SingleRelayConfig) []string {
 	if relay.DefaultState != nil && (*relay.DefaultState == "restore_last" || *relay.DefaultState == "match_input") {
 		unsupported = append(unsupported, path+"default_state")
 	}
-	bad := false
-	if relay.ScheduleRules != nil {
-		bad = len(*relay.ScheduleRules) > gen1MaxScheduleRules
-		for _, rule := range *relay.ScheduleRules {
-			if rule == "" || strings.Contains(rule, ",") {
-				bad = true
-			}
-		}
-	}
-	if bad {
+	if unsupportedScheduleRules(relay.ScheduleRules) {
 		unsupported = append(unsupported, path+"schedule_rules")
 	}
 	return unsupported
+}
+
+// unsupportedScheduleRules reports a schedule no device keeps: more rules than gen1MaxScheduleRules,
+// an empty rule, or a rule with a comma (rules are sent comma-separated).
+func unsupportedScheduleRules(rules *[]string) bool {
+	if rules == nil {
+		return false
+	}
+	if len(*rules) > gen1MaxScheduleRules {
+		return true
+	}
+	for _, rule := range *rules {
+		if rule == "" || strings.Contains(rule, ",") {
+			return true
+		}
+	}
+	return false
 }
 
 // comparableChannelMaxPower returns desired in the shape the read-back of a Shelly 2.5 in relay

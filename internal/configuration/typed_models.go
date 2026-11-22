@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -1218,6 +1220,84 @@ func getRelaySchema() map[string]interface{} {
 							"title":       "Max Power",
 							"description": "Overpower threshold of this channel in watts",
 							"minimum":     0,
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+// getLightSchema is the channel list of a model whose channels are lights (the Shelly Dimmer). The
+// words and ranges are those of the Gen1 Dimmer settings page as relayed, and unverified until a
+// device reads one back: the page gives auto_on and auto_off no range, and no maximum number of
+// schedule rules (the relay's gen1MaxScheduleRules is used). Its parameter table spells one button
+// word "toglle" where its attribute table says "toggle"; "toggle" is the word, and the word a Dimmer
+// reads back is unconfirmed. The channel's name is an attribute of the page, not a parameter.
+func getLightSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                "object",
+		"title":               "Light Settings",
+		"description":         "Configure the light channels of a dimmer",
+		"x-device-capability": "light",
+		"properties": map[string]interface{}{
+			"lights": map[string]interface{}{
+				"type":        "array",
+				"title":       "Lights",
+				"description": "Configuration of each light channel",
+				"items": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"id": map[string]interface{}{
+							"type":        "integer",
+							"title":       "Light ID",
+							"description": "Light channel index",
+						},
+						"default_state": map[string]interface{}{
+							"type":  "string",
+							"title": "Default State",
+							"enum":  slices.Sorted(maps.Keys(gen1InitialStates)),
+						},
+						"auto_on": map[string]interface{}{
+							"type":        "integer",
+							"title":       "Auto On",
+							"description": "Turn on automatically after this many seconds (0 = disabled)",
+							"minimum":     0,
+						},
+						"auto_off": map[string]interface{}{
+							"type":        "integer",
+							"title":       "Auto Off",
+							"description": "Turn off automatically after this many seconds (0 = disabled)",
+							"minimum":     0,
+						},
+						"schedule": map[string]interface{}{
+							"type":        "boolean",
+							"title":       "Schedule",
+							"description": "Enable the schedule rules of this channel",
+						},
+						"schedule_rules": map[string]interface{}{
+							"type":        "array",
+							"title":       "Schedule Rules",
+							"description": "Rules like 0000-0123456-on: time, days (0 is Sunday), action",
+							"items":       map[string]interface{}{"type": "string"},
+							"maxItems":    gen1MaxScheduleRules,
+						},
+						"btn_type": map[string]interface{}{
+							"type":  "string",
+							"title": "Button Type",
+							"enum":  gen1LightButtonTypes,
+						},
+						"btn_debounce": map[string]interface{}{
+							"type":        "integer",
+							"title":       "Button Debounce",
+							"description": "Input debounce in milliseconds",
+							"minimum":     gen1LightMinDebounce,
+							"maximum":     gen1LightMaxDebounce,
+						},
+						"swap_inputs": map[string]interface{}{
+							"type":        "boolean",
+							"title":       "Swap Inputs",
+							"description": "Swap the two inputs",
 						},
 					},
 				},

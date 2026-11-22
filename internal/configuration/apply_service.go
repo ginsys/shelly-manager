@@ -38,7 +38,8 @@ type LoginHooks interface {
 // written as the flat sntp_server parameter, and the inputs section, whose btn_type and
 // btn_reverse are written per input (POST /settings/relay/<n> on a Shelly 1, 1PM or 2.5, POST
 // /settings/input/<n> on a Shelly i3), and the wifi_sta and wifi_ap sections, which are written
-// with POST /settings/sta and /settings/ap (unsupportedWiFi names what stays refused). Every other
+// with POST /settings/sta and /settings/ap (unsupportedWiFi names what stays refused), and the lights
+// section of a Dimmer, which is written per channel with POST /settings/light/<n>. Every other
 // section is refused before the device is touched, because the applier would send it in a shape the
 // device ignores. A relay key outside gen1RelayKeys
 // is refused through the round-trip check below, and so is a cloud server, which Gen1 neither
@@ -56,6 +57,7 @@ var gen1ApplyKeys = map[string]bool{
 	"led_status_disable": true,
 	"mqtt":               true,
 	"relays":             true,
+	"lights":             true,
 	"rollers":            true,
 	"cloud":              true,
 	"coiot":              true,
@@ -124,6 +126,18 @@ var gen1ApplicablePaths = map[string]bool{
 	"relay.relays[].schedule":       true,
 	"relay.relays[].schedule_rules": true,
 	"relay.relays[].max_power":      true,
+
+	// A Dimmer's lights are written per channel with POST /settings/light/<n> and read back from
+	// GET /settings/light/<n>. The id is an item's position, and the name is an attribute of the
+	// page, not a parameter, so it is not applicable.
+	"light.lights[].default_state":  true,
+	"light.lights[].auto_on":        true,
+	"light.lights[].auto_off":       true,
+	"light.lights[].schedule":       true,
+	"light.lights[].schedule_rules": true,
+	"light.lights[].btn_type":       true,
+	"light.lights[].btn_debounce":   true,
+	"light.lights[].swap_inputs":    true,
 
 	// The roller is written with POST /settings/roller/0 and read back from the same path.
 	// Only a model with roller mode has the section.
@@ -336,6 +350,12 @@ func unsupportedApplySettings(converter ConfigConverter, desired *DeviceConfigur
 				unsupported = append(unsupported, fmt.Sprintf("relay.relays[%d].id", i))
 			}
 			unsupported = append(unsupported, unsupportedRelayValues(i, relay)...)
+		}
+	}
+	// A light channel's id is its position for the same reason.
+	if desired.Light != nil {
+		for i, light := range desired.Light.Lights {
+			unsupported = append(unsupported, unsupportedLightValues(i, light)...)
 		}
 	}
 	if desired.PowerMetering != nil && desired.PowerMetering.MaxPower != nil && *desired.PowerMetering.MaxPower < 0 {

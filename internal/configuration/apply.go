@@ -243,6 +243,7 @@ func (a *ConfigApplier) applyConfigSections(ctx context.Context, client ShellyCl
 		{"Cloud", a.applyCloudSettings},
 		{"CoIoT", a.applyCoIoTSettings},
 		{"Relay", a.applyRelaySettings},
+		{"Light", a.applyLightSettings},
 		{"Roller", a.applyRollerSettings},
 		// Inputs follow the relays: on a relay model they are keys of the same channel.
 		{"Input", func(ctx context.Context, client ShellyClient, apiConfig map[string]interface{}, result *ApplyResult) error {
@@ -641,6 +642,35 @@ func (a *ConfigApplier) applyRelaySettings(ctx context.Context, client ShellyCli
 	return applyChannels(ctx, result, "relays", relays, gen1RelayKeys, relayClient.SetRelaySettings, relayClient.GetRelaySettings)
 }
 
+// LightSettingsClient is the per-channel light surface of a Gen1 Dimmer: POST and GET on
+// /settings/light/<n>. A client without it cannot apply light settings, and apply reports that as a
+// failure instead of sending the nested "lights" document, which Gen1 ignores.
+type LightSettingsClient interface {
+	SetLightSettings(ctx context.Context, channel int, settings map[string]interface{}) error
+	GetLightSettings(ctx context.Context, channel int) (map[string]interface{}, error)
+}
+
+var errNoLightClient = errors.New("client cannot write per-channel light settings")
+
+// gen1LightKeys are the light settings apply writes: the form parameters of POST /settings/light/<n>
+// the page lists. The channel name is an attribute of the page and no parameter, so it is not here.
+// Anything else in a light document is refused before the device is touched (see
+// unsupportedApplySettings).
+var gen1LightKeys = []string{"default_state", "auto_on", "auto_off", "schedule", "schedule_rules", "btn_type", "btn_debounce", "swap_inputs"}
+
+func (a *ConfigApplier) applyLightSettings(ctx context.Context, client ShellyClient, apiConfig map[string]interface{}, result *ApplyResult) error {
+	lights := relayMaps(apiConfig["lights"])
+	if len(lights) == 0 {
+		return nil
+	}
+
+	lightClient, ok := client.(LightSettingsClient)
+	if !ok {
+		return failSection(result, "lights", errNoLightClient)
+	}
+	return applyChannels(ctx, result, "lights", lights, gen1LightKeys, lightClient.SetLightSettings, lightClient.GetLightSettings)
+}
+
 // InputSettingsClient is the per-input surface of a Shelly i3: POST and GET on
 // /settings/input/<n>. The relay models keep their button type in the relay channel instead, so
 // they go through RelaySettingsClient. A client without the route a model needs cannot apply
@@ -925,11 +955,14 @@ func flagAsFloat(v interface{}) (float64, bool) {
 func (a *ConfigApplier) countSettings(config map[string]interface{}) int {
 	count := 0
 	for key, val := range config {
-		if key == "relays" || key == "inputs" {
+		if key == "relays" || key == "inputs" || key == "lights" {
 			// One setting per key apply writes, as applyChannels counts them.
 			keys := gen1RelayKeys
-			if key == "inputs" {
+			switch key {
+			case "inputs":
 				keys = gen1InputKeys
+			case "lights":
+				keys = gen1LightKeys
 			}
 			for _, item := range relayMaps(val) {
 				for _, itemKey := range keys {

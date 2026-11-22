@@ -339,7 +339,7 @@ func moveChannelSources(sources map[string]string, listPath string, moved []int)
 
 // remapChannelPaths turns the paths of a patch body into paths of the configuration that merging
 // the patch into existing gives. A path through a list holds the index of the element in the patch
-// body. The merge puts a channel where its id is, so in a relay or input channel list the index is
+// body. The merge puts a channel where its id is, so in a relay, light or input channel list the index is
 // changed to the position of the channel with the same id. A list that is merged by position, and
 // every other path, keeps its index. The paths given are not changed.
 func remapChannelPaths(paths [][]string, existing, patch *DeviceConfiguration) [][]string {
@@ -358,8 +358,17 @@ func remapChannelPaths(paths [][]string, existing, patch *DeviceConfiguration) [
 		patchInputs = patch.Input.Inputs
 	}
 
+	var existingLights, patchLights []SingleLightConfig
+	if existing.Light != nil {
+		existingLights = existing.Light.Lights
+	}
+	if patch.Light != nil {
+		patchLights = patch.Light.Lights
+	}
+
 	relayLayout, _ := pairChannels(reflect.ValueOf(existingRelays), reflect.ValueOf(patchRelays))
 	inputLayout, _ := pairChannels(reflect.ValueOf(existingInputs), reflect.ValueOf(patchInputs))
+	lightLayout, _ := pairChannels(reflect.ValueOf(existingLights), reflect.ValueOf(patchLights))
 
 	remapped := make([][]string, len(paths))
 	for i, path := range paths {
@@ -373,6 +382,8 @@ func remapChannelPaths(paths [][]string, existing, patch *DeviceConfiguration) [
 			positions = relayLayout.src
 		case strings.EqualFold(path[0], "input") && strings.EqualFold(path[1], "inputs"):
 			positions = inputLayout.src
+		case strings.EqualFold(path[0], "light") && strings.EqualFold(path[1], "lights"):
+			positions = lightLayout.src
 		}
 		index, err := strconv.Atoi(path[2])
 		if err != nil || index < 0 || index >= len(positions) {

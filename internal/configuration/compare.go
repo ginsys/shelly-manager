@@ -44,6 +44,7 @@ var defaultCompareRules = []FieldCompareRule{
 
 	// A schedule is the whole list the device keeps: a rule left on the device is not the desired schedule.
 	{Path: "relay.relays.*.schedule_rules", ExactList: true},
+	{Path: "light.lights.*.schedule_rules", ExactList: true},
 	{Path: "roller.schedule_rules", ExactList: true},
 	// An action keeps the whole URL list that is desired: a URL left on the device, or a list that was
 	// cleared and is not empty, is a difference. Without the rule a device-only URL reads as a match.

@@ -32,6 +32,34 @@ type SingleRelayConfig struct {
 	MaxPower *int `json:"max_power,omitempty"`
 }
 
+// LightConfig is the channel list of a Gen1 model whose channels are lights (the Shelly Dimmer),
+// written with POST /settings/light/<n> and read from GET /settings/light/<n>. Its fields carry the
+// names the reference page gives, so a later light model adds to it and renames nothing. The
+// Dimmer's device-level settings are DimmingConfig, a separate group.
+type LightConfig struct {
+	Lights []SingleLightConfig `json:"lights,omitempty"`
+}
+
+// SingleLightConfig is one light channel. The channel's name is an attribute the page lists and no
+// parameter it accepts, so it is not stored. A list element's id is its position.
+type SingleLightConfig struct {
+	ID int `json:"id"`
+
+	// DefaultState is on, off, last or switch.
+	DefaultState *string `json:"default_state,omitempty"`
+	AutoOn       *int    `json:"auto_on,omitempty"`
+	AutoOff      *int    `json:"auto_off,omitempty"`
+	Schedule     *bool   `json:"schedule,omitempty"`
+	// ScheduleRules is a pointer so that nil (leave the rules alone) and an empty list (clear them)
+	// stay different through a save and a reload.
+	ScheduleRules *[]string `json:"schedule_rules,omitempty"`
+	// ButtonType is one_button, dual_button, toggle, edge, detached or action.
+	ButtonType *string `json:"btn_type,omitempty"`
+	// ButtonDebounce is the input debounce in milliseconds, 60 to 200.
+	ButtonDebounce *int  `json:"btn_debounce,omitempty"`
+	SwapInputs     *bool `json:"swap_inputs,omitempty"`
+}
+
 // PowerMeteringConfig represents power metering configuration
 type PowerMeteringConfig struct {
 	MaxPower          *int       `json:"max_power,omitempty"`

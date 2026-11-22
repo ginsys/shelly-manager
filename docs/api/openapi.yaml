@@ -2027,7 +2027,10 @@ paths:
         discoverable, the relay or roller mode of a Shelly 2.5 (system.device.mode, written first), max power, LED, MQTT (including the update period), SNTP server, cloud (the enabled flag), CoIoT (enabled, update
         period of 15 to 65535 seconds and peer), login (enable, username and password of 1 to 50
         bytes each, written last; the new login is stored once the device accepts it) and
-        relays (default_state, auto_on, auto_off and name per channel), for a model with roller mode
+        relays (default_state, auto_on, auto_off and name per channel), for a Dimmer (SHDM-1, SHDM-2)
+        lights instead of relays (default_state, auto_on, auto_off, schedule, schedule_rules, btn_type,
+        btn_debounce of 60 to 200 ms and swap_inputs per channel, through POST and GET
+        /settings/light/<n>; not confirmed on hardware), for a model with roller mode
         (SHSW-25) rollers (max_open_time and max_close_time in seconds, motor_direction, swap_inputs and
         input_mode, each read back), and input button types (mode as btn_type and inverted as
         btn_reverse per input; the parameter names, the toggle and edge mapping and the i3 mode set

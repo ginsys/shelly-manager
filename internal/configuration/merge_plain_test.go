@@ -38,7 +38,7 @@ var plainScalarCases = []struct {
 // replaces the whole list, so no field of an entry is merged; TestActionConfig_AMergedLayerReplacesTheListWhole
 // holds that) and the time zone internals of an opaque time value.
 func plainScalarsNotCovered(path string) bool {
-	return path == "relay.relays.id" || path == "input.inputs.id" ||
+	return path == "relay.relays.id" || path == "input.inputs.id" || path == "light.lights.id" ||
 		path == "actions.name" || path == "actions.index" ||
 		strings.HasPrefix(path, "power_metering.energy_reset")
 }

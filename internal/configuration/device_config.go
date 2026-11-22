@@ -11,6 +11,7 @@ type DeviceConfiguration struct {
 	CoIoT    *CoIoTConfiguration    `json:"coiot,omitempty"`
 
 	Relay         *RelayConfig         `json:"relay,omitempty"`
+	Light         *LightConfig         `json:"light,omitempty"`
 	PowerMetering *PowerMeteringConfig `json:"power_metering,omitempty"`
 	Dimming       *DimmingConfig       `json:"dimming,omitempty"`
 	Roller        *RollerConfig        `json:"roller,omitempty"`

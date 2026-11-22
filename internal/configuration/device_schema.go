@@ -62,8 +62,9 @@ func GetDeviceConfigurationSchema(deviceType string) map[string]interface{} {
 	if _, hasActions := gen1ActionTable(deviceType); !supported || hasActions {
 		sections["actions"] = getActionsSchema(deviceType)
 	}
-	if !supported {
-		// No supported Gen1 model is a dimmer.
+	if !supported || converter.hasLight(deviceType) {
+		sections["light"] = getLightSchema()
+		// The Dimmer's device-level group is stored and not applied yet, so no field of it is applicable.
 		sections["dimming"] = getDimmingSchema()
 	}
 

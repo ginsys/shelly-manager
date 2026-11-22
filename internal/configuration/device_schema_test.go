@@ -108,7 +108,10 @@ func TestDeviceSchemaSectionsFollowTheModel(t *testing.T) {
 		"SHSW-25": {"actions", "auth", "cloud", "coiot", "input", "location", "mqtt", "network", "power_metering", "relay", "roller", "system", "wifi"},
 		// The i3 has no actions section in this slice: apply refuses it whole.
 		"SHIX3-1": {"auth", "cloud", "coiot", "input", "location", "mqtt", "network", "system", "wifi"},
-		"unknown": {"actions", "auth", "cloud", "coiot", "dimming", "input", "led", "location", "mqtt", "network", "power_metering", "relay", "roller", "system", "wifi"},
+		// A Dimmer has light channels and no relay; its device-level group is stored, not applied.
+		"SHDM-1":  {"auth", "cloud", "coiot", "dimming", "light", "location", "mqtt", "network", "system", "wifi"},
+		"SHDM-2":  {"auth", "cloud", "coiot", "dimming", "light", "location", "mqtt", "network", "system", "wifi"},
+		"unknown": {"actions", "auth", "cloud", "coiot", "dimming", "input", "led", "light", "location", "mqtt", "network", "power_metering", "relay", "roller", "system", "wifi"},
 	}
 	for deviceType, want := range cases {
 		schema := GetDeviceConfigurationSchema(deviceType)
@@ -124,6 +127,34 @@ func TestDeviceSchemaSectionsFollowTheModel(t *testing.T) {
 	}
 	if GetDeviceConfigurationSchema("unknown")[SchemaKeyApplySupported] != false {
 		t.Error("an unknown model must not be apply-supported")
+	}
+}
+
+// The Dimmer's light fields are applicable and the device-level dimming group is not: apply writes
+// the channels and nothing of the group (S7).
+func TestDeviceSchemaDimmerMarksLightApplicableAndDimmingNot(t *testing.T) {
+	for _, model := range []string{"SHDM-1", "SHDM-2"} {
+		leaves := map[string]map[string]interface{}{}
+		schemaLeaves("", GetDeviceConfigurationSchema(model), leaves)
+		for _, field := range gen1LightKeys {
+			path := "light.lights[]." + field
+			leaf, ok := leaves[path]
+			if !ok {
+				t.Errorf("%s: no schema leaf %s", model, path)
+				continue
+			}
+			if leaf[SchemaKeyApplicable] != true {
+				t.Errorf("%s: %s is not applicable", model, path)
+			}
+		}
+		for path, leaf := range leaves {
+			if strings.HasPrefix(path, "dimming.") && leaf[SchemaKeyApplicable] != false {
+				t.Errorf("%s: %s = %v, want false", model, path, leaf[SchemaKeyApplicable])
+			}
+		}
+		if _, ok := leaves["light.lights[].name"]; ok {
+			t.Errorf("%s: a light name is an attribute, not a parameter", model)
+		}
 	}
 }
 

@@ -857,6 +857,7 @@ func isEmptyConfig(config *DeviceConfiguration) bool {
 		config.Location == nil &&
 		config.CoIoT == nil &&
 		config.Relay == nil &&
+		config.Light == nil &&
 		config.PowerMetering == nil &&
 		config.Dimming == nil &&
 		config.Roller == nil &&
