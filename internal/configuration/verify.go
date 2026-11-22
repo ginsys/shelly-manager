@@ -136,7 +136,7 @@ func (v *ConfigVerifier) VerifyConfig(ctx context.Context, client ShellyClient, 
 
 	// The login password is write-only. Compare without it, so a missing read-back section never
 	// puts the whole desired auth object, password included, into a difference.
-	wanted := comparableChannelMaxPower(comparableDesired(withoutWiFiPasswords(withoutLoginPassword(desired))), deviceConfig.Raw, deviceType)
+	wanted := comparableChannelMaxPower(comparableDesired(withoutWiFiPasswords(withoutLoginPassword(withoutDisabledWarmupValues(desired)))), deviceConfig.Raw, deviceType)
 	compareResult := v.comparator.Compare(wanted, imported)
 	result.Match = compareResult.Match
 	result.Differences = compareResult.Differences

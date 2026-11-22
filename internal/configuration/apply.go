@@ -253,6 +253,7 @@ func (a *ConfigApplier) applyConfigSections(ctx context.Context, client ShellyCl
 		{"Light", func(ctx context.Context, client ShellyClient, apiConfig map[string]interface{}, result *ApplyResult) error {
 			return a.applyLightSettings(ctx, client, apiConfig, live, deviceType, result)
 		}},
+		{"Dimmer", a.applyDimmerEndpoints}, // night mode and warm-up: their own endpoints
 		{"Roller", a.applyRollerSettings},
 		// Inputs follow the relays: on a relay model they are keys of the same channel.
 		{"Input", func(ctx context.Context, client ShellyClient, apiConfig map[string]interface{}, result *ApplyResult) error {

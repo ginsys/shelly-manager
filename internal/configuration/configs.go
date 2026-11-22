@@ -91,7 +91,7 @@ type PowerMeteringConfig struct {
 
 // DimmingConfig represents dimmer configuration. A Gen1 Dimmer's settings page names min_brightness
 // (0 to 50), fade_rate (1 to 5), transition (0 to 5000 ms), zcross_debounce (50 to 150 microseconds)
-// and leading_edge (pulse_mode); the other fields have no /settings parameter.
+// and leading_edge (pulse_mode); night mode and warm-up have their own endpoints.
 type DimmingConfig struct {
 	MinBrightness       *int    `json:"min_brightness,omitempty"`
 	MaxBrightness       *int    `json:"max_brightness,omitempty"`
@@ -101,6 +101,8 @@ type DimmingConfig struct {
 	TransitionTime      *int    `json:"transition,omitempty"`
 	ZcrossDebounce      *int    `json:"zcross_debounce,omitempty"`
 	LeadingEdge         *bool   `json:"leading_edge,omitempty"`
+	WarmupEnabled       *bool   `json:"warmup_enabled,omitempty"`
+	WarmupBrightness    *int    `json:"warmup_brightness,omitempty"`
 	WarmupTime          *int    `json:"warmup_time,omitempty"`
 	MinDimLevel         *int    `json:"min_dim_level,omitempty"`
 	NightModeEnabled    *bool   `json:"night_mode,omitempty"`

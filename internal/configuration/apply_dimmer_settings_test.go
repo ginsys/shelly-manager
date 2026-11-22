@@ -287,9 +287,7 @@ func TestApplyDimmerSettings_FieldsWithoutAParameterAreRefused(t *testing.T) {
 		"max_brightness":     {MaxBrightness: IntPtr(80)},
 		"default_brightness": {DefaultBrightness: IntPtr(50)},
 		"default_state":      {DefaultState: BoolPtr(true)},
-		"warmup_time":        {WarmupTime: IntPtr(100)},
 		"min_dim_level":      {MinDimLevel: IntPtr(5)},
-		"night_mode":         {NightModeEnabled: BoolPtr(true)},
 	} {
 		t.Run(name, func(t *testing.T) {
 			svc, repo := newServiceWithDesiredName(t, "dimmer")
