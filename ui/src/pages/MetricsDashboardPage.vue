@@ -80,6 +80,14 @@
       </div>
     </section>
 
+    <section v-else-if="securityMonitoringOff" class="metrics-section" data-testid="panel-security-off">
+      <h2>Security Metrics</h2>
+      <p>
+        Security monitoring is off. Turn it on with <code>security.monitoring.enabled</code>
+        (<code>SHELLY_SECURITY_MONITORING_ENABLED</code>) to count suspicious requests here.
+      </p>
+    </section>
+
     <!-- Resolution Metrics -->
     <section v-if="resolutionMetrics" class="metrics-section" data-testid="panel-resolution">
       <h2>Resolution Metrics</h2>
@@ -273,6 +281,9 @@ const dashboardSummary = ref<DashboardMetrics | null>(null)
 const notificationMetrics = ref<NotificationMetrics | null>(null)
 const resolutionMetrics = ref<ResolutionMetrics | null>(null)
 const securityMetrics = ref<SecurityMetrics | null>(null)
+// The server registers GET /metrics/security only while the security monitor is on
+// (security.monitoring.enabled, off by default), so a 404 from that one call means "off", not a failure.
+const securityMonitoringOff = ref(false)
 const loading = ref(false)
 
 // Update current time every second for relative timestamps
@@ -295,7 +306,8 @@ onUnmounted(() => {
 
 // Fetch all advanced metrics. Each call fills its own panel: a failed call
 // empties only that panel and is named in the banner, so one failing endpoint
-// (the security one is 404 without a security monitor) never blanks the rest.
+// never blanks the rest. The security call is the exception when it answers 404:
+// that is the server saying the monitor is off, so the page says so, with no banner.
 async function fetchAdvancedMetrics() {
   loading.value = true
   clearError()
@@ -310,12 +322,13 @@ async function fetchAdvancedMetrics() {
     notificationMetrics.value = notifications.status === 'fulfilled' ? notifications.value : null
     resolutionMetrics.value = resolution.status === 'fulfilled' ? resolution.value : null
     securityMetrics.value = security.status === 'fulfilled' ? security.value : null
+    securityMonitoringOff.value = security.status === 'rejected' && isNotFound(security.reason)
 
     const failures = [
       ['Dashboard summary', summary],
       ['Notification metrics', notifications],
       ['Resolution metrics', resolution],
-      ['Security metrics', security]
+      ...(securityMonitoringOff.value ? [] : [['Security metrics', security]])
     ].flatMap(([label, result]) =>
       (result as PromiseSettledResult<unknown>).status === 'rejected'
         ? [`${label}: ${reasonMessage((result as PromiseRejectedResult).reason)}`]
@@ -331,6 +344,10 @@ async function fetchAdvancedMetrics() {
   } finally {
     loading.value = false
   }
+}
+
+function isNotFound(reason: unknown): boolean {
+  return (reason as { response?: { status?: number } } | null)?.response?.status === 404
 }
 
 // The backend's own message (the error envelope of an axios rejection) beats the

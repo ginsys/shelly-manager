@@ -383,21 +383,7 @@ func startServer() {
 	apiHandler.ShareAdminKey()
 
 	// Build security config from application config
-	secCfg := middleware.DefaultSecurityConfig()
-	if cfg != nil {
-		secCfg.UseProxyHeaders = cfg.Security.UseProxyHeaders
-		secCfg.TrustedProxies = cfg.Security.TrustedProxies
-		secCfg.CORSAllowedOrigins = cfg.Security.CORS.AllowedOrigins
-		if len(cfg.Security.CORS.AllowedMethods) > 0 {
-			secCfg.CORSAllowedMethods = cfg.Security.CORS.AllowedMethods
-		}
-		if len(cfg.Security.CORS.AllowedHeaders) > 0 {
-			secCfg.CORSAllowedHeaders = cfg.Security.CORS.AllowedHeaders
-		}
-		if cfg.Security.CORS.MaxAge > 0 {
-			secCfg.CORSMaxAge = cfg.Security.CORS.MaxAge
-		}
-	}
+	secCfg := securityConfigFrom(cfg)
 	// Setup validation config based on main configuration
 	valCfg := middleware.DefaultValidationConfig()
 	if cfg != nil {
@@ -599,6 +585,12 @@ func initApp() {
 	// key left empty the guarded routes would be open.
 	if err = secrets.ApplyToConfig(cfg); err != nil {
 		log.Fatalf("Failed to read secrets: %v", err)
+	}
+
+	// Blocking on with the monitor off, or a zero block length or threshold, would leave an operator
+	// believing a protection is working: stop here, naming the key.
+	if err = cfg.ValidateSecurityMonitoring(); err != nil {
+		log.Fatalf("Invalid security configuration: %v", err)
 	}
 
 	// Initialize logger from config

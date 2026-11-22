@@ -690,9 +690,19 @@ func TestSecurityStatisticsAccuracy(t *testing.T) {
 		return metrics.TopAttackerIPs[i].SuspiciousRequests > metrics.TopAttackerIPs[j].SuspiciousRequests
 	})
 
-	// Top attacker should be 10.0.0.4 with 7 attacks
-	assert.Equal(t, "10.0.0.4", metrics.TopAttackerIPs[0].IP, "Top attacker should be correct")
-	assert.Equal(t, 7, metrics.TopAttackerIPs[0].SuspiciousRequests, "Top attacker request count should be correct")
+	// 10.0.0.4 sent 7 requests, and the 6th blocked it (more than 5 inside the hour), which started
+	// its counting over: its row is still listed, blocked, with the counters as reset. The monitor-wide
+	// statistics above still hold all 7. The most active IP left is 10.0.0.1 with 5.
+	assert.Equal(t, "10.0.0.1", metrics.TopAttackerIPs[0].IP, "Top attacker should be correct")
+	assert.Equal(t, 5, metrics.TopAttackerIPs[0].SuspiciousRequests, "Top attacker request count should be correct")
+	for _, row := range metrics.TopAttackerIPs {
+		if row.IP == "10.0.0.4" {
+			assert.True(t, row.Blocked, "the blocked IP stays listed")
+			assert.Equal(t, 0, row.SuspiciousRequests, "its counters were reset by the block")
+			assert.Equal(t, 7, row.TotalRequests)
+		}
+	}
+	assert.Equal(t, 1, metrics.BlockedIPs)
 }
 
 func BenchmarkSecurityMonitoring(b *testing.B) {

@@ -3973,11 +3973,17 @@ paths:
     get:
       tags: [Metrics]
       summary: Get security metrics
+      description: >-
+        Present only while the security monitor is on (`security.monitoring.enabled`, off by
+        default). With the monitor off the route does not exist and the answer is 404.
+        A blocked IP stays listed in `top_attacker_ips` while its block lasts, with its counters as reset.
       operationId: getSecurityMetrics
       security:
         - BearerAuth: []
         - ApiKeyAuth: []
       responses:
+        '404':
+          description: Security monitoring is off
         '200':
           description: Security metrics
           content:
