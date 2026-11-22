@@ -166,7 +166,8 @@ and keeps it for the browser tab (see `ui/README.md`); a build with `VITE_ADMIN_
 
 Provisioner agents can also enrol by key: an agent that sends an Ed25519 `public_key` waits as `pending` until the
 admin key holder approves its fingerprint (`POST /api/v1/provisioner/agents/{id}/approve`, or pre-approve one with
-`POST /api/v1/provisioner/enrolments`), then signs a challenge to receive its token. `security.agent_enrolment`
+`POST /api/v1/provisioner/enrolments`; the web UI's Provisioning Agents page does both, and rejects an agent), then
+signs a challenge to receive its token. `security.agent_enrolment`
 (`SHELLY_SECURITY_AGENT_ENROLMENT`) is `open` by default: agents that register without a key work as before. Set it to
 `strict` to let in only approved agents: a register without a key is then refused with `403`, and the token of an agent
 that is not approved stops working, so every existing keyless agent must be pre-approved and re-enrolled by key first.

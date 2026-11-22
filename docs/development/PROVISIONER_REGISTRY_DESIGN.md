@@ -4,8 +4,8 @@ Status: proposal for ginsys/shelly-manager#638. Slice 1 is built: the tables and
 (merged as ginsys/shelly-manager#724), the handlers that use them, the admin delete route and the
 hourly purge of old rows. Slice 2, the manager half of Option F, is built: the columns and the keyless refusals
 (ginsys/shelly-manager#845, ginsys/shelly-manager#851), the purge by state (ginsys/shelly-manager#854), the admin routes
-(ginsys/shelly-manager#857), the keyed register (ginsys/shelly-manager#862) and the `strict` mode. Slices 3 and 4 (the
-agent and the UI) are not built. Serge chose the enrolment design on
+(ginsys/shelly-manager#857), the keyed register (ginsys/shelly-manager#862) and the `strict` mode. Slice 4, the UI, is built: the agents page
+shows each agent's enrolment state and fingerprint and approves, rejects and pre-approves. Slice 3 (the agent) is not built. Serge chose the enrolment design on
 2026-11-21 (14:13 CET, typed "F"): **Option F, fingerprint approval of a seeded agent key**. Options
 A to E stay below as the options that were weighed. Sections below that describe the registry
 "today" describe the code before slice 1.
@@ -489,6 +489,13 @@ The admin agents page (`ui/src/pages/ProvisioningAgentsPage.vue:17-35`) lists th
 the approve, reject and pre-approve actions that call the routes of slice 2, and the list of
 pending agents that the operator compares with the fingerprint in the agent's log. Until it ships
 the operator uses the routes of slice 2 directly.
+
+Built. `uiProvisioningAgent` gains `enrolmentState` and `fingerprint` (the readable form, absent for a
+keyless row), and the page reads the same list as before. The manager stores the state name in an agent's
+`status` until an enrolled agent registers (a pending row has `pending`, a just approved one `approved`), so
+the page's Activity column shows `online`, `busy` or `offline` only and the summary counts keyless and
+approved agents only. Reject and approving a rejected row ask
+first. The page does not show the manager's `security.agent_enrolment` mode: no route returns it.
 
 ## Enrolment
 
@@ -1114,7 +1121,7 @@ agent silent for 30 days with no `pending` task.
 
 ### Slice 4 (the UI)
 
-- Nothing to migrate. Until it ships, the operator uses the routes of slice 2.
+- Nothing to migrate. The operator can use the agents page or the routes of slice 2.
 
 ## Risk
 

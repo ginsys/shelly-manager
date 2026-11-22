@@ -333,6 +333,23 @@ page imports still counts. The Playwright spec is what proves the links are rend
   counts as a usable key, and making a rotation durable needs a storage decision that no ticket
   carries yet.
 
+- **Provisioning agents and enrolment** (ginsys/shelly-manager#638): the `/provisioning/agents` page
+  (`ui/src/pages/ProvisioningAgentsPage.vue`) shows each agent's enrolment state (`legacy`, `pending`,
+  `preapproved`, `approved`, `rejected`) and, for an agent enrolled by key, its fingerprint. A "Waiting for
+  approval" section lists the `pending` agents with their fingerprints, to compare with the one in the
+  agent's own log; the name and version there are what the agent sent. Approve (`pending`, `rejected`) and
+  Reject (`pending`, `preapproved`, `approved`) call `POST /api/v1/provisioner/agents/{id}/approve` and
+  `/reject`, and a form pre-approves a fingerprint with `POST /api/v1/provisioner/enrolments`; the list is
+  loaded again after each act. Reject asks first and says it fails the agent's assigned and in-progress
+  tasks; approving a rejected row asks too. A refusal (`404`, `409`, `400`) shows the server's message above
+  the table. The Activity column shows only `online`, `busy` or `offline`, and the summary counts only keyless
+  and approved agents, because the manager stores the state name in `status` until an enrolled agent
+  registers (a pending row has `pending`, a just approved one `approved`). The list never carries the key, the
+  challenge or the token hash. Not in the UI: the manager's `security.agent_enrolment` mode (no route
+  returns it), deleting an agent, and cancelling the pending tasks of a rejected agent.
+
+  ![Provisioning agents with a pending, an approved and a keyless agent](images/provisioning-agents-enrolment.png)
+
 ---
 
 ## 6. Phase 7 API integration issues (ginsys/shelly-manager#128 to ginsys/shelly-manager#139)
