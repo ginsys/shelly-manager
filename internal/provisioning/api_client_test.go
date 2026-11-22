@@ -12,6 +12,7 @@ import (
 
 	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/testutil"
+	"github.com/ginsys/shelly-manager/internal/version"
 )
 
 // writeEnvelope answers the way every manager route does: {"success": true, "data": <data>}.
@@ -81,6 +82,28 @@ func TestAPIClient(t *testing.T) {
 
 		err := client.RegisterAgent("test-host", []string{"wifi"}, map[string]string{"region": "us"})
 		assert.NoError(t, err)
+	})
+
+	t.Run("RegisterAgent_SendsTheStampedVersion", func(t *testing.T) {
+		testutil.SkipIfNoSocketPermissions(t)
+		old := version.Version
+		version.Version = "v9.9.9-test"
+		t.Cleanup(func() { version.Version = old })
+
+		var sent string
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var agent struct {
+				Version string `json:"version"`
+			}
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&agent))
+			sent = agent.Version
+			writeEnvelope(t, w, http.StatusCreated, map[string]interface{}{"agent_id": "test-agent"})
+		}))
+		defer server.Close()
+
+		client := NewAPIClient(server.URL, "test-key", "test-agent", logger)
+		require.NoError(t, client.RegisterAgent("test-host", nil, nil))
+		assert.Equal(t, "v9.9.9-test", sent)
 	})
 
 	t.Run("RegisterAgent_ServerError", func(t *testing.T) {

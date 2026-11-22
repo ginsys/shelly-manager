@@ -17,6 +17,14 @@ MANAGER_IMAGE=shelly-manager
 PROVISIONER_IMAGE=shelly-provisioner
 DOCKER_TAG=latest
 
+# The version a build says it is (internal/version). A plain build is the VERSION file plus -dev, so
+# an untagged build never claims a released version. A release build passes the bare tag:
+# make build APP_VERSION=v0.6.0-alpha.1. Without the file, or with APP_VERSION= empty, nothing is
+# stamped and the binary says "dev". Not VERSION: changelog-assemble reads that name.
+FILE_VERSION := $(shell cat VERSION 2>/dev/null)
+APP_VERSION ?= $(if $(FILE_VERSION),$(FILE_VERSION)-dev)
+VERSION_LDFLAGS := $(if $(APP_VERSION),-ldflags '-X github.com/ginsys/shelly-manager/internal/version.Version=$(APP_VERSION)')
+
 # Color definitions for help output
 CYAN := \033[1;36m
 WHITE := \033[1;37m
@@ -154,11 +162,11 @@ build: build-manager build-provisioner
 
 # Build the main manager application
 build-manager:
-	CGO_ENABLED=1 go build -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/shelly-manager
+	CGO_ENABLED=1 go build $(VERSION_LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/shelly-manager
 
 # Build the provisioner application
 build-provisioner:
-	CGO_ENABLED=1 go build -o $(BUILD_DIR)/$(PROVISIONER_BINARY) ./cmd/shelly-provisioner
+	CGO_ENABLED=1 go build $(VERSION_LDFLAGS) -o $(BUILD_DIR)/$(PROVISIONER_BINARY) ./cmd/shelly-provisioner
 
 # Run the main manager application
 run:

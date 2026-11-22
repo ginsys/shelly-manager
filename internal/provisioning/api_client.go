@@ -13,6 +13,7 @@ import (
 
 	"github.com/ginsys/shelly-manager/internal/agentkey"
 	"github.com/ginsys/shelly-manager/internal/logging"
+	"github.com/ginsys/shelly-manager/internal/version"
 )
 
 // APIClient handles communication with the main shelly-manager API server
@@ -175,7 +176,7 @@ func (c *APIClient) RegisterAgent(hostname string, capabilities []string, metada
 	req := AgentRegistrationRequest{
 		ID:           c.agentID,
 		Hostname:     hostname,
-		Version:      "0.5.0-alpha",
+		Version:      version.Version,
 		Capabilities: capabilities,
 		Metadata:     metadata,
 	}

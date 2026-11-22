@@ -18,6 +18,7 @@ import (
 	"github.com/ginsys/shelly-manager/internal/database/provider"
 	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/security"
+	"github.com/ginsys/shelly-manager/internal/version"
 )
 
 // DatabaseManagerInterface defines what we need from database.Manager
@@ -1052,7 +1053,7 @@ func (e *SyncEngine) loadExportData(ctx context.Context, filters ExportFilters) 
 		TotalDevices:  len(exportDevices),
 		TotalConfigs:  len(configurations),
 		FilterApplied: e.hasFilters(filters),
-		SystemVersion: "v0.5.3-alpha", // TODO: Get from build info
+		SystemVersion: version.Version,
 		DatabaseType:  e.dbManager.GetProvider().Name(),
 	}
 
