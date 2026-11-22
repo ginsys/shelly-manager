@@ -375,6 +375,7 @@ function armLanding() {
 function landAtHistoryCard() {
   if (!landAtHistory) return
   landAtHistory = false
+  if (route.hash !== '#history-card') return // the address dropped the hash while the read was pending
   void nextTick(() => historyCardEl.value?.scrollIntoView?.({ block: 'start' }))
 }
 
