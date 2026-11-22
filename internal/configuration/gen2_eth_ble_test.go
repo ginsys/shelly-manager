@@ -110,13 +110,13 @@ func TestApplyDesiredConfig_Gen2AnUnchangedEthernetOwesNoRestart(t *testing.T) {
 func TestApplyDesiredConfig_Gen2WritesBLERPCAndNeverTheObserver(t *testing.T) {
 	dev := newEthBleDevice("192.168.1.99", nil)
 
-	result, err := applyTo(t, dev, bleDesired(BLEConfig{RPC: &BLERPCConfig{Enable: BoolPtr(true), KeepRunning: BoolPtr(true)}}))
+	result, err := applyTo(t, dev, bleDesired(BLEConfig{RPC: &BLERPCConfig{Enable: BoolPtr(true)}}))
 
 	require.NoError(t, err)
 	assert.True(t, result.ConfigApplied)
 	require.Len(t, dev.calls, 1)
 	assert.Equal(t, "BLE.SetConfig", dev.calls[0].method)
-	assert.Equal(t, map[string]interface{}{"rpc": map[string]interface{}{"enable": true, "keep_running": true}}, dev.calls[0].config)
+	assert.Equal(t, map[string]interface{}{"rpc": map[string]interface{}{"enable": true}}, dev.calls[0].config)
 	assert.NotContains(t, dev.calls[0].config, "observer")
 	assert.NotContains(t, dev.calls[0].config, "enable", "the top-level enable was removed in firmware 2.0.0")
 }
@@ -155,17 +155,34 @@ func TestApplyDesiredConfig_Gen2ABLEEnableFalseIsNothing(t *testing.T) {
 
 // Pin: a stored document keeps its Gen1 rpc words through the new type.
 func TestBLERPCConfig_KeepsTheStoredWords(t *testing.T) {
-	const stored = `{"system":{"device":{"ble":{"enable":true,"rpc":{"dst_addr":"10.0.0.1","listen_port":8080,"enable":true,"keep_running":false}}}}}`
+	const stored = `{"system":{"device":{"ble":{"enable":true,"rpc":{"dst_addr":"10.0.0.1","listen_port":8080,"enable":true}}}}}`
 	var config DeviceConfiguration
 	require.NoError(t, json.Unmarshal([]byte(stored), &config))
 	rpc := config.System.Device.BleConfig.RPC
 	assert.Equal(t, "10.0.0.1", rpc.DstAddr)
 	assert.Equal(t, 8080, rpc.ListenPort)
 	assert.True(t, *rpc.Enable)
-	assert.False(t, *rpc.KeepRunning)
 	out, err := json.Marshal(config)
 	require.NoError(t, err)
 	assert.JSONEq(t, stored, string(out))
+}
+
+// keep_running is not written: where it sits in the BLE configuration (inside rpc or beside it) is
+// unconfirmed, so a desired one at either path is refused before any write.
+func TestParseDesiredConfig_RefusesKeepRunningAtEitherPath(t *testing.T) {
+	for name, raw := range map[string]string{
+		"inside rpc":  `{"system":{"device":{"ble":{"rpc":{"keep_running":true}}}}}`,
+		"beside rpc":  `{"system":{"device":{"ble":{"keep_running":true}}}}`,
+		"with enable": `{"system":{"device":{"ble":{"rpc":{"enable":true,"keep_running":false}}}}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := parseApplicableDesiredConfig(raw)
+
+			require.Error(t, err)
+			assert.True(t, errors.Is(err, ErrUnsupportedSettings), err.Error())
+			assert.Contains(t, err.Error(), "keep_running")
+		})
+	}
 }
 
 func TestApplyDesiredConfig_Gen2EthernetStrandGuard(t *testing.T) {
@@ -381,15 +398,15 @@ func TestApplyDesiredConfig_Gen2RefusesWhatTheLiveDeviceDoesNotReport(t *testing
 		require.NoError(t, err)
 		require.Len(t, ethCalls(dev.fakeGen2Device), 1)
 	})
-	t.Run("keep_running on firmware that does not report it", func(t *testing.T) {
+	t.Run("rpc.enable on firmware that does not report it", func(t *testing.T) {
 		dev := newEthBleDevice("192.168.1.99", nil)
-		delete(dev.doc["ble"].(map[string]interface{})["rpc"].(map[string]interface{}), "keep_running")
+		delete(dev.doc["ble"].(map[string]interface{})["rpc"].(map[string]interface{}), "enable")
 
-		_, err := applyTo(t, dev, bleDesired(BLEConfig{RPC: &BLERPCConfig{KeepRunning: BoolPtr(true)}}))
+		_, err := applyTo(t, dev, bleDesired(BLEConfig{RPC: &BLERPCConfig{Enable: BoolPtr(true)}}))
 
 		require.Error(t, err)
 		assert.True(t, errors.Is(err, ErrUnsupportedSettings), err.Error())
-		assert.Contains(t, err.Error(), "system.device.ble.rpc.keep_running (rpc.keep_running)")
+		assert.Contains(t, err.Error(), "system.device.ble.rpc.enable (rpc.enable)")
 		assert.Empty(t, dev.calls)
 	})
 	t.Run("a device that cannot be read", func(t *testing.T) {

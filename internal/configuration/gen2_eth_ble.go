@@ -86,19 +86,10 @@ func gen2EthFromDoc(section interface{}) *EthernetConfig {
 // gen2BLEToDoc returns the ble object of the rpc keys the configuration sets. The observer is
 // obsolete and the top-level enable was removed in firmware 2.0.0: neither is ever written.
 func gen2BLEToDoc(b *BLEConfig) map[string]interface{} {
-	rpc := map[string]interface{}{}
-	if b != nil && b.RPC != nil {
-		if b.RPC.Enable != nil {
-			rpc["enable"] = *b.RPC.Enable
-		}
-		if b.RPC.KeepRunning != nil {
-			rpc["keep_running"] = *b.RPC.KeepRunning
-		}
-	}
-	if len(rpc) == 0 {
+	if b == nil || b.RPC == nil || b.RPC.Enable == nil {
 		return nil
 	}
-	return map[string]interface{}{"rpc": rpc}
+	return map[string]interface{}{"rpc": map[string]interface{}{"enable": *b.RPC.Enable}}
 }
 
 // gen2BLEFromDoc reads ble.rpc, or returns nil.
@@ -108,17 +99,11 @@ func gen2BLEFromDoc(section interface{}) *BLEConfig {
 	if !ok {
 		return nil
 	}
-	r := &BLERPCConfig{}
-	if enable, ok := rpc["enable"].(bool); ok {
-		r.Enable = BoolPtr(enable)
-	}
-	if keep, ok := rpc["keep_running"].(bool); ok {
-		r.KeepRunning = BoolPtr(keep)
-	}
-	if *r == (BLERPCConfig{}) {
+	enable, ok := rpc["enable"].(bool)
+	if !ok {
 		return nil
 	}
-	return &BLEConfig{RPC: r}
+	return &BLEConfig{RPC: &BLERPCConfig{Enable: BoolPtr(enable)}}
 }
 
 // parseIPv4 returns the IPv4 address of a literal, or nil for a name, an IPv6 address or anything else.
@@ -200,12 +185,9 @@ func unreportedEthBLEKeys(doc, apiConfig map[string]interface{}) []string {
 			missing = append(missing, "system.device.ble (the device reports no "+gen2BLEKey+" component)")
 		}
 		liveRPC, _ := live["rpc"].(map[string]interface{})
-		for _, k := range []string{"enable", "keep_running"} {
-			if _, wanted := rpc[k]; !wanted || !held {
-				continue
-			}
-			if _, ok := liveRPC[k]; !ok {
-				missing = append(missing, "system.device.ble.rpc."+k+" (rpc."+k+")")
+		if _, wanted := rpc["enable"]; wanted && held {
+			if _, ok := liveRPC["enable"]; !ok {
+				missing = append(missing, "system.device.ble.rpc.enable (rpc.enable)")
 			}
 		}
 	}

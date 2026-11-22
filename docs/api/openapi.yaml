@@ -2020,7 +2020,7 @@ paths:
         on hardware), the roller of a device in cover profile
         (max_open_time, max_close_time, motor_direction, swap_inputs, input_mode, and the
         obstacle and safety settings) with Cover.SetConfig on cover:0, the Bluetooth RPC
-        (system.device.ble.rpc enable and keep_running) with BLE.SetConfig, the Ethernet of a Pro
+        (system.device.ble.rpc.enable) with BLE.SetConfig, the Ethernet of a Pro
         model (network.eth enable, ipv4mode, ip, netmask, gw and nameserver) with Eth.SetConfig, and last of all the Wi-Fi station (enable,
         ssid, password, IPv4 mode and static address) with WiFi.SetConfig. A device that reports no
         eth or ble component, or a key it does not list, is refused with 422 and nothing is written.
@@ -2172,8 +2172,9 @@ paths:
             an SNTP server that is not an IPv4 address or a host name, a negative MQTT update
             period, a section with no Gen1 mapping such as the debug settings, or a stored field the configuration
             model does not know. On a Gen2 or Gen3 device every section except the system, MQTT,
-            cloud, switch, input and roller settings, the Bluetooth RPC (system.device.ble.rpc.enable
-            and keep_running; the top-level enable, dst_addr and listen_port are refused), the
+            cloud, switch, input and roller settings, the Bluetooth RPC (system.device.ble.rpc.enable;
+            the top-level enable, dst_addr and listen_port are refused, and so is keep_running, whose
+            placement on the Shelly page is unconfirmed), the
             Ethernet (network.eth) and the Wi-Fi (station, access point, roaming), a roller on a device that reports no cover:0 (a switch profile), the
             access point key (wifi.ap.key), switching the access point off while the station is not
             steady, switching an access point on that is off with no password (unless the device
