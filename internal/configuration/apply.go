@@ -167,6 +167,10 @@ func (a *ConfigApplier) ApplyConfig(ctx context.Context, client ShellyClient, co
 	if err := checkWiFiBeforeWrite(liveRaw, currentConfig != nil, readErr, apiConfig); err != nil {
 		return nil, err
 	}
+	// A Dimmer's pulse mode is written only when the device says it detected one.
+	if err := checkPulseModeBeforeWrite(liveRaw, currentConfig != nil, readErr, apiConfig); err != nil {
+		return nil, err
+	}
 
 	// Decide the reboot from the settings as they are before any write, and record it before the
 	// first one. A write that fails can still have landed (the answer may be lost), and a later
@@ -294,7 +298,7 @@ func (a *ConfigApplier) applyMainSettings(ctx context.Context, client ShellyClie
 	mainSettings := make(map[string]interface{})
 
 	// Extract main settings
-	mainKeys := []string{"name", "timezone", "lat", "lng", "eco_mode_enabled", "discoverable", "max_power"}
+	mainKeys := append([]string{"name", "timezone", "lat", "lng", "eco_mode_enabled", "discoverable", "max_power"}, gen1DimmerKeys...)
 	for _, key := range mainKeys {
 		if val, ok := apiConfig[key]; ok {
 			mainSettings[key] = val

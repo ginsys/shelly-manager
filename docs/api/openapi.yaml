@@ -2038,7 +2038,11 @@ paths:
         relays (default_state, auto_on, auto_off and name per channel), for a Dimmer (SHDM-1, SHDM-2)
         lights instead of relays (default_state, auto_on, auto_off, schedule, schedule_rules, btn_type,
         btn_debounce of 60 to 200 ms and swap_inputs per channel, through POST and GET
-        /settings/light/<n>; not confirmed on hardware), for a model with roller mode
+        /settings/light/<n>; not confirmed on hardware) and its device-level dimming settings
+        (min_brightness 0 to 50, fade_rate 1 to 5, transition 0 to 5000 ms, zcross_debounce 50 to 150
+        microseconds, and leading_edge as pulse_mode, only where the device reports pulse_mode_detected,
+        so never on an SHDM-1; the status LED as led_status_disable; not confirmed on hardware), for a
+        model with roller mode
         (SHSW-25) rollers (max_open_time and max_close_time in seconds, motor_direction, swap_inputs and
         input_mode, each read back), and input button types (mode as btn_type and inverted as
         btn_reverse per input; the parameter names, the toggle and edge mapping and the i3 mode set

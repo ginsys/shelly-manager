@@ -69,6 +69,13 @@ var gen1ApplyKeys = map[string]bool{
 
 	"ap_roaming":                  true, // flattened to ap_roaming_* on POST /settings (applyMainSettings)
 	"wifirecovery_reboot_enabled": true,
+
+	// A Dimmer's device-level parameters of POST /settings (gen1DimmerKeys).
+	"min_brightness":  true,
+	"fade_rate":       true,
+	"transition":      true,
+	"zcross_debounce": true,
+	"pulse_mode":      true,
 }
 
 // gen1CoIoTMinPeriod and gen1CoIoTMaxPeriod bound the CoIoT update period, in seconds, that a
@@ -138,6 +145,14 @@ var gen1ApplicablePaths = map[string]bool{
 	"light.lights[].btn_type":       true,
 	"light.lights[].btn_debounce":   true,
 	"light.lights[].swap_inputs":    true,
+
+	// A Dimmer's device-level settings are flat parameters of POST /settings, read back from GET
+	// /settings. leading_edge is pulse_mode, and only where the device reports pulse_mode_detected.
+	"dimming.min_brightness":  true,
+	"dimming.fade_rate":       true,
+	"dimming.transition":      true,
+	"dimming.zcross_debounce": true,
+	"dimming.leading_edge":    true,
 
 	// The roller is written with POST /settings/roller/0 and read back from the same path.
 	// Only a model with roller mode has the section.
@@ -357,6 +372,9 @@ func unsupportedApplySettings(converter ConfigConverter, desired *DeviceConfigur
 		for i, light := range desired.Light.Lights {
 			unsupported = append(unsupported, unsupportedLightValues(i, light)...)
 		}
+	}
+	if desired.Dimming != nil {
+		unsupported = append(unsupported, unsupportedDimmingValues(desired.Dimming)...)
 	}
 	if desired.PowerMetering != nil && desired.PowerMetering.MaxPower != nil && *desired.PowerMetering.MaxPower < 0 {
 		unsupported = append(unsupported, "power_metering.max_power")

@@ -108,9 +108,9 @@ func TestDeviceSchemaSectionsFollowTheModel(t *testing.T) {
 		"SHSW-25": {"actions", "auth", "cloud", "coiot", "input", "location", "mqtt", "network", "power_metering", "relay", "roller", "system", "wifi"},
 		// The i3 has no actions section in this slice: apply refuses it whole.
 		"SHIX3-1": {"auth", "cloud", "coiot", "input", "location", "mqtt", "network", "system", "wifi"},
-		// A Dimmer has light channels and no relay; its device-level group is stored, not applied.
-		"SHDM-1":  {"auth", "cloud", "coiot", "dimming", "light", "location", "mqtt", "network", "system", "wifi"},
-		"SHDM-2":  {"auth", "cloud", "coiot", "dimming", "light", "location", "mqtt", "network", "system", "wifi"},
+		// A Dimmer has light channels and no relay; it has the status LED and its device-level group.
+		"SHDM-1":  {"auth", "cloud", "coiot", "dimming", "led", "light", "location", "mqtt", "network", "system", "wifi"},
+		"SHDM-2":  {"auth", "cloud", "coiot", "dimming", "led", "light", "location", "mqtt", "network", "system", "wifi"},
 		"unknown": {"actions", "auth", "cloud", "coiot", "dimming", "input", "led", "light", "location", "mqtt", "network", "power_metering", "relay", "roller", "system", "wifi"},
 	}
 	for deviceType, want := range cases {
@@ -130,12 +130,50 @@ func TestDeviceSchemaSectionsFollowTheModel(t *testing.T) {
 	}
 }
 
-// The Dimmer's light fields are applicable and the device-level dimming group is not: apply writes
-// the channels and nothing of the group (S7).
-func TestDeviceSchemaDimmerMarksLightApplicableAndDimmingNot(t *testing.T) {
+// A plug keeps both of its LED keys: the Dimmer's status-LED-only section changes nothing for it.
+func TestDeviceSchemaPlugKeepsBothLEDLeaves(t *testing.T) {
+	for _, model := range []string{"SHPLG-S", "SHPLG-1"} {
+		leaves := map[string]map[string]interface{}{}
+		schemaLeaves("", GetDeviceConfigurationSchema(model), leaves)
+		for _, path := range []string{"led.power_indication", "led.network_indication"} {
+			if leaf, ok := leaves[path]; !ok || leaf[SchemaKeyApplicable] != true {
+				t.Errorf("%s: %s = %v, want an applicable leaf", model, path, leaf)
+			}
+		}
+	}
+}
+
+// The Dimmer's light fields are applicable, and so are the five device-level dimming fields apply
+// writes on POST /settings. Every other dimming leaf is not applicable. The Dimmer has the status LED
+// and no power LED, so its led section holds network_indication and no power_indication, while the
+// plug keeps both.
+func TestDeviceSchemaDimmerMarksLightAndFiveDimmingFieldsApplicable(t *testing.T) {
+	written := map[string]bool{
+		"dimming.min_brightness": true, "dimming.fade_rate": true, "dimming.transition": true,
+		"dimming.zcross_debounce": true, "dimming.leading_edge": true,
+	}
 	for _, model := range []string{"SHDM-1", "SHDM-2"} {
 		leaves := map[string]map[string]interface{}{}
 		schemaLeaves("", GetDeviceConfigurationSchema(model), leaves)
+		for path := range written {
+			leaf, ok := leaves[path]
+			if !ok {
+				t.Errorf("%s: no schema leaf %s", model, path)
+			} else if leaf[SchemaKeyApplicable] != true {
+				t.Errorf("%s: %s is not applicable", model, path)
+			}
+		}
+		if leaf, ok := leaves["led.network_indication"]; !ok || leaf[SchemaKeyApplicable] != true {
+			t.Errorf("%s: led.network_indication = %v, want an applicable leaf", model, leaf)
+		}
+		if _, ok := leaves["led.power_indication"]; ok {
+			t.Errorf("%s: a Dimmer has no power LED", model)
+		}
+		for path, leaf := range leaves {
+			if strings.HasPrefix(path, "dimming.") && !written[path] && leaf[SchemaKeyApplicable] != false {
+				t.Errorf("%s: %s = %v, want false", model, path, leaf[SchemaKeyApplicable])
+			}
+		}
 		for _, field := range gen1LightKeys {
 			path := "light.lights[]." + field
 			leaf, ok := leaves[path]
@@ -145,11 +183,6 @@ func TestDeviceSchemaDimmerMarksLightApplicableAndDimmingNot(t *testing.T) {
 			}
 			if leaf[SchemaKeyApplicable] != true {
 				t.Errorf("%s: %s is not applicable", model, path)
-			}
-		}
-		for path, leaf := range leaves {
-			if strings.HasPrefix(path, "dimming.") && leaf[SchemaKeyApplicable] != false {
-				t.Errorf("%s: %s = %v, want false", model, path, leaf[SchemaKeyApplicable])
 			}
 		}
 		if _, ok := leaves["light.lights[].name"]; ok {
