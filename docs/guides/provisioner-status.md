@@ -68,11 +68,14 @@ Use `strict` on the agent when the manager is `strict` too (`security.agent_enro
 enrolment code answers a keyed register with a token at once; in `open` the agent carries on under its new id,
 and in `strict` it refuses.
 
-When the agent or `fingerprint` cannot load a config file that exists, it prints one fixed sentence ("the config
-file is not valid ...") and nothing from the file or the decoder, not even a line number. The decoders quote the
-value they refused, and a seed written in the config file would be on the screen and in the logs. Check the
-syntax with a YAML linter, and compare each setting's type with `configs/shelly-provisioner.yaml` (a linter finds
-a syntax error, never a value of the wrong type). A file that is missing or unreadable is named as it always was.
+When the manager, the agent or `fingerprint` cannot load a config that exists, it prints the file's path and one
+fixed sentence ("the configuration is not valid ...") and nothing from the file, the environment or the decoder,
+not even a line number or a setting name. The decoders quote the value they refused, and a secret written in the
+config file, or in a `SHELLY_` variable, would be on the screen and in the logs. The sentence covers both sources:
+check the file's syntax with a YAML linter, compare each setting's type with `configs/shelly-manager.yaml` or
+`configs/shelly-provisioner.yaml` (a linter finds a syntax error, never a value of the wrong type), and check that
+each `SHELLY_` variable holds a value of the setting's type. A file that is missing or unreadable, or whose
+extension is not a config type, is named, with the system's own reason, as it always was.
 
 A manager that holds too many agents waiting for approval answers `429`: approve or reject some, and the agent
 tries again on its next poll.

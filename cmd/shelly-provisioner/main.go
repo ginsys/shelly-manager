@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
 	"log"
 	"os"
 	"os/signal"
@@ -140,7 +139,7 @@ var fingerprintCmd = &cobra.Command{
 			fileSeed = loaded.Provisioning.AgentSeed
 		case configFile == "" && errors.As(err, &notFound):
 		default:
-			log.Fatal("Failed to load config: ", loadFailure(err))
+			log.Fatal("Failed to load config: ", err)
 		}
 		seed, err := secrets.OverrideIfPresent(fileSeed, "SHELLY_PROVISIONING_AGENT_SEED")
 		if err != nil {
@@ -155,19 +154,6 @@ var fingerprintCmd = &cobra.Command{
 		}
 		fmt.Println(key.Readable())
 	},
-}
-
-// loadFailure is a config-load error as text that carries nothing the decoders quote. Both the YAML decoder and the
-// one that fills the settings put the value they refused into the error, and a seed in the config file is such a
-// value, in any shape; even a line number read out of that text can be the seed's own digits. A file that is missing
-// or unreadable is the operator's own path and is printed as it is; for a file that does not parse, nothing of the
-// decoder's text is read or printed.
-func loadFailure(err error) string {
-	var notFound viper.ConfigFileNotFoundError
-	if errors.As(err, &notFound) || errors.Is(err, fs.ErrNotExist) || errors.Is(err, fs.ErrPermission) {
-		return err.Error()
-	}
-	return "the config file is not valid (details withheld, they may quote a secret from it; check it with a YAML linter)"
 }
 
 // keyFromSeed makes the agent's key, or returns nil for no seed. A malformed seed is an error that names the
@@ -805,7 +791,7 @@ func initApp() {
 	// Load configuration
 	cfg, err = config.LoadWithName(configFile, "shelly-provisioner")
 	if err != nil {
-		log.Fatal("Failed to load config: ", loadFailure(err))
+		log.Fatal("Failed to load config: ", err)
 	}
 
 	// Apply secret overrides (env and *_FILE). A *_FILE that cannot be read stops the start.

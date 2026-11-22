@@ -39,8 +39,8 @@ const (
 	// The agent id for cmdSeed, one fixed value (never computed from the code under test).
 	cmdAgentID = "keyed-56475aa75463474c0285df5dbf2bcab7"
 
-	// notValidSentence is all a config file that exists and does not load may show: nothing in it comes from the file.
-	notValidSentence = "the config file is not valid (details withheld, they may quote a secret from it; check it with a YAML linter)"
+	// notValidSentence is all a config that does not load may show beside its path: nothing in it comes from the file.
+	notValidSentence = "the configuration is not valid (details withheld, they may quote a secret): check the file's syntax with a YAML linter, compare each setting's type with the sample config (a linter finds a syntax error, never a wrong type), and check that each SHELLY_ environment variable holds a value of the setting's type"
 )
 
 // syncBuffer is the child's whole output (stdout and stderr together), safe to read while it runs.
@@ -266,35 +266,31 @@ func TestKeyedAgentCommands(t *testing.T) {
 		assert.NotContains(t, out, cmdSeed[:16])
 	})
 
-	// The YAML decoder puts the value it could not decode into its error text, so a seed in a config file that does not
-	// load (here a tag that makes the value an integer) would reach stderr whole on the start and on `fingerprint`.
+	// The loader withholds what the decoders quote, in every shape of the value: that matrix runs in internal/config
+	// (load_failure_test.go). Here the binary shows both commands print what the loader returns: the file's path and
+	// the fixed sentence, and nothing of the seed (a tag that makes the value an integer, which the YAML decoder quotes).
 	t.Run("a config that fails to parse never prints a seed that is in it", func(t *testing.T) {
-		// The seed in shapes a pattern on its own look would miss: whole, in four hyphenated groups, spaced, and as a
-		// map or a list (the decoder of the settings quotes those too). None of its 16-character pieces may appear.
 		groups := []string{cmdSeed[:16], cmdSeed[16:32], cmdSeed[32:48], cmdSeed[48:]}
-		for name, value := range map[string]string{
-			"tagged":   "!!int " + cmdSeed,
-			"hyphens":  "!!int " + strings.Join(groups, "-"),
-			"spaces":   "!!int " + strings.Join(groups, " "),
-			"a map":    "{a: " + cmdSeed + "}",
-			"a list":   "[" + strings.Join(groups, ", ") + "]",
-			"a number": "!!float " + strings.Join(groups, "_"),
-			// The decoder quotes the value, so a value that reads like a location must not become one.
-			"a line word": `!!int "line ` + strings.Join(groups, "-") + `"`,
-			// A syntax error, which the decoder reports with a line number of its own.
-			"unclosed": "[" + cmdSeed,
-		} {
-			config := writeConfig(t, "logging:\n  level: info\nprovisioning:\n  agent_seed: "+value+"\n")
-			for _, args := range [][]string{{"fingerprint"}, {"--api-url", "http://127.0.0.1:1", "agent"}} {
-				out, code := p.run(t, nil, append([]string{"--config", config}, args...)...)
-				assert.NotZero(t, code, "%s, %v:\n%s", name, args, out)
-				for _, piece := range groups {
-					assert.NotContains(t, out, piece, "%s, %v", name, args)
-				}
-				// Nothing printed comes from the file: the failure is one fixed sentence, with no line number.
-				assert.Contains(t, out, "Failed to load config: "+notValidSentence+"\n", "%s, %v: one fixed sentence", name, args)
-				assert.NotContains(t, out, "near line", "%s, %v", name, args)
+		config := writeConfig(t, "logging:\n  level: info\nprovisioning:\n  agent_seed: !!int "+cmdSeed+"\n")
+		for _, args := range [][]string{{"fingerprint"}, {"--api-url", "http://127.0.0.1:1", "agent"}} {
+			out, code := p.run(t, nil, append([]string{"--config", config}, args...)...)
+			assert.NotZero(t, code, "%v:\n%s", args, out)
+			for _, piece := range groups {
+				assert.NotContains(t, out, piece, "%v", args)
 			}
+			assert.Contains(t, out, "Failed to load config: "+config+": "+notValidSentence+"\n", "%v: the path and one fixed sentence", args)
+		}
+	})
+
+	// A file that is missing is still named, with the OS's own cause, on both commands.
+	t.Run("a config file that is missing is named", func(t *testing.T) {
+		missing := filepath.Join(t.TempDir(), "absent.yaml")
+		for _, args := range [][]string{{"fingerprint"}, {"--api-url", "http://127.0.0.1:1", "agent"}} {
+			out, code := p.run(t, nil, append([]string{"--config", missing}, args...)...)
+			assert.NotZero(t, code, "%v:\n%s", args, out)
+			assert.Contains(t, out, "Failed to load config: failed to read config file at '"+missing+"'", "%v", args)
+			assert.Contains(t, out, "no such file or directory", "%v", args)
+			assert.NotContains(t, out, "details withheld", "%v", args)
 		}
 	})
 
