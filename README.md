@@ -170,6 +170,7 @@ admin key holder approves its fingerprint (`POST /api/v1/provisioner/agents/{id}
 (`SHELLY_SECURITY_AGENT_ENROLMENT`) is `open` by default: agents that register without a key work as before. Set it to
 `strict` to let in only approved agents: a register without a key is then refused with `403`, and the token of an agent
 that is not approved stops working, so every existing keyless agent must be pre-approved and re-enrolled by key first.
+The provisioner agent shipped today cannot enrol by key yet, so `strict` locks it out: keep `open` while you run it.
 `strict` needs an admin key and the manager refuses to start without one (see `docs/api/api-overview.md`, "Strict
 enrolment").
 

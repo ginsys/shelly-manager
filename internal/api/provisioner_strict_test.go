@@ -32,7 +32,7 @@ func TestStrictEnrolment_KeylessRegisterIs403ForEveryCaller(t *testing.T) {
 		code, _, body := idRegister(t, srv, "plain-agent", hdr)
 		assert.Equal(t, http.StatusForbidden, code, "%s: %s", name, body)
 	}
-	// A key- id and a bad id are refused the same way: the mode, not the id, is the answer.
+	// A key- id is refused the same way: the mode, not the id, is the answer.
 	priv := kdKey(0xc1)
 	code, _, body := idRegister(t, srv, kdID(priv), idAgentHdr(""))
 	assert.Equal(t, http.StatusForbidden, code, body)
