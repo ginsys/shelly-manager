@@ -87,8 +87,8 @@ Response: Header validation failure, request rejected
 #### Scenario 3: Event Handler Injection
 ```
 Attack: {"name": "device<img src=x onerror=alert(1)>"}
-Detection: HTML event handler patterns in JSON validation
-Response: JSON structure validation failure
+Detection: none in the JSON validator, which checks syntax, nesting depth and array size, not the text of a value
+Response: The body is accepted; output escaping in the page that shows the value is the defence
 ```
 
 ### Performance Impact
@@ -122,8 +122,8 @@ GET /api/v1/devices?id=1' OR '1'='1
 
 #### Union-Based Injection
 ```sql
--- Attack in path parameter  
-GET /api/v1/devices/1 UNION SELECT password FROM users--
+-- Attack in a query parameter
+GET /api/v1/devices?id=1 UNION SELECT password FROM users--
 
 -- Detection trigger: "union select" pattern match
 -- Response: Request refused with 400
@@ -131,11 +131,13 @@ GET /api/v1/devices/1 UNION SELECT password FROM users--
 
 #### Blind SQL Injection
 ```sql
--- Time-based blind injection
-GET /api/v1/devices?search=test'; WAITFOR DELAY '00:00:05'--
+-- Stacked statement
+GET /api/v1/devices?search=test'; DROP TABLE devices--
 
--- Detection trigger: SQL comment patterns + suspicious keywords
--- Response: Query parameter validation failure
+-- Detection trigger: "drop table" pattern match
+-- Response: Request refused with 400
+-- A time-based payload such as WAITFOR DELAY matches no pattern, so the validator does not refuse it;
+-- parameterised queries are the defence against it.
 ```
 
 ### Advanced SQL Injection Patterns
@@ -442,9 +444,9 @@ func ValidateQueryParamsMiddleware(config *ValidationConfig) {
 
 #### Query Parameter Pollution
 ```
-Attack: GET /api/v1/devices?__proto__[isAdmin]=true
-Detection: Forbidden parameter name matching
-Response: Query parameter validation failure
+Attack: GET /api/v1/devices?__proto__=true
+Detection: Forbidden parameter name matching (exact name: __proto__, constructor, prototype)
+Response: Request refused with 400
 ```
 
 #### JSON Prototype Pollution
@@ -454,8 +456,8 @@ Response: Query parameter validation failure
   "device": {"name": "test"}
 }
 
-// Detection: JSON key validation (if implemented)
-// Response: JSON validation failure
+// Detection: none. The JSON validator checks syntax, depth and array size, not key names,
+// so this body is accepted.
 ```
 
 ## Automated Scanner Detection
