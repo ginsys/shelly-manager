@@ -358,9 +358,9 @@ A "../" in the URL path is not refused by the validator, which reads query value
 
 #### Encoded Path Traversal
 ```
-Attack: GET /api/v1/files/%2e%2e%2f%2e%2e%2fetc%2fpasswd
-Detection: URL decoding + pattern matching
-Response: Path validation failure
+Attack: GET /api/v1/devices?path=%2e%2e%2f%2e%2e%2fetc%2fpasswd
+Detection: the query value is URL-decoded, then the "../" pattern matches
+Response: Request refused with 400
 ```
 
 ## Header Injection Prevention
