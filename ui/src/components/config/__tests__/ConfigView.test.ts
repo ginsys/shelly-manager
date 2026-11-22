@@ -31,6 +31,16 @@ describe('ConfigView nested values', () => {
     expect(text).toContain('Auto on:')
   })
 
+  // A Dimmer's light channels are their own section: a label and an icon of its own, not the
+  // fallback clipboard icon every unknown section gets.
+  it('labels the light section and gives it a lamp icon, not the fallback', () => {
+    const wrapper = mountView({ config: { light: { lights: [{ id: 0, default_state: 'last', btn_debounce: 80 }] } } })
+    const section = wrapper.find('.section-header')
+    expect(section.find('.section-title').text()).toBe('Light')
+    expect(section.find('.section-icon').text()).toBe('💡')
+    expect(section.find('.section-icon').text()).not.toBe('📋')
+  })
+
   it('makes one group per item, named by its name, else by its id', () => {
     const titles = mountView().findAll('[data-nested="item"] .nested-title').map(t => t.text())
     expect(titles).toEqual(['Lamp', 'Item 1'])

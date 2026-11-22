@@ -76,6 +76,9 @@ func (c *Gen1Converter) FromAPIConfig(apiJSON json.RawMessage, deviceType string
 		return nil, fmt.Errorf("failed to convert Relay: %w", err)
 	}
 
+	// Convert Light settings (a Dimmer's channels)
+	c.convertLight(gen1, config, deviceType)
+
 	// Convert PowerMetering settings (device-specific)
 	if err := c.convertPowerMetering(gen1, config, deviceType); err != nil {
 		return nil, fmt.Errorf("failed to convert PowerMetering: %w", err)
@@ -129,6 +132,9 @@ func (c *Gen1Converter) ToAPIConfig(config *DeviceConfiguration, deviceType stri
 	// Convert Relay settings
 	c.exportRelay(config, gen1, deviceType)
 
+	// Convert Light settings
+	c.exportLight(config, gen1, deviceType)
+
 	// Convert PowerMetering settings
 	c.exportPowerMetering(config, gen1, deviceType)
 
@@ -154,6 +160,8 @@ func (c *Gen1Converter) SupportedDeviceTypes() []string {
 		"SHSW-PM", // Shelly 1PM
 		"SHSW-25", // Shelly 2.5
 		"SHIX3-1", // Shelly i3
+		"SHDM-1",  // Shelly Dimmer
+		"SHDM-2",  // Shelly Dimmer 2 (read as the same channel as SHDM-1; unverified)
 	}
 }
 
@@ -453,14 +461,8 @@ func (c *Gen1Converter) convertRelay(gen1 map[string]interface{}, config *Device
 		if schedule, ok := relayMap["schedule"].(bool); ok {
 			singleRelay.Schedule = BoolPtr(schedule)
 		}
-		if rules, ok := relayMap["schedule_rules"].([]interface{}); ok {
-			list := []string{}
-			for _, rule := range rules {
-				if text, isString := rule.(string); isString {
-					list = append(list, text)
-				}
-			}
-			singleRelay.ScheduleRules = &list
+		if rules, ok := scheduleRulesOf(relayMap["schedule_rules"]); ok {
+			singleRelay.ScheduleRules = rules
 		}
 		if maxPower, ok := shelly.WholeNumber(relayMap["max_power"]); ok {
 			singleRelay.MaxPower = IntPtr(maxPower)
@@ -474,6 +476,66 @@ func (c *Gen1Converter) convertRelay(gen1 map[string]interface{}, config *Device
 	}
 
 	return nil
+}
+
+// scheduleRulesOf reads a channel's schedule_rules: the list of rule strings, empty when the device
+// keeps none. It is false when the value is no list.
+func scheduleRulesOf(raw interface{}) (*[]string, bool) {
+	rules, ok := raw.([]interface{})
+	if !ok {
+		return nil, false
+	}
+	list := []string{}
+	for _, rule := range rules {
+		if text, isString := rule.(string); isString {
+			list = append(list, text)
+		}
+	}
+	return &list, true
+}
+
+// convertLight reads the lights array of a model whose channels are lights. The name of a light is
+// an attribute the page lists and no parameter it accepts, so it is not read.
+func (c *Gen1Converter) convertLight(gen1 map[string]interface{}, config *DeviceConfiguration, deviceType string) {
+	if !c.hasLight(deviceType) {
+		return
+	}
+	lights := relayMaps(gen1["lights"])
+	if len(lights) == 0 {
+		return
+	}
+
+	light := &LightConfig{Lights: make([]SingleLightConfig, 0, len(lights))}
+	for i, lightMap := range lights {
+		single := SingleLightConfig{ID: i}
+		if defaultState, ok := lightMap["default_state"].(string); ok {
+			single.DefaultState = StringPtr(defaultState)
+		}
+		if autoOn, ok := shelly.WholeNumber(lightMap["auto_on"]); ok {
+			single.AutoOn = IntPtr(autoOn)
+		}
+		if autoOff, ok := shelly.WholeNumber(lightMap["auto_off"]); ok {
+			single.AutoOff = IntPtr(autoOff)
+		}
+		if schedule, ok := lightMap["schedule"].(bool); ok {
+			single.Schedule = BoolPtr(schedule)
+		}
+		if rules, ok := scheduleRulesOf(lightMap["schedule_rules"]); ok {
+			single.ScheduleRules = rules
+		}
+		if buttonType, ok := lightMap["btn_type"].(string); ok {
+			single.ButtonType = StringPtr(buttonType)
+		}
+		if debounce, ok := shelly.WholeNumber(lightMap["btn_debounce"]); ok {
+			single.ButtonDebounce = IntPtr(debounce)
+		}
+		// The page's example shows swap_inputs as 0; a device may report a number or a boolean.
+		if swap, ok := reverseFlag(lightMap["swap_inputs"]); ok {
+			single.SwapInputs = BoolPtr(swap)
+		}
+		light.Lights = append(light.Lights, single)
+	}
+	config.Light = light
 }
 
 func (c *Gen1Converter) convertPowerMetering(gen1 map[string]interface{}, config *DeviceConfiguration, deviceType string) error {
@@ -800,6 +862,47 @@ func (c *Gen1Converter) exportRelay(config *DeviceConfiguration, gen1 map[string
 	}
 
 	gen1["relays"] = relays
+}
+
+func (c *Gen1Converter) exportLight(config *DeviceConfiguration, gen1 map[string]interface{}, deviceType string) {
+	if !c.hasLight(deviceType) || config.Light == nil || len(config.Light.Lights) == 0 {
+		return
+	}
+
+	lights := make([]map[string]interface{}, len(config.Light.Lights))
+	for i, light := range config.Light.Lights {
+		lightMap := make(map[string]interface{})
+		if light.DefaultState != nil {
+			lightMap["default_state"] = *light.DefaultState
+		}
+		if light.AutoOn != nil {
+			lightMap["auto_on"] = *light.AutoOn
+		}
+		if light.AutoOff != nil {
+			lightMap["auto_off"] = *light.AutoOff
+		}
+		if light.Schedule != nil {
+			lightMap["schedule"] = *light.Schedule
+		}
+		if light.ScheduleRules != nil {
+			lightMap["schedule_rules"] = *light.ScheduleRules
+		}
+		if light.ButtonType != nil {
+			lightMap["btn_type"] = *light.ButtonType
+		}
+		if light.ButtonDebounce != nil {
+			lightMap["btn_debounce"] = *light.ButtonDebounce
+		}
+		if light.SwapInputs != nil {
+			swap := 0
+			if *light.SwapInputs {
+				swap = 1
+			}
+			lightMap["swap_inputs"] = swap
+		}
+		lights[i] = lightMap
+	}
+	gen1["lights"] = lights
 }
 
 func (c *Gen1Converter) exportPowerMetering(config *DeviceConfiguration, gen1 map[string]interface{}, deviceType string) {
@@ -1142,7 +1245,21 @@ func (c *Gen1Converter) hasRelay(deviceType string) bool {
 	case "SHIX3-1":
 		// Input-only device, no relays
 		return false
+	case "SHDM-1", "SHDM-2":
+		// A Dimmer's channel is /settings/light/<n>, and its settings carry a lights array and no
+		// relays array. A relay sent to /settings/relay/<n> goes to a path the device does not have.
+		return false
 	default:
 		return true
+	}
+}
+
+// hasLight reports whether a model's channels are lights: POST and GET on /settings/light/<n>.
+func (c *Gen1Converter) hasLight(deviceType string) bool {
+	switch deviceType {
+	case "SHDM-1", "SHDM-2":
+		return true
+	default:
+		return false
 	}
 }

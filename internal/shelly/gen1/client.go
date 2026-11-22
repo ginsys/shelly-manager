@@ -546,6 +546,16 @@ func (c *Client) SetLightSettings(ctx context.Context, channel int, settings map
 	return c.postForm(ctx, url, settings)
 }
 
+// GetLightSettings reads light-specific settings with GET /settings/light/<channel>.
+func (c *Client) GetLightSettings(ctx context.Context, channel int) (map[string]interface{}, error) {
+	url := fmt.Sprintf("http://%s/settings/light/%d", c.ip, channel)
+	var result map[string]interface{}
+	if err := c.getJSON(ctx, url, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 // GetLightStatus retrieves the status of a light channel
 func (c *Client) GetLightStatus(ctx context.Context, channel int) (map[string]interface{}, error) {
 	url := fmt.Sprintf("http://%s/light/%d", c.ip, channel)

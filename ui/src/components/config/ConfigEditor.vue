@@ -296,7 +296,7 @@ function getSectionIcon(key: string): string {
   const icons: Record<string, string> = {
     wifi: '📶', mqtt: '📡', auth: '🔐', system: '⚙️', cloud: '☁️',
     location: '📍', relay: '🔌', led: '💡', power_metering: '⚡',
-    input: '🔘', coiot: '🔗', dimming: '🌗', roller: '🪟', color: '🎨',
+    input: '🔘', coiot: '🔗', dimming: '🌗', light: '💡', roller: '🪟', color: '🎨',
     temp_protection: '🌡️', schedule: '📅', energy_meter: '📊',
     motion: '👁️', sensor: '🌡️'
   }

@@ -67,7 +67,7 @@
   - Calibration mode
 - **API Endpoints**:
   - ❌ `/light/0` - Control brightness
-  - ❌ `/settings/light/0` - Configure dimmer
+  - ✅ `/settings/light/0` - Channel settings (`light.lights`: apply writes the keys that are set and reads them back, unconfirmed on hardware; the device-level settings and night mode are not applied yet)
   - ✅ `/meter/0` - Power consumption
   - ❌ `/settings/light/0/calibration` - Calibration settings
 

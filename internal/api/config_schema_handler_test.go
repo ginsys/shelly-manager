@@ -92,7 +92,7 @@ func TestConfigSchemaForGlobalTemplate(t *testing.T) {
 	code, data := getSchema(t, handler, "?scope=global")
 	require.Equal(t, http.StatusOK, code)
 	assert.Equal(t,
-		[]string{"actions", "auth", "cloud", "coiot", "dimming", "input", "led", "location", "mqtt", "network", "power_metering", "relay", "roller", "system", "wifi"},
+		[]string{"actions", "auth", "cloud", "coiot", "dimming", "input", "led", "light", "location", "mqtt", "network", "power_metering", "relay", "roller", "system", "wifi"},
 		schemaSections(data), "a global template holds every stored section, and no generic-only section")
 	assert.Equal(t, true, data[configuration.SchemaKeyApplySupported])
 
