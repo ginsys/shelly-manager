@@ -116,7 +116,9 @@ export async function getAgents(): Promise<ProvisioningAgent[]> {
 }
 
 export async function getAgentStatus(id: string): Promise<ProvisioningAgent> {
-  const res = await api.get<APIResponse<ProvisioningAgent>>(`/provisioning/agents/${id}/status`)
+  // The id may hold a slash or a space, so it is escaped in the path, as for approve and reject below.
+  const agentId = encodeURIComponent(id)
+  const res = await api.get<APIResponse<ProvisioningAgent>>(`/provisioning/agents/${agentId}/status`)
   if (!res.data.success || !res.data.data) {
     const msg = res.data.error?.message || 'Failed to load agent status'
     throw new Error(msg)

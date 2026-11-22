@@ -186,6 +186,34 @@ func checkProvisionerIDRule(t *testing.T, manager *Manager) {
 		assert.NoError(t, err)
 	})
 
+	// The id is a path segment of every per-agent route, so a new id that the path clean rewrites (an empty
+	// or a "." or ".." segment) or that the security monitor counts as suspicious (".." anywhere) would be
+	// created and then be unreachable or block its own agent's address.
+	t.Run("a new id with an empty, a . or a .. segment, or .. anywhere, is refused and leaves no row", func(t *testing.T) {
+		for _, id := range []string{
+			"a//b", "/a", "a/", "/", "a/./b", "./a", "a/.", ".", "a/../b", "../a", "a/..", "..",
+			"a..b", "..a", "a..", "...x", "provisioner-x//y", "provisioner-x/../y", "provisioner-a..b", "provisioner-x/",
+		} {
+			for name, actor := range map[string]ProvisionerActor{"agent key": {}, "admin key": adminActor} {
+				_, created, err := s.RegisterAgent(ctx, actor, agentRow(id, "tok-"+name+id, now), testOfflineAfter)
+				assert.ErrorIs(t, err, ErrAgentIDUnroutable, "%q with the %s", id, name)
+				assert.False(t, created)
+			}
+			assert.EqualValues(t, 0, rows(id), "%q must leave no row", id)
+		}
+	})
+
+	t.Run("an id with one inner slash, or dots that are not a . or .. segment, registers", func(t *testing.T) {
+		for _, id := range []string{
+			"lab/pi-1", "a/b", "a/b/c", "v1.2", "a.b", "a/b.c", "a/.b", "a/b.", ".a", "a.", "provisioner-lab/pi 1",
+			"provisioner-host.example.com-42", "provisioner-/x",
+		} {
+			_, created, err := s.RegisterAgent(ctx, ProvisionerActor{}, agentRow(id, "tok-pin"+id, now), testOfflineAfter)
+			require.NoError(t, err, "%q", id)
+			assert.True(t, created, "%q", id)
+		}
+	})
+
 	t.Run("a row that exists keeps registering, whatever its id holds", func(t *testing.T) {
 		silent := now.Add(-time.Hour)
 		for _, id := range []string{"café ünï", "with space", "日本語"} {

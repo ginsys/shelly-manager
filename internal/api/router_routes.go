@@ -238,7 +238,11 @@ func registerAPIRoutes(api *mux.Router, handler *Handler, logger *logging.Logger
 	api.HandleFunc("/provisioning/tasks/{id}/cancel", handler.CancelProvisioningTaskUI).Methods("POST")
 	api.HandleFunc("/provisioning/bulk", handler.BulkProvisionUI).Methods("POST")
 	api.HandleFunc("/provisioning/agents", handler.ListProvisioningAgentsUI).Methods("GET")
-	api.HandleFunc("/provisioning/agents/{id}/status", handler.GetProvisioningAgentStatusUI).Methods("GET")
+	// An agent id may hold a "/", so the five per-agent routes take the id as everything between the fixed
+	// parts of the path (agentIDVar); each ends in its own literal, so the greedy match stays unambiguous.
+	// (?s) lets the id hold a newline, which an id that starts with "provisioner-" may.
+	const agentIDVar = "{id:(?s).+}"
+	api.HandleFunc("/provisioning/agents/"+agentIDVar+"/status", handler.GetProvisioningAgentStatusUI).Methods("GET")
 
 	// Provisioner agent management routes. The agent calls five of them (register, poll, task status,
 	// report discovered devices, health) with its own key or the admin key; the rest create tasks and
@@ -248,11 +252,11 @@ func registerAPIRoutes(api *mux.Router, handler *Handler, logger *logging.Logger
 	agent := handler.agentOrAdmin
 	api.HandleFunc("/provisioner/agents/register", agent(handler.RegisterAgent)).Methods("POST")
 	api.HandleFunc("/provisioner/agents", admin(handler.GetProvisionerAgents)).Methods("GET")
-	api.HandleFunc("/provisioner/agents/{id}", admin(handler.DeleteProvisionerAgent)).Methods("DELETE")
-	api.HandleFunc("/provisioner/agents/{id}/approve", admin(handler.ApproveProvisionerAgent)).Methods("POST")
-	api.HandleFunc("/provisioner/agents/{id}/reject", admin(handler.RejectProvisionerAgent)).Methods("POST")
+	api.HandleFunc("/provisioner/agents/"+agentIDVar, admin(handler.DeleteProvisionerAgent)).Methods("DELETE")
+	api.HandleFunc("/provisioner/agents/"+agentIDVar+"/approve", admin(handler.ApproveProvisionerAgent)).Methods("POST")
+	api.HandleFunc("/provisioner/agents/"+agentIDVar+"/reject", admin(handler.RejectProvisionerAgent)).Methods("POST")
 	api.HandleFunc("/provisioner/enrolments", admin(handler.PreapproveProvisionerAgent)).Methods("POST")
-	api.HandleFunc("/provisioner/agents/{id}/tasks", agent(handler.PollTasks)).Methods("GET")
+	api.HandleFunc("/provisioner/agents/"+agentIDVar+"/tasks", agent(handler.PollTasks)).Methods("GET")
 	api.HandleFunc("/provisioner/tasks", admin(handler.CreateProvisioningTask)).Methods("POST")
 	api.HandleFunc("/provisioner/tasks", admin(handler.GetProvisioningTasks)).Methods("GET")
 	api.HandleFunc("/provisioner/tasks/{id}/status", agent(handler.UpdateTaskStatus)).Methods("PUT")

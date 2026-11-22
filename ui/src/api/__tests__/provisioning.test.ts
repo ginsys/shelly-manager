@@ -278,6 +278,17 @@ describe('provisioning api', () => {
     })
   })
 
+  describe('agent status of an id with a slash or a space', () => {
+    it('getAgentStatus escapes the id in the path, and a plain id is unchanged', async () => {
+      const row = { id: 'x', name: 'x', status: 'online', version: '1', capabilities: [], lastSeen: '', enrolmentState: 'legacy' }
+      ;(api.get as any).mockResolvedValue({ data: { success: true, data: row, timestamp: '' } })
+      await getAgentStatus('provisioner-lab/pi 1')
+      expect(api.get).toHaveBeenLastCalledWith('/provisioning/agents/provisioner-lab%2Fpi%201/status')
+      await getAgentStatus('agent-1')
+      expect(api.get).toHaveBeenLastCalledWith('/provisioning/agents/agent-1/status')
+    })
+  })
+
   // The enrolment acts: admin routes of the manager, each answering with a row view that the page does not read.
   describe('enrolment acts', () => {
     const ok = { data: { success: true, data: { id: 'a-1', enrolment_state: 'approved' }, timestamp: '' } }

@@ -4130,6 +4130,7 @@ paths:
         - name: id
           in: path
           required: true
+          description: The agent id. It may hold a `/`, sent as it is or as `%2F`.
           schema:
             type: string
       responses:
@@ -4158,6 +4159,7 @@ paths:
         - name: id
           in: path
           required: true
+          description: The agent id. It may hold a `/`, sent as it is or as `%2F`.
           schema:
             type: string
       responses:
@@ -4194,6 +4196,7 @@ paths:
         - name: id
           in: path
           required: true
+          description: The agent id. It may hold a `/`, sent as it is or as `%2F`.
           schema:
             type: string
       responses:
@@ -4358,6 +4361,7 @@ paths:
         - name: id
           in: path
           required: true
+          description: The agent id. It may hold a `/`, sent as it is or as `%2F`.
           schema:
             type: string
         - $ref: '#/components/parameters/AgentToken'
