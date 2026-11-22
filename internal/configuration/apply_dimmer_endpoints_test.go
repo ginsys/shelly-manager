@@ -181,6 +181,19 @@ func TestApplyDimmerWarmup_EnabledWithBrightnessZeroIsRefusedBeforeAnyWrite(t *t
 	assert.Empty(t, dev.warmPosts)
 }
 
+// The page's own warm-up example, enabled 0 with brightness 0, passes the schema check that guards
+// every template and override write; the night mode bounds are the schema's.
+func TestValidateConfigBody_WarmupOffExampleAndNightBounds(t *testing.T) {
+	example := map[string]interface{}{"dimming": map[string]interface{}{
+		"warmup_enabled": false, "warmup_brightness": float64(0), "warmup_time": float64(20),
+		"night_mode_brightness": float64(1), "night_mode_start": "22:00", "night_mode_end": "06:00",
+	}}
+	assert.Empty(t, ValidateConfigBody("SHDM-1", example))
+
+	bad := map[string]interface{}{"dimming": map[string]interface{}{"night_mode_brightness": float64(0), "night_mode_start": "24:00"}}
+	assert.Len(t, ValidateConfigBody("SHDM-2", bad), 2)
+}
+
 // A device that answers 200 and keeps the old value fails at the path of the key.
 type forgetfulNightDimmer struct{ *nightDimmer }
 

@@ -328,7 +328,14 @@ func TestDeviceSchemaApplicableMatchesApply(t *testing.T) {
 			if strings.HasSuffix(path, "[].id") {
 				continue // an array item's index, not a setting
 			}
-			cfg := configWithLeaf(t, path, sampleValue(leaf))
+			sample := sampleValue(leaf)
+			switch path { // bounded by apply only, when warm-up is on: the schema leaf has no minimum
+			case "dimming.warmup_brightness":
+				sample = gen1DimmerMinWarmupBrightness
+			case "dimming.warmup_time":
+				sample = gen1DimmerMinWarmupTime
+			}
+			cfg := configWithLeaf(t, path, sample)
 			if strings.HasPrefix(path, "actions[].") {
 				cfg = actionsLeafConfig(t, deviceType, strings.TrimPrefix(path, "actions[]."), leaf)
 			}
