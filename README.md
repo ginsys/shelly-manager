@@ -96,6 +96,21 @@ make run
 make ui-dev
 ```
 
+### Version
+
+Each binary prints its version with `--version`, and `GET /api/v1/version` answers it as `version`
+beside the `git_sha` revision:
+
+```bash
+./bin/shelly-manager --version      # shelly-manager version v0.6.0-alpha.1-dev
+./bin/shelly-provisioner --version
+```
+
+The root `VERSION` file holds the next release. A plain `make build` stamps it with `-dev` added, so an
+untagged build never claims a released version. A release build passes the bare tag:
+`make build APP_VERSION=v0.6.0-alpha.1`. A binary built without the stamp (`go build`, `go run`) says `dev`,
+and so does one built with `APP_VERSION=` empty.
+
 ## CLI Commands
 
 ```bash
