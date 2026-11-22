@@ -524,7 +524,7 @@ A `pending`, `preapproved` or `rejected` row shows its state as `status` and is 
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/v1/provisioner/agents/register` | Register provisioner agent, returns `agent_token` (agent or admin key; without `public_key`: `409` for an online id or an enrolled one, `400` for an id starting `key-` and for a new id with a space or a non-ASCII byte unless it starts `provisioner-`; with `public_key`: see "Registering with a key", `200` `pending`/`challenge`/`rejected`, `201` token, `401`, `409`, `429`) |
+| POST | `/api/v1/provisioner/agents/register` | Register provisioner agent, returns `agent_token` (agent or admin key; without `public_key`: `409` for an online id or an enrolled one, `400` for an id starting `key-` and for a new id with a space or a non-ASCII byte unless it starts `provisioner-`, `403` in `strict` enrolment; with `public_key`: see "Registering with a key", `200` `pending`/`challenge`/`rejected`, `201` token, `401`, `409`, `429`) |
 | GET | `/api/v1/provisioner/agents` | List registered agents, each with its `enrolment_state` and, for an agent enrolled by key, its `fingerprint` as eight groups of four characters (admin key) |
 | POST | `/api/v1/provisioner/agents/{id}/approve` | `pending` or `rejected` to `approved` (a `rejected` row that never had a key to `preapproved`); `409` for any other state (admin key; `404` for an unknown id) |
 | POST | `/api/v1/provisioner/agents/{id}/reject` | `pending`, `preapproved` or `approved` to `rejected`: the token stops working, the agent's assigned tasks fail; `409` for any other state (admin key; `404` for an unknown id) |

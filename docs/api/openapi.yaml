@@ -4329,6 +4329,10 @@ paths:
             A signed register with no stored challenge, an expired or already used one, a key that is not the
             row's, or a signature that does not verify. Nothing is written, and a bad signature does not spend the
             challenge.
+        '403':
+          description: >-
+            A register without a `public_key` while the manager runs `security.agent_enrolment: strict`, for the agent
+            key and the admin key alike. No row is written and no token is issued. A keyed register is not affected.
         '409':
           description: >-
             The id is online (seen within 5 minutes) and the request carries neither that agent's token nor the
