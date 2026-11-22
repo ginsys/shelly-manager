@@ -575,12 +575,16 @@ func (c *Gen1Converter) convertDimming(gen1 map[string]interface{}, config *Devi
 	}
 	dimming := &DimmingConfig{}
 	found := false
+	if n, ok := shelly.WholeNumber(gen1["transition"]); ok && c.hasTransition(deviceType) {
+		dimming.TransitionTime = IntPtr(n)
+		found = true
+	}
 	if c.hasDimmerSettings(deviceType) {
 		for key, dst := range map[string]**int{
-			"min_brightness": &dimming.MinBrightness, "fade_rate": &dimming.FadeRate,
-			"transition": &dimming.TransitionTime, "zcross_debounce": &dimming.ZcrossDebounce,
+			"min_brightness": &dimming.MinBrightness, "fade_rate": &dimming.FadeRate, "zcross_debounce": &dimming.ZcrossDebounce,
 		} {
-			if n, ok := shelly.WholeNumber(gen1[key]); ok {
+			// The page's example shows fade_rate 0 beside the range 1..5: a value outside it is no value.
+			if n, ok := shelly.WholeNumber(gen1[key]); ok && (key != "fade_rate" || (n >= gen1DimmerMinFadeRate && n <= gen1DimmerMaxFadeRate)) {
 				*dst = IntPtr(n)
 				found = true
 			}
@@ -1024,12 +1028,14 @@ func (c *Gen1Converter) exportDimming(config *DeviceConfiguration, gen1 map[stri
 	}); len(night) > 0 {
 		gen1["night_mode"] = night
 	}
+	if c.hasTransition(deviceType) && d.TransitionTime != nil {
+		gen1["transition"] = *d.TransitionTime
+	}
 	if !c.hasDimmerSettings(deviceType) {
 		return
 	}
 	for key, value := range map[string]*int{
-		"min_brightness": d.MinBrightness, "fade_rate": d.FadeRate,
-		"transition": d.TransitionTime, "zcross_debounce": d.ZcrossDebounce,
+		"min_brightness": d.MinBrightness, "fade_rate": d.FadeRate, "zcross_debounce": d.ZcrossDebounce,
 	} {
 		if value != nil {
 			gen1[key] = *value
@@ -1186,7 +1192,10 @@ func relayInputs(gen1 map[string]interface{}) []interface{} {
 
 func (c *Gen1Converter) convertInput(gen1 map[string]interface{}, config *DeviceConfiguration, deviceType string) error {
 	inputsData, ok := gen1["inputs"].([]interface{})
-	if (!ok || len(inputsData) == 0) && inputsLiveInRelays(deviceType) {
+	// The relays of a 2.5 report a button type in either mode, but in roller mode the inputs are the
+	// roller's: reading none keeps an import from being refused when it is applied again.
+	rollerMode := HasRollerMode(deviceType) && gen1["mode"] == "roller"
+	if (!ok || len(inputsData) == 0) && inputsLiveInRelays(deviceType) && !rollerMode {
 		inputsData = relayInputs(gen1)
 	}
 	if len(inputsData) == 0 {
@@ -1449,6 +1458,13 @@ func (c *Gen1Converter) hasDimmerSettings(deviceType string) bool {
 	default:
 		return false
 	}
+}
+
+// hasTransition reports whether a model has the on/off transition parameter of POST /settings: the
+// Dimmers, the Duo and the Vintage. The Duo and the Vintage have none of a Dimmer's other device-level
+// settings, so this is a list of its own and hasDimmerSettings stays the Dimmers'.
+func (c *Gen1Converter) hasTransition(deviceType string) bool {
+	return c.hasDimmerSettings(deviceType) || isGen1WhiteBulb(deviceType)
 }
 
 // hasLightEffect reports whether a model's light has the effect parameter: the RGBW2 (color mode) and

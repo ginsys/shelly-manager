@@ -260,12 +260,12 @@ func TestApplyWhiteBulbNightMode_OutOfRangeIsRefusedBeforeAnyWrite(t *testing.T)
 }
 
 // The Duo and Vintage pages have no warm-up and the flat parameters of a Dimmer (fade_rate and the
-// rest) are not theirs: the round trip refuses them before any write, as it does on the Bulb.
+// rest, but not transition, which they list) are not theirs: the round trip refuses them before any
+// write, as it does on the Bulb.
 func TestApplyWhiteBulbDimming_OnlyTheNightObjectIsTaken(t *testing.T) {
 	cases := map[string]DimmingConfig{
 		"fade_rate":        {FadeRate: IntPtr(3)},
 		"min_brightness":   {MinBrightness: IntPtr(10)},
-		"transition":       {TransitionTime: IntPtr(500)},
 		"warm-up enabled":  {WarmupEnabled: BoolPtr(true), WarmupBrightness: IntPtr(50), WarmupTime: IntPtr(100)},
 		"night and a flat": {NightModeEnabled: BoolPtr(true), FadeRate: IntPtr(3)},
 	}
@@ -308,7 +308,8 @@ func TestApplyWhiteBulbLight_KeyListHoldsOnlyTheSixSettings(t *testing.T) {
 }
 
 // The schema of the Duo and Vintage: the six page keys with name and no effect, the three default
-// states, no mode, and a dimming section of the four night-mode leaves only, brightness from 0.
+// states, no mode, and a dimming section of the four night-mode leaves and the transition, brightness
+// from 0.
 func TestDeviceSchemaWhiteBulbHoldsItsOwnKeys(t *testing.T) {
 	for _, model := range whiteBulbModels {
 		t.Run(model, func(t *testing.T) {
@@ -334,6 +335,7 @@ func TestDeviceSchemaWhiteBulbHoldsItsOwnKeys(t *testing.T) {
 			}
 			assert.ElementsMatch(t, []string{
 				"dimming.night_mode", "dimming.night_mode_brightness", "dimming.night_mode_start", "dimming.night_mode_end",
+				"dimming.transition",
 			}, dimming)
 			for _, path := range dimming {
 				assert.Equal(t, true, leaves[path][SchemaKeyApplicable], path)

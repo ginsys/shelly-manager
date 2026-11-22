@@ -174,6 +174,9 @@ func (a *ConfigApplier) ApplyConfig(ctx context.Context, client ShellyClient, co
 	if err := checkLightModeBeforeWrite(liveRaw, apiConfig, deviceType); err != nil {
 		return nil, err
 	}
+	if err := checkInputModeBeforeWrite(liveRaw, apiConfig, deviceType); err != nil {
+		return nil, err
+	}
 
 	// Decide the reboot from the settings as they are before any write, and record it before the
 	// first one. A write that fails can still have landed (the answer may be lost), and a later

@@ -53,6 +53,7 @@
   - ✅ `/meter/0`, `/meter/1` - Power consumption
   - ✅ `/settings/roller/0` - Roller configuration (written and read back by apply)
   - ✅ `/settings/relay/0`, `/settings/relay/1` - Relay configuration
+  - ⚠️ Inputs (`btn_type`, `btn_reverse`) in roller mode: the page lists them under both modes but detects input events only in relay mode, so an `input` entry on a roller-mode 2.5 is refused before any write (use `roller.button_type`, `roller.button_reverse`, `roller.swap_inputs`, `roller.input_mode`), and an import from one reads no `input` section
   - ✅ `/settings` `mode=relay|roller` - Switch between relay/roller mode (`system.device.mode`; apply writes it first and reads it back, unconfirmed on hardware)
 
 ### 💡 Lighting Control Devices
@@ -108,7 +109,8 @@
   - ❌ `/light/0` - Control (brightness, white and temperature on the Duo, timer, transition)
   - ✅ `/settings/light/0` - Channel settings (`light.lights`: `name`, `default_state`, `auto_on`, `auto_off`, `schedule`, `schedule_rules`; apply writes the keys that are set and reads them back, unconfirmed on hardware; `reset` is never sent)
   - ✅ `/settings/night_mode` - Night mode (`dimming.night_mode`, `night_mode_start`, `night_mode_end`, `night_mode_brightness` 0 to 100; apply writes it and reads it back from `GET /settings`, unconfirmed on hardware)
-  - ❌ `/settings` `transition` (0 to 5000 ms) and, on the Duo, `device_submodel` - not applied
+  - ✅ `/settings` `transition` (0 to 5000 ms) - `dimming.transition`; apply writes it and reads it back, unconfirmed on hardware
+  - ❌ `/settings` `device_submodel` (Duo) - not applied: the page lists it as a parameter but its example nests it as `device.submodel`
 
 ### 🏠 Other Devices
 
