@@ -109,8 +109,10 @@ func TestDeviceSchemaSectionsFollowTheModel(t *testing.T) {
 		// The i3 has no actions section in this slice: apply refuses it whole.
 		"SHIX3-1": {"auth", "cloud", "coiot", "input", "location", "mqtt", "network", "system", "wifi"},
 		// A Dimmer has light channels and no relay; it has the status LED and its device-level group.
-		"SHDM-1":  {"auth", "cloud", "coiot", "dimming", "led", "light", "location", "mqtt", "network", "system", "wifi"},
-		"SHDM-2":  {"auth", "cloud", "coiot", "dimming", "led", "light", "location", "mqtt", "network", "system", "wifi"},
+		"SHDM-1": {"auth", "cloud", "coiot", "dimming", "led", "light", "location", "mqtt", "network", "system", "wifi"},
+		"SHDM-2": {"auth", "cloud", "coiot", "dimming", "led", "light", "location", "mqtt", "network", "system", "wifi"},
+		// An RGBW2 has light channels (color: one, white: four) and no relay, and no Dimmer group.
+		"SHRGBW2": {"auth", "cloud", "coiot", "light", "location", "mqtt", "network", "system", "wifi"},
 		"unknown": {"actions", "auth", "cloud", "coiot", "dimming", "input", "led", "light", "location", "mqtt", "network", "power_metering", "relay", "roller", "system", "wifi"},
 	}
 	for deviceType, want := range cases {

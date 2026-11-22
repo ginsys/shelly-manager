@@ -168,6 +168,7 @@ func (c *Gen1Converter) SupportedDeviceTypes() []string {
 		"SHIX3-1", // Shelly i3
 		"SHDM-1",  // Shelly Dimmer
 		"SHDM-2",  // Shelly Dimmer 2 (read as the same channel as SHDM-1; unverified)
+		"SHRGBW2", // Shelly RGBW2 (color mode: one channel, white mode: four)
 	}
 }
 
@@ -500,8 +501,8 @@ func scheduleRulesOf(raw interface{}) (*[]string, bool) {
 	return &list, true
 }
 
-// convertLight reads the lights array of a model whose channels are lights. The name of a light is
-// an attribute the page lists and no parameter it accepts, so it is not read.
+// convertLight reads the lights array of a model whose channels are lights. The name is read for an
+// RGBW2 only: a Dimmer's page lists it as an attribute, not a parameter.
 func (c *Gen1Converter) convertLight(gen1 map[string]interface{}, config *DeviceConfiguration, deviceType string) {
 	if !c.hasLight(deviceType) {
 		return
@@ -514,6 +515,20 @@ func (c *Gen1Converter) convertLight(gen1 map[string]interface{}, config *Device
 	light := &LightConfig{Lights: make([]SingleLightConfig, 0, len(lights))}
 	for i, lightMap := range lights {
 		single := SingleLightConfig{ID: i}
+		if deviceType == "SHRGBW2" {
+			if name, ok := lightMap["name"].(string); ok {
+				single.Name = StringPtr(name)
+			}
+			if effect, ok := shelly.WholeNumber(lightMap["effect"]); ok {
+				single.Effect = IntPtr(effect)
+			}
+			if transition, ok := shelly.WholeNumber(lightMap["transition"]); ok {
+				single.Transition = IntPtr(transition)
+			}
+			if reverse, ok := reverseFlag(lightMap["btn_reverse"]); ok {
+				single.ButtonReverse = BoolPtr(reverse)
+			}
+		}
 		if defaultState, ok := lightMap["default_state"].(string); ok {
 			single.DefaultState = StringPtr(defaultState)
 		}
@@ -905,6 +920,18 @@ func (c *Gen1Converter) exportLight(config *DeviceConfiguration, gen1 map[string
 	lights := make([]map[string]interface{}, len(config.Light.Lights))
 	for i, light := range config.Light.Lights {
 		lightMap := make(map[string]interface{})
+		if light.Name != nil {
+			lightMap["name"] = *light.Name
+		}
+		if light.Effect != nil {
+			lightMap["effect"] = *light.Effect
+		}
+		if light.Transition != nil {
+			lightMap["transition"] = *light.Transition
+		}
+		if light.ButtonReverse != nil {
+			lightMap["btn_reverse"] = *light.ButtonReverse
+		}
 		if light.DefaultState != nil {
 			lightMap["default_state"] = *light.DefaultState
 		}
@@ -1313,7 +1340,7 @@ func (c *Gen1Converter) hasRelay(deviceType string) bool {
 	case "SHIX3-1":
 		// Input-only device, no relays
 		return false
-	case "SHDM-1", "SHDM-2":
+	case "SHDM-1", "SHDM-2", "SHRGBW2":
 		// A Dimmer's channel is /settings/light/<n>, and its settings carry a lights array and no
 		// relays array. A relay sent to /settings/relay/<n> goes to a path the device does not have.
 		return false
@@ -1334,10 +1361,11 @@ func (c *Gen1Converter) hasDimmerSettings(deviceType string) bool {
 	}
 }
 
-// hasLight reports whether a model's channels are lights: POST and GET on /settings/light/<n>.
+// hasLight reports whether a model's channels are lights: /settings/light/<n> for a Dimmer,
+// /settings/color/0 or /settings/white/<n> for an RGBW2.
 func (c *Gen1Converter) hasLight(deviceType string) bool {
 	switch deviceType {
-	case "SHDM-1", "SHDM-2":
+	case "SHDM-1", "SHDM-2", "SHRGBW2":
 		return true
 	default:
 		return false

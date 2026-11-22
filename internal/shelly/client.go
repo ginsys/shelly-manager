@@ -37,7 +37,6 @@ type Client interface {
 
 	// RGBW Operations
 	SetWhiteChannel(ctx context.Context, channel int, brightness int, temp int) error
-	SetColorMode(ctx context.Context, mode string) error
 
 	// System Operations
 	Reboot(ctx context.Context) error

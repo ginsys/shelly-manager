@@ -129,11 +129,6 @@ func (m *mockShellyClient) SetWhiteChannel(ctx context.Context, channel int, bri
 	return args.Error(0)
 }
 
-func (m *mockShellyClient) SetColorMode(ctx context.Context, mode string) error {
-	args := m.Called(ctx, mode)
-	return args.Error(0)
-}
-
 func (m *mockShellyClient) Reboot(ctx context.Context) error {
 	args := m.Called(ctx)
 	return args.Error(0)

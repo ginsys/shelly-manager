@@ -537,10 +537,6 @@ func TestClient_LightOperations(t *testing.T) {
 	// Test SetWhiteChannel
 	err = client.SetWhiteChannel(ctx, 0, 50, 3000)
 	assertNoError(t, err)
-
-	// Test SetColorMode (no-op for Gen2+)
-	err = client.SetColorMode(ctx, "color")
-	assertNoError(t, err)
 }
 
 func TestClient_RollerOperations(t *testing.T) {

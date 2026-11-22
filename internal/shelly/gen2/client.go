@@ -798,10 +798,3 @@ func (c *Client) SetWhiteChannel(ctx context.Context, channel int, brightness in
 	}
 	return c.rpcCall(ctx, "Light.Set", params, nil)
 }
-
-// SetColorMode sets the mode for RGBW devices (not directly available in Gen2+, handled via Light.Set)
-func (c *Client) SetColorMode(ctx context.Context, mode string) error {
-	// Gen2+ handles this differently - the mode is implicit based on what parameters are set
-	// in Light.Set calls. This is a compatibility method.
-	return nil
-}

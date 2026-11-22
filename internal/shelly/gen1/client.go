@@ -588,25 +588,36 @@ func (c *Client) SetWhiteChannel(ctx context.Context, channel int, brightness in
 	return c.postForm(ctx, url, params)
 }
 
-// SetColorMode sets the mode for RGBW2 devices (color/white)
-func (c *Client) SetColorMode(ctx context.Context, mode string) error {
-	url := fmt.Sprintf("http://%s/settings/mode", c.ip)
-	params := map[string]interface{}{
-		"mode": mode, // "color" or "white"
-	}
-	return c.postForm(ctx, url, params)
-}
-
-// SetColorSettings updates color-specific settings
+// SetColorSettings updates color-specific settings with POST /settings/color/<channel>.
 func (c *Client) SetColorSettings(ctx context.Context, channel int, settings map[string]interface{}) error {
 	url := fmt.Sprintf("http://%s/settings/color/%d", c.ip, channel)
 	return c.postForm(ctx, url, settings)
 }
 
-// SetWhiteSettings updates white channel settings
+// GetColorSettings reads color-specific settings with GET /settings/color/<channel>.
+func (c *Client) GetColorSettings(ctx context.Context, channel int) (map[string]interface{}, error) {
+	url := fmt.Sprintf("http://%s/settings/color/%d", c.ip, channel)
+	var result map[string]interface{}
+	if err := c.getJSON(ctx, url, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// SetWhiteSettings updates white channel settings with POST /settings/white/<channel>.
 func (c *Client) SetWhiteSettings(ctx context.Context, channel int, settings map[string]interface{}) error {
 	url := fmt.Sprintf("http://%s/settings/white/%d", c.ip, channel)
 	return c.postForm(ctx, url, settings)
+}
+
+// GetWhiteSettings reads white channel settings with GET /settings/white/<channel>.
+func (c *Client) GetWhiteSettings(ctx context.Context, channel int) (map[string]interface{}, error) {
+	url := fmt.Sprintf("http://%s/settings/white/%d", c.ip, channel)
+	var result map[string]interface{}
+	if err := c.getJSON(ctx, url, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 // SetInputSettings configures input behavior
