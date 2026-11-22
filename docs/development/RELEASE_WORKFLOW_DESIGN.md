@@ -71,9 +71,10 @@ cross-compiled host binary needs no C toolchain.
 
 **Upgrade and rollback.** Start-up runs repairs and `AutoMigrate` (`internal/database/migrations.go:17-37`);
 an ambiguous legacy database makes start-up refuse (`docs/guides/database-upgrade.md:49`), and a
-failure leaves the repair partly applied and resumable (`:89-101`). A search of `internal/database` and `docs` for a downgrade or down-migration finds none. A
-SQLite backup can be staged and restored, with the previous file put back on failure
-(`internal/database/restore/restore.go:1-6`). Archives carry a closed format version
+failure leaves the repair partly applied and resumable (`:89-101`). A search of `internal/database`
+and `docs` for a downgrade or down-migration finds none. A SQLite backup is staged and swapped in at
+the next start (`internal/database/restore/restore.go:1-6`), and the previous file is put back when the
+restored database cannot be opened or migrated (`:258-260`). Archives carry a closed format version
 (`internal/plugins/sync/sma/sma.go:19`, `2026.1`).
 
 ## 2. What the owner's other projects do
@@ -257,8 +258,8 @@ Each slice is one pull request with its own tests; none is a release.
    values from section 1 (chart `appVersion`, the bug template placeholder, the OpenAPI `version`).
 5. **Only if decision 6 changes:** signing, SBOM and attestations.
 
-The first tag is cut by the owner from a dry run, not by an agent session. This note leaves the issue
-open until slice 3 has run once.
+Recommended: the first tag is cut by the owner from a dry run, not by an agent session, and
+ginsys/shelly-manager#846 stays open until slice 3 has run once. Both are the owner's to confirm.
 
 ## 8. What this note does not do
 
