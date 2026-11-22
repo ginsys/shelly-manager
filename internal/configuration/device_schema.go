@@ -136,7 +136,7 @@ func lightSchemaOf(schema map[string]interface{}, deviceType string, supported b
 		}
 		return schema
 	}
-	if deviceType != "SHRGBW2" {
+	if !hasColorWhiteChannels(deviceType) {
 		for _, key := range []string{"name", "effect", "transition", "btn_reverse"} {
 			delete(items, key)
 		}

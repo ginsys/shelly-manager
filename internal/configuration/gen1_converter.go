@@ -515,7 +515,7 @@ func (c *Gen1Converter) convertLight(gen1 map[string]interface{}, config *Device
 	light := &LightConfig{Lights: make([]SingleLightConfig, 0, len(lights))}
 	for i, lightMap := range lights {
 		single := SingleLightConfig{ID: i}
-		if deviceType == "SHRGBW2" {
+		if hasColorWhiteChannels(deviceType) {
 			if name, ok := lightMap["name"].(string); ok {
 				single.Name = StringPtr(name)
 			}
@@ -917,6 +917,8 @@ func (c *Gen1Converter) exportLight(config *DeviceConfiguration, gen1 map[string
 		return
 	}
 
+	// name, effect, transition and btn_reverse are exported for any light model and read back for the
+	// RGBW2 only: that asymmetry is what refuses them on a Dimmer through the round trip.
 	lights := make([]map[string]interface{}, len(config.Light.Lights))
 	for i, light := range config.Light.Lights {
 		lightMap := make(map[string]interface{})
@@ -1347,6 +1349,12 @@ func (c *Gen1Converter) hasRelay(deviceType string) bool {
 	default:
 		return true
 	}
+}
+
+// hasColorWhiteChannels reports whether a model's lights are one color channel or four white ones, by
+// its device mode (the RGBW2).
+func hasColorWhiteChannels(deviceType string) bool {
+	return deviceType == "SHRGBW2"
 }
 
 // hasDimmerSettings reports whether a model has a Dimmer's device-level settings (the dimming

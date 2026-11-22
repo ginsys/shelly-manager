@@ -36,7 +36,7 @@ func effectiveLightMode(apiConfig map[string]interface{}, live json.RawMessage) 
 // channel; white has no effect, and btn_type and btn_reverse (shared) on channel 0 only.
 func checkLightModeBeforeWrite(live json.RawMessage, apiConfig map[string]interface{}, deviceType string) error {
 	lights := relayMaps(apiConfig["lights"])
-	if deviceType != "SHRGBW2" || len(lights) == 0 {
+	if !hasColorWhiteChannels(deviceType) || len(lights) == 0 {
 		return nil
 	}
 	mode, known := effectiveLightMode(apiConfig, live)

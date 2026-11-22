@@ -672,7 +672,7 @@ func (a *ConfigApplier) applyLightSettings(ctx context.Context, client ShellyCli
 	if len(lights) == 0 {
 		return nil
 	}
-	if deviceType == "SHRGBW2" {
+	if hasColorWhiteChannels(deviceType) {
 		return applyRGBW2Lights(ctx, client, lights, apiConfig, live, result)
 	}
 
