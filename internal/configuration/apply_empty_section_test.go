@@ -70,7 +70,7 @@ func TestApplyDesiredConfig_AnEmptySectionAtAnyDepthIsNothing(t *testing.T) {
 
 			_, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
 
-			assert.False(t, errors.Is(err, ErrUnsupportedSettings), "%s: %v", row, err)
+			require.NoError(t, err, row)
 			for _, posted := range dev.posted {
 				assert.Empty(t, posted, "nothing is sent for an empty section")
 			}
@@ -82,7 +82,7 @@ func TestApplyDesiredConfig_AnEmptySectionAtAnyDepthIsNothing(t *testing.T) {
 
 			_, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SNSW-001X16EU")
 
-			assert.False(t, errors.Is(err, ErrUnsupportedSettings), "%s: %v", row, err)
+			require.NoError(t, err, row)
 			for _, c := range dev.calls {
 				assert.Empty(t, c.config, "nothing is sent for an empty section")
 			}
