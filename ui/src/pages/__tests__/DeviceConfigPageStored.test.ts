@@ -46,16 +46,16 @@ const entry = (over: Record<string, unknown> = {}) => ({
   ...over,
 })
 
-async function mountPage(id = '7') {
+async function mountPage(id = '7', hash = '') {
   const store = useDeviceConfigNewStore()
   vi.spyOn(store, 'refresh').mockResolvedValue(undefined as never)
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [{ path: '/devices/:id/config', component: DeviceConfigPage }],
   })
-  router.push(`/devices/${id}/config`)
+  router.push(`/devices/${id}/config${hash}`)
   await router.isReady()
-  const wrapper = mount(RouterView, { global: { plugins: [router], stubs } })
+  const wrapper = mount(RouterView, { global: { plugins: [router], stubs }, attachTo: document.body })
   await flushPromises()
   return { wrapper, router }
 }
@@ -210,6 +210,17 @@ describe('DeviceConfigPage history', () => {
     expect(wrapper.get('[data-testid="history-card"]').text()).toContain('No configuration was recorded')
   })
 
+  it('shows a configuration that came as text as text', async () => {
+    vi.mocked(getConfigHistory).mockResolvedValue([entry({ config: 'not json: mqtt on' })] as any)
+    const { wrapper } = await mountPage()
+
+    await wrapper.get('[data-testid="history-toggle-11"]').trigger('click')
+
+    const card = wrapper.get('[data-testid="history-card"]')
+    expect(card.get('pre').text()).toBe('not json: mqtt on')
+    expect(card.find('[data-testid="stub-view"]').exists()).toBe(false)
+  })
+
   it('says there is no history when the list is empty', async () => {
     const { wrapper } = await mountPage()
 
@@ -282,5 +293,80 @@ describe('DeviceConfigPage history', () => {
     await wrapper.get('[data-testid="history-toggle-11"]').trigger('click')
 
     expect(wrapper.text()).not.toContain('Restore')
+  })
+})
+
+// "View History" and the old history address open the page at #history-card (ginsys/shelly-manager#775).
+describe('DeviceConfigPage landing at the History card', () => {
+  const scrolled = vi.fn()
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.resetAllMocks()
+    vi.mocked(getStoredDeviceConfig).mockResolvedValue(null)
+    vi.mocked(getConfigHistory).mockResolvedValue([entry()] as any)
+    scrolled.mockReset()
+    Element.prototype.scrollIntoView = scrolled
+  })
+
+  it('gives the card the id that the address names', async () => {
+    const { wrapper } = await mountPage('7', '#history-card')
+    expect(wrapper.get('[data-testid="history-card"]').attributes('id')).toBe('history-card')
+  })
+
+  it('moves to the card once its history has been read', async () => {
+    const { wrapper } = await mountPage('7', '#history-card')
+    expect(scrolled).toHaveBeenCalledTimes(1)
+    expect(scrolled.mock.contexts[0]).toBe(wrapper.get('[data-testid="history-card"]').element)
+  })
+
+  it('moves to the card when the history read failed, so the error is in view', async () => {
+    vi.mocked(getConfigHistory).mockRejectedValue(new Error('Forbidden'))
+    await mountPage('7', '#history-card')
+    expect(scrolled).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not move again at a later read while the address keeps the hash', async () => {
+    const { wrapper } = await mountPage('7', '#history-card')
+    expect(scrolled).toHaveBeenCalledTimes(1)
+
+    await wrapper.findAll('button').find((b) => b.text() === 'Refresh')!.trigger('click')
+    await flushPromises()
+
+    expect(getConfigHistory).toHaveBeenCalledTimes(2)
+    expect(scrolled).toHaveBeenCalledTimes(1)
+  })
+
+  it('moves once more for the next device when the page is moved to it at the card', async () => {
+    const { router } = await mountPage('7', '#history-card')
+    expect(scrolled).toHaveBeenCalledTimes(1)
+
+    await router.push('/devices/8/config#history-card')
+    await flushPromises()
+
+    expect(getConfigHistory).toHaveBeenLastCalledWith('8')
+    expect(scrolled).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not move a page opened with no hash', async () => {
+    await mountPage('7')
+    expect(scrolled).not.toHaveBeenCalled()
+  })
+
+  it('does not move for an answer of an older read that a newer one replaced', async () => {
+    let releaseFirst: (rows: unknown) => void = () => {}
+    vi.mocked(getConfigHistory)
+      .mockReturnValueOnce(new Promise((resolve) => (releaseFirst = resolve)) as any)
+      .mockResolvedValue([entry()] as any)
+    const { wrapper } = await mountPage('7', '#history-card')
+    expect(scrolled).not.toHaveBeenCalled()
+
+    await wrapper.findAll('button').find((b) => b.text() === 'Refresh')!.trigger('click')
+    await flushPromises()
+    expect(scrolled).toHaveBeenCalledTimes(1)
+
+    releaseFirst([entry({ id: 99 })])
+    await flushPromises()
+    expect(scrolled).toHaveBeenCalledTimes(1)
   })
 })

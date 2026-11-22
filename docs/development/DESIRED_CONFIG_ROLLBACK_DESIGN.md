@@ -386,8 +386,12 @@ Each is under about 350 non-test lines.
    import-written version that differs only in key order passes it; a path only the merged tree holds, with
    a zero value, passes, and with any other value is refused.
 3. **The card on `DeviceConfigPage`.** Versions, the confirm, the secret prompts, the notice.
-4. **Retire `ui/src/pages/DeviceConfigHistoryPage.vue`.** Re-point the link at `DeviceDetailPage.vue:142`
-   to the card and remove the route at `ui/src/router/routes.ts:28-30`, as the comment on the issue asks.
+4. **Retire `ui/src/pages/DeviceConfigHistoryPage.vue`** (done). "View History" on the device page opens
+   `/devices/{id}/config#history-card`, and the page moves to the History card once its history is read. The
+   page and its test are gone. The route is kept as a redirect to that address instead of being removed:
+   an unknown route shows the device list with no word of why, so a saved link to the old address
+   would have landed there. The same slice adds a test that no secret reaches a log line or an answer
+   of the rollback route, through the production request chain, for each kind of answer the handler gives.
 
 ## 5. Decisions needed
 

@@ -93,6 +93,15 @@ describe('Navigation Routes Configuration', () => {
     expect(router.currentRoute.value.params.id).toBe('import-789')
   })
 
+  // The history page was retired. A saved link to its address lands at the History card of the
+  // configuration page, and not at the device list that the not-found route shows.
+  it('sends the old history address to the History card of the configuration page', async () => {
+    await router.push('/devices/7/config/history')
+    expect(router.currentRoute.value.path).toBe('/devices/7/config')
+    expect(router.currentRoute.value.hash).toBe('#history-card')
+    expect(router.currentRoute.value.name).toBe('device-config')
+  })
+
   it('should handle 404 routes correctly', async () => {
     await router.push('/non-existent-route')
     expect(router.currentRoute.value.name).toBe('not-found')

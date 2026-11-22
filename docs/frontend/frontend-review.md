@@ -128,7 +128,6 @@ rg -n --no-heading -o "(to=\"[^\"]+\"|:to=\"[^\"]+\"|to: '[^']+'|router\.(push|r
 | `/` | Devices | top bar, Device details |
 | `/devices/:id` | Device details (status, energy, configuration, capabilities, edit, control) | Devices, Device configuration, Drift reports, Task details |
 | `/devices/:id/config` | Device configuration (templates, overrides, apply, verify, last import and create template from it, desired configuration versions and rollback, import history) | Device details, Configuration history |
-| `/devices/:id/config/history` | Configuration history (list and view, no restore: ginsys/shelly-manager#775) | Device details |
 | `/templates` | Configuration templates | top bar, Template detail |
 | `/templates/common-settings` | Common settings (compare the imports of several devices, save what they share as a template) | Templates |
 | `/templates/:id` | Template detail | Templates |
@@ -233,7 +232,11 @@ page imports still counts. The Playwright spec is what proves the links are rend
   Roll back is off while the overrides editor is open and until the page has read the current configuration, and
   the card reads its versions again each time the page finishes a read, and a failed read leaves the list it
   already shows. No device is contacted: the operator
-  applies afterwards. The History card below it lists imports, not these versions.
+  applies afterwards. The History card below it lists imports, not these versions. "View History" on the device
+  page opens this page at that card (`#history-card`), once; the old `/devices/:id/config/history` page is gone
+  and its address redirects here.
+
+  ![The configuration page opened at its History card from View History](images/device-config-history-card.png)
 
   ![The desired configuration versions card, newest first](images/desired-rollback-versions.png)
 

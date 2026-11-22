@@ -72,7 +72,7 @@ describe('DeviceDetailPage Configuration card', () => {
     expect(links.filter((l) => l.href === '/devices/7/config')).toEqual([
       { text: 'Edit Configuration', href: '/devices/7/config' },
     ])
-    expect(links.map((l) => l.text)).toContain('View History')
+    expect(links.find((l) => l.text === 'View History')?.href).toBe('/devices/7/config#history-card')
     expect(wrapper.text()).not.toContain('View Full Config')
   })
 

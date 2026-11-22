@@ -139,7 +139,7 @@
           </div>
           <div class="config-actions">
             <router-link :to="`/devices/${d.id}/config`" class="btn-secondary">Edit Configuration</router-link>
-            <router-link :to="`/devices/${d.id}/config/history`" class="btn-secondary">View History</router-link>
+            <router-link :to="`/devices/${d.id}/config#history-card`" class="btn-secondary">View History</router-link>
           </div>
         </div>
       </div>

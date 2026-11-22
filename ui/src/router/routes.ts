@@ -24,11 +24,11 @@ export const routes: RouteRecordRaw[] = [
     component: () => import('../pages/DeviceConfigPage.vue'),
     meta: { title: 'Device Configuration' }
   },
+  // The history page was retired: the History card of the configuration page shows the same rows. A saved
+  // link to the old address lands at that card, never at the device list the not-found route shows.
   {
     path: '/devices/:id/config/history',
-    name: 'device-config-history',
-    component: () => import('../pages/DeviceConfigHistoryPage.vue'),
-    meta: { title: 'Configuration History' }
+    redirect: (to) => ({ path: `/devices/${to.params.id}/config`, hash: '#history-card' })
   },
 
   // Configuration Templates
