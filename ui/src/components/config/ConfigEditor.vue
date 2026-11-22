@@ -145,6 +145,10 @@ interface Props {
   sources?: Record<string, string>
   // The overrides as they were saved: the page sets it when it loads them (see `held` below). The device page always gives it; template pages (layer) do not.
   held?: ConfigBody
+  // Text typed in the JSON view that does not parse yet. The page keeps it, because it removes and re-creates the
+  // editor while it loads (ginsys/shelly-manager#858): the editor reports it by `update:draft` and reads it back
+  // once, when it is created. Template pages give none.
+  draft?: string | null
   // The field errors of a refused save by form key (a list item by its id, see formErrorKey), shown
   // under their fields. They never change `valid`.
   serverErrors?: Record<string, string>
@@ -154,6 +158,7 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   'update:modelValue': [value: Record<string, any>]
   'update:valid': [value: boolean]
+  'update:draft': [value: string | null]
 }>()
 
 const typedConfigStore = useTypedConfigStore()
@@ -182,6 +187,18 @@ watch(() => props.modelValue, (newValue) => {
   localConfig.value = clone(incoming)
   jsonText.value = JSON.stringify(incoming, null, 2)
 }, { immediate: true, deep: true })
+
+// A draft that still does not parse wins over the body just written, and opens the JSON view, the only place it
+// shows. One that parses is ignored: the body path owns it.
+if (props.draft != null) {
+  try {
+    JSON.parse(props.draft)
+  } catch (e: any) {
+    jsonText.value = props.draft
+    jsonError.value = e.message
+    mode.value = 'json'
+  }
+}
 
 // The page passes the inherited configuration: the template layers alone, which is what a field
 // falls back to when its override is removed. A secret that a template sets arrives as a mask.
@@ -243,6 +260,7 @@ function emitChange() {
   jsonText.value = JSON.stringify(localConfig.value, null, 2)
   // The form body is valid JSON again, so an earlier JSON syntax error no longer applies.
   jsonError.value = null
+  emit('update:draft', null)
   emit('update:modelValue', clone(localConfig.value))
 }
 
@@ -266,9 +284,11 @@ function handleJsonChange() {
   try {
     localConfig.value = JSON.parse(jsonText.value || '{}')
     jsonError.value = null
+    emit('update:draft', null)
     emit('update:modelValue', clone(localConfig.value))
   } catch (e: any) {
     jsonError.value = e.message
+    emit('update:draft', jsonText.value)
   }
 }
 

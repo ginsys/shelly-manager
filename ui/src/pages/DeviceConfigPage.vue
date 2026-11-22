@@ -133,6 +133,7 @@
             ref="overridesEditor"
             v-model="overridesData"
             v-model:valid="overridesValid"
+            v-model:draft="overridesDraft"
             :held="overridesHeld"
             :server-errors="refusedKeys"
             :device-id="deviceId"
@@ -344,6 +345,10 @@ const refusedKeys = ref<Record<string, string>>({})
 // removed and re-created while the page loads (Verify Device does it), so it lives here, beside the
 // body it describes. Only a load of the overrides sets it; no edit does.
 const overridesHeld = ref<Record<string, any>>({})
+// Text in the editor's JSON view that does not parse yet (ginsys/shelly-manager#858). It lives here for the same
+// reason. The editor empties it when the text parses or a form edit rewrites it; a load of the overrides (Cancel,
+// Clear All, another device) drops it too.
+const overridesDraft = ref<string | null>(null)
 const showSources = ref(false)
 const showRawJson = ref(false)
 const showAddTemplate = ref(false)
@@ -399,6 +404,7 @@ const reportLateResult = useLateResult()
 function loadOverrides(body: Record<string, any> | null | undefined) {
   overridesData.value = JSON.parse(JSON.stringify(body || {}))
   overridesHeld.value = JSON.parse(JSON.stringify(body || {}))
+  overridesDraft.value = null
 }
 
 // A refresh never rewrites an open edit (ginsys/shelly-manager#855). With the editor closed the buffer is

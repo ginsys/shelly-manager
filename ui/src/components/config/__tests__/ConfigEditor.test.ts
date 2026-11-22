@@ -842,4 +842,63 @@ describe('ConfigEditor', () => {
     await field.find('[data-action="reset"]').trigger('click')
     expect(lastModel(wrapper)).toEqual({})
   })
+
+  // ginsys/shelly-manager#858: text in the JSON view that does not parse yet is the page's to keep, because the
+  // page removes and re-creates the editor while it loads. The editor hands the text up and takes it back.
+  describe('an unparsed JSON draft', () => {
+    const lastDraft = (wrapper: ReturnType<typeof mountEditor>) => {
+      const events = wrapper.emitted('update:draft') || []
+      return events[events.length - 1]?.[0]
+    }
+
+    it('opens the JSON view with the draft, shows why it does not parse, and keeps the editor invalid', async () => {
+      const wrapper = mountEditor({ power_metering: { max_power: 2000 } }, { draft: '{"mqtt": {' })
+      await flushPromises()
+      expect(wrapper.find('textarea').exists()).toBe(true)
+      expect((wrapper.find('textarea').element as HTMLTextAreaElement).value).toBe('{"mqtt": {')
+      expect(wrapper.find('.json-error').exists()).toBe(true)
+      expect(lastValid(wrapper)).toBe(false)
+    })
+
+    it('hands the text up when it is typed and does not parse', async () => {
+      const wrapper = mountEditor({})
+      await flushPromises()
+      await wrapper.findAll('.mode-btn')[1].trigger('click')
+      await wrapper.find('textarea').setValue('{"mqtt": {')
+      expect(lastDraft(wrapper)).toBe('{"mqtt": {')
+    })
+
+    it('drops the draft when the text parses', async () => {
+      const wrapper = mountEditor({}, { draft: '{"mqtt": {' })
+      await flushPromises()
+      await wrapper.find('textarea').setValue('{"power_metering": {"max_power": 1000}}')
+      expect(lastDraft(wrapper)).toBeNull()
+      expect(lastModel(wrapper)).toEqual({ power_metering: { max_power: 1000 } })
+      expect(lastValid(wrapper)).toBe(true)
+    })
+
+    it('drops the draft when a form edit rewrites the text', async () => {
+      const wrapper = mountEditor({}, { draft: '{"mqtt": {' })
+      await flushPromises()
+      await wrapper.findAll('.mode-btn')[0].trigger('click')
+      await openSection(wrapper, 'power_metering')
+      await wrapper.find('[data-path="power_metering.max_power"] input').setValue('2000')
+      expect(lastDraft(wrapper)).toBeNull()
+      expect(lastValid(wrapper)).toBe(true)
+    })
+
+    it('ignores a draft that parses: the body path owns it', async () => {
+      const wrapper = mountEditor({ power_metering: { max_power: 2000 } }, { draft: '{"mqtt": {}}' })
+      await flushPromises()
+      expect(wrapper.find('textarea').exists()).toBe(false)
+      expect(lastValid(wrapper)).toBe(true)
+    })
+
+    it('opens in Form view when no draft is given, as before', async () => {
+      const wrapper = mountEditor({})
+      await flushPromises()
+      expect(wrapper.find('textarea').exists()).toBe(false)
+      expect(wrapper.emitted('update:draft')).toBeUndefined()
+    })
+  })
 })
