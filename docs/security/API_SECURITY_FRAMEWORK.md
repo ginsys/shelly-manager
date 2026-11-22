@@ -61,6 +61,41 @@ The Shelly Manager API Security Framework provides comprehensive protection agai
 
 ### 4. Security Monitoring and Alerting
 
+**Off by default.** The security monitor and IP blocking are two switches in the application
+configuration, and a deployment turns them on:
+
+| Key | Environment variable | Default | Meaning |
+|---|---|---|---|
+| `security.monitoring.enabled` | `SHELLY_SECURITY_MONITORING_ENABLED` | `false` | Build the monitor: count suspicious requests, rate limit violations and attack types per client IP, raise alerts, serve `GET /api/v1/metrics/security`. |
+| `security.ip_blocking.enabled` | `SHELLY_SECURITY_IP_BLOCKING_ENABLED` | `false` | Block a client IP the monitor flags. Needs `security.monitoring.enabled`: start-up stops with an error naming both keys if blocking is on and the monitor is off. |
+| `security.ip_blocking.block_seconds` | `SHELLY_SECURITY_IP_BLOCKING_BLOCK_SECONDS` | `3600` | How long a block lasts, in seconds. Any length is honoured, a block of more than 24 hours included. |
+| `security.ip_blocking.suspicious_threshold` | `SHELLY_SECURITY_IP_BLOCKING_SUSPICIOUS_THRESHOLD` | `10` | Block at this many suspicious requests. |
+| `security.ip_blocking.rate_limit_threshold` | `SHELLY_SECURITY_IP_BLOCKING_RATE_LIMIT_THRESHOLD` | `5` | Block at this many rate limit violations. |
+| `security.ip_blocking.attack_type_threshold` | `SHELLY_SECURITY_IP_BLOCKING_ATTACK_TYPE_THRESHOLD` | `3` | Block at this many distinct attack types. |
+| `security.ip_blocking.suspicious_per_hour_threshold` | `SHELLY_SECURITY_IP_BLOCKING_SUSPICIOUS_PER_HOUR_THRESHOLD` | `5` | Block at more than this many suspicious requests inside one hour. |
+
+A zero or negative block length or threshold stops start-up with an error naming the key. With the
+monitor on and blocking off, counts and alerts continue, no IP is refused or reported blocked, and
+no counter resets. The rate limiter, the security headers and the request validation do not depend
+on either switch.
+
+**Upgrade note.** Before this setting existed, the monitor and IP blocking were always on. A
+deployment that upgrades stops blocking IPs, and stops serving `GET /api/v1/metrics/security`
+(the route answers 404), until it turns the keys on. The numbers above are what the monitor always
+used, so turning both switches on restores the earlier behaviour, except for one change: a block
+now resets that IP's counters (below).
+
+**A block starts the IP's counting over.** When a block starts, that IP's suspicious request count,
+rate limit violation count, attack types and rolling-hour record are emptied. Requests that finish
+during the block do not count toward the next block, so after the block ends one more suspicious
+request does not block the IP again. The monitor-wide statistics (`total_requests`,
+`suspicious_requests`, `attacks_by_type`) are history and are not reset. While a block lasts, the
+IP stays in `top_attacker_ips` with `blocked: true` and the counters as reset (`suspicious_requests`
+0, `attack_types` empty; `total_requests`, `first_seen` and `last_seen` unchanged), and it counts in
+`blocked_ips` and `active_threats`. After the block ends, an entry with no counts is no longer
+listed. The monitor drops an idle entry 24 hours after its last request, but never while its block
+is still running.
+
 **Attack Detection**:
 - SQL injection attempt detection
 - XSS attempt detection
@@ -69,9 +104,9 @@ The Shelly Manager API Security Framework provides comprehensive protection agai
 - Suspicious user agent detection
 
 **IP Blocking**:
-- Automatic IP blocking based on attack patterns
-- Configurable blocking duration
-- Temporary blocks with automatic expiration
+- Automatic IP blocking based on attack patterns (off by default: `security.ip_blocking.enabled`)
+- Configurable blocking duration and thresholds
+- Temporary blocks with automatic expiration; a block resets the IP's counters
 
 **Security Metrics**:
 - Real-time security statistics
@@ -138,9 +173,19 @@ type SecurityConfig struct {
     
     // Attack detection
     EnableIPBlocking  bool          // enable automatic IP blocking
-    BlockDuration     time.Duration // how long to block suspicious IPs
+    BlockDuration     time.Duration // how long to block suspicious IPs; a block resets the IP's counters
+
+    // Block rules: zero or less switches that one rule off
+    SuspiciousThreshold    int // blocked at this many suspicious requests
+    RateViolationThreshold int // blocked at this many rate limit violations
+    AttackTypeThreshold    int // blocked at this many distinct attack types
+    HourlyThreshold        int // blocked at more than this many suspicious requests inside one hour
 }
 ```
+
+`DefaultSecurityConfig()` turns monitoring and blocking on with the thresholds 10, 5, 3 and 5, for
+code that builds a router itself. The application's own default is the configuration keys above,
+which are off.
 
 ### Validation Configuration
 
@@ -205,7 +250,9 @@ The `api.timeout` setting is not one of these limits: it is read by nothing toda
 
 **GET `/metrics/security`**
 
-Returns comprehensive security metrics and statistics.
+Returns comprehensive security metrics and statistics. The route exists only while the security
+monitor is on (`security.monitoring.enabled`, off by default); with the monitor off it answers 404,
+and the web UI's Metrics page says that security monitoring is off.
 
 **Response**:
 ```json
@@ -305,6 +352,11 @@ securityConfig := &middleware.SecurityConfig{
     EnableMonitoring: true,
     EnableIPBlocking: true,
     BlockDuration: 2 * time.Hour,
+    // A rule with a threshold of zero is off, so set the ones you want
+    SuspiciousThreshold: 10,
+    RateViolationThreshold: 5,
+    AttackTypeThreshold: 3,
+    HourlyThreshold: 5,
 }
 
 validationConfig := &middleware.ValidationConfig{

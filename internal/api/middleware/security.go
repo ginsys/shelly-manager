@@ -61,12 +61,21 @@ type SecurityConfig struct {
 	BlockDuration    time.Duration // how long to block suspicious IPs
 	TrustedIPs       []string      // IPs exempt from suspicious activity tracking and blocking
 
+	// Block rules of the security monitor. An IP is blocked when any rule fires; a value of zero or
+	// less switches that one rule off.
+	SuspiciousThreshold    int // blocked at this many suspicious requests
+	RateViolationThreshold int // blocked at this many rate limit violations
+	AttackTypeThreshold    int // blocked at this many distinct attack types
+	HourlyThreshold        int // blocked at more than this many suspicious requests inside one hour
+
 	// Proxy handling
 	UseProxyHeaders bool     // trust proxy headers for client IP extraction
 	TrustedProxies  []string // list of trusted proxy IPs or CIDR ranges
 }
 
-// DefaultSecurityConfig returns a secure default configuration
+// DefaultSecurityConfig returns a secure default configuration for code that builds a router itself:
+// the monitor and IP blocking are on. The application's own default is off, held by the
+// security.monitoring and security.ip_blocking keys (cmd/shelly-manager securityConfigFrom).
 func DefaultSecurityConfig() *SecurityConfig {
 	return &SecurityConfig{
 		CSP:             "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self';",
@@ -92,8 +101,14 @@ func DefaultSecurityConfig() *SecurityConfig {
 		EnableIPBlocking:   true,      // enable automatic IP blocking
 		BlockDuration:      time.Hour, // block for 1 hour
 		TrustedIPs:         []string{"127.0.0.1", "::1", "localhost"},
-		UseProxyHeaders:    false,
-		TrustedProxies:     nil,
+
+		SuspiciousThreshold:    10,
+		RateViolationThreshold: 5,
+		AttackTypeThreshold:    3,
+		HourlyThreshold:        5,
+
+		UseProxyHeaders: false,
+		TrustedProxies:  nil,
 	}
 }
 

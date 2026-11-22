@@ -107,10 +107,11 @@ func TestMonitorBlocksOnlyAfterSixSuspiciousRequestsInAnHour(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, c.get(ip, chainNormalPath), "the 6th inside the hour blocks")
 }
 
-// A cumulative rule (here 5 rate limit violations) still holds when its block ends, so the next
-// tracked request blocks the IP again. The block lasts until the entry is dropped, 24 hours after the
-// last tracked request, not one hour (the lead ruled that a block does not reset the counters).
-func TestMonitorCumulativeRuleBlocksAgainWhenTheHourEnds(t *testing.T) {
+// A block starts the IP's counting over (ginsys/shelly-manager#861, Serge's answer: reset on block).
+// Where the block ends, the counters that caused it are gone, so the IP is served and one more
+// refusal does not block it again; it takes a fresh 5 refusals. Before that change the counters
+// stayed and the next tracked request blocked the IP again.
+func TestMonitorBlockEndsWithAFreshCount(t *testing.T) {
 	c := newMonitorChain(t)
 	ip := "10.66.0.5"
 
@@ -120,9 +121,12 @@ func TestMonitorCumulativeRuleBlocksAgainWhenTheHourEnds(t *testing.T) {
 	value, ok := c.monitor.attackMap.Load(ip)
 	require.True(t, ok)
 	info := value.(*AttackInfo)
+	info.mu.Lock()
 	info.BlockedUntil = time.Now().Add(-time.Minute) // the hour has passed
+	info.mu.Unlock()
 
 	assert.Equal(t, http.StatusOK, c.get(ip, chainNormalPath), "the block ended, this request is served")
-	assert.Equal(t, http.StatusForbidden, c.get(ip, chainNormalPath),
-		fmt.Sprintf("and the counters (%d violations) block the IP again", info.RateLimitViolations))
+	assert.Equal(t, http.StatusTooManyRequests, c.get(ip, chainBulkPath), "one more refusal is served as a refusal")
+	assert.Equal(t, http.StatusOK, c.get(ip, chainNormalPath),
+		fmt.Sprintf("and the counters (%d violations) do not block the IP again", info.RateLimitViolations))
 }

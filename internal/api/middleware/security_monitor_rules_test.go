@@ -50,7 +50,7 @@ func TestShouldBlockIPRateRuleIsARollingHour(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			info := &AttackInfo{AttackTypes: map[string]int{}}
 			for _, ago := range tt.times {
-				info.recordSuspiciousTime(now.Add(-ago))
+				info.recordSuspiciousTime(now.Add(-ago), monitor.config.HourlyThreshold)
 			}
 			assert.Equal(t, tt.want, monitor.shouldBlockIP(info, now))
 		})

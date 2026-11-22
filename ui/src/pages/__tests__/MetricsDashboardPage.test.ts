@@ -293,9 +293,60 @@ describe('MetricsDashboardPage', () => {
       expect(panel('summary').exists()).toBe(true)
     })
 
+    // The route answers 404 only while security monitoring is off (security.monitoring.enabled,
+    // off by default): the server registers it with a monitor and never otherwise.
+    const notFound = () =>
+      Object.assign(new Error('Request failed with status code 404'), {
+        response: { status: 404, data: { success: false, error: { code: 'NOT_FOUND', message: 'not found' } } }
+      })
+
+    it('says security monitoring is off on a 404, with no error banner and no late notice', async () => {
+      dismissNotice()
+      vi.mocked(metricsApi.getSecurityMetrics).mockRejectedValue(notFound())
+
+      wrapper = mountPage()
+      await flushPromises()
+
+      expect(panel('security-off').text()).toContain('Security monitoring is off')
+      expect(panel('security').exists()).toBe(false)
+      expect(wrapper.text()).not.toContain('Security metrics:')
+      expect(wrapper.text()).not.toContain('not found')
+      expect(wrapper.text()).not.toContain('status code 404')
+      expect(notice.value).toBeNull()
+      expect(panel('summary').exists()).toBe(true)
+      expect(panel('notifications').exists()).toBe(true)
+      expect(panel('resolution').exists()).toBe(true)
+    })
+
+    it('shows the panel again when a later load finds the monitor on', async () => {
+      vi.mocked(metricsApi.getSecurityMetrics).mockRejectedValueOnce(notFound())
+      wrapper = mountPage()
+      await flushPromises()
+      expect(panel('security-off').exists()).toBe(true)
+
+      await wrapper.vm.fetchAdvancedMetrics()
+      await flushPromises()
+
+      expect(panel('security-off').exists()).toBe(false)
+      expect(panel('security').exists()).toBe(true)
+    })
+
+    it('still names a failure of the security call that is not a 404', async () => {
+      const serverError = Object.assign(new Error('Request failed with status code 500'), {
+        response: { status: 500, data: { success: false, error: { code: 'INTERNAL', message: 'monitor broke' } } }
+      })
+      vi.mocked(metricsApi.getSecurityMetrics).mockRejectedValue(serverError)
+
+      wrapper = mountPage()
+      await flushPromises()
+
+      expect(panel('security-off').exists()).toBe(false)
+      expect(wrapper.text()).toContain('Security metrics: monitor broke')
+    })
+
     it('renders the other three panels when one call fails', async () => {
       vi.mocked(metricsApi.getSecurityMetrics).mockRejectedValue(
-        new Error('Request failed with status code 404')
+        new Error('Request failed with status code 502')
       )
 
       wrapper = mountPage()
@@ -305,7 +356,7 @@ describe('MetricsDashboardPage', () => {
       expect(panel('notifications').exists()).toBe(true)
       expect(panel('resolution').exists()).toBe(true)
       expect(panel('security').exists()).toBe(false)
-      expect(wrapper.text()).toContain('Security metrics: Request failed with status code 404')
+      expect(wrapper.text()).toContain('Security metrics: Request failed with status code 502')
     })
 
     it('names every failed panel and renders none when all four calls fail', async () => {

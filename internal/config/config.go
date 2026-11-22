@@ -143,6 +143,23 @@ type Config struct {
 		AgentAPIKey string `mapstructure:"agent_api_key"`
 		// Test mode to bypass security validations (for E2E testing)
 		ValidationTestMode bool `mapstructure:"validation_test_mode"`
+		// Monitoring turns the security monitor on: it counts suspicious requests, rate limit
+		// violations and attack types per client IP, raises alerts and serves
+		// GET /api/v1/metrics/security. Off by default. The rate limiter, the security headers and
+		// the request validation do not depend on it.
+		Monitoring struct {
+			Enabled bool `mapstructure:"enabled"`
+		} `mapstructure:"monitoring"`
+		// IPBlocking turns on blocking of a client IP that the monitor flags. It needs Monitoring.
+		// A block resets that IP's counters and lasts BlockSeconds.
+		IPBlocking struct {
+			Enabled                    bool `mapstructure:"enabled"`
+			BlockSeconds               int  `mapstructure:"block_seconds"`
+			SuspiciousThreshold        int  `mapstructure:"suspicious_threshold"`          // blocked at this many suspicious requests
+			RateLimitThreshold         int  `mapstructure:"rate_limit_threshold"`          // blocked at this many rate limit violations
+			AttackTypeThreshold        int  `mapstructure:"attack_type_threshold"`         // blocked at this many distinct attack types
+			SuspiciousPerHourThreshold int  `mapstructure:"suspicious_per_hour_threshold"` // blocked at more than this many suspicious requests in one hour
+		} `mapstructure:"ip_blocking"`
 	} `mapstructure:"security"`
 
 	// Export settings
@@ -342,6 +359,16 @@ func setDefaults() {
 	viper.SetDefault("security.agent_api_key", "")
 	// Validation test mode disabled by default (security validations enabled)
 	viper.SetDefault("security.validation_test_mode", false)
+	// Security monitor and IP blocking are off until an operator turns them on. The numbers are
+	// what the monitor used when it was always on (equal to middleware.DefaultSecurityConfig, pinned
+	// by a test in cmd/shelly-manager).
+	viper.SetDefault("security.monitoring.enabled", false)
+	viper.SetDefault("security.ip_blocking.enabled", false)
+	viper.SetDefault("security.ip_blocking.block_seconds", 3600)
+	viper.SetDefault("security.ip_blocking.suspicious_threshold", 10)
+	viper.SetDefault("security.ip_blocking.rate_limit_threshold", 5)
+	viper.SetDefault("security.ip_blocking.attack_type_threshold", 3)
+	viper.SetDefault("security.ip_blocking.suspicious_per_hour_threshold", 5)
 
 	// Export defaults
 	viper.SetDefault("export.output_directory", "")

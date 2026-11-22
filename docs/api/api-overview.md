@@ -485,7 +485,7 @@ connects to the host first, and it fails with the connection error when they are
 | GET | `/metrics/drift` | Drift summary metrics |
 | GET | `/metrics/notifications` | Notification metrics |
 | GET | `/metrics/resolution` | Resolution metrics |
-| GET | `/metrics/security` | Security metrics |
+| GET | `/metrics/security` | Security metrics; present only while `security.monitoring.enabled` is on (off by default), 404 otherwise |
 
 ---
 
