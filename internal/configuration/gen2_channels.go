@@ -399,16 +399,26 @@ func unreportedChannelKeys(doc map[string]interface{}, config *DeviceConfigurati
 	return missing
 }
 
-// refuseInputIDWithMode refuses a configuration that sets an input_id and an input mode together,
-// before the device is read. The mode of input N is written to switch N, and refuseRemappedInputs
-// checks the live input_id, so a new input_id in the same apply would put the mode on the wrong input.
-func refuseInputIDWithMode(config *DeviceConfiguration) error {
+// refuseInputIDWithMode refuses a configuration that changes an input_id and sets an input mode in one
+// apply. The mode of input N is written to switch N, and refuseRemappedInputs checks the live input_id,
+// so a new input_id would put the mode on the wrong input. An input_id equal to the live one is no
+// change, so a template imported from the device and applied again passes. A live switch with no
+// number runs its own input, as refuseRemappedInputs reads it.
+func refuseInputIDWithMode(doc map[string]interface{}, config *DeviceConfiguration) error {
 	if config.Relay == nil || config.Input == nil {
 		return nil
 	}
 	var ids, modes []string
 	for i, r := range config.Relay.Relays {
-		if r.InputID != nil {
+		if r.InputID == nil {
+			continue
+		}
+		live, _ := doc["switch:"+strconv.Itoa(r.ID)].(map[string]interface{})
+		running := float64(r.ID)
+		if n, ok := live["input_id"].(float64); ok {
+			running = n
+		}
+		if float64(*r.InputID) != running {
 			ids = append(ids, "relay.relays."+strconv.Itoa(i)+".input_id")
 		}
 	}

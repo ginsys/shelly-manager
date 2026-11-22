@@ -97,9 +97,6 @@ func (s *ConfigurationService) applyPathFor(client ShellyClient, loginSupported 
 		if _, ok := client.(Gen2ConfigClient); ok {
 			converter := NewGen2Converter(s.logger)
 			return converter, func(desired *DeviceConfiguration, _ string) ([]string, error) {
-				if err := refuseInputIDWithMode(desired); err != nil {
-					return nil, err
-				}
 				return unsupportedGen2Settings(converter, desired, loginSupported)
 			}, nil
 		}
@@ -356,6 +353,9 @@ func refuseFromLiveDevice(ctx context.Context, client ShellyClient, readLive liv
 	doc, err := readLive(ctx)
 	if err != nil {
 		return nil, &refusedBeforeWriteError{fmt.Errorf("could not read the device before writing %s: %w", what, err)}
+	}
+	if err = refuseInputIDWithMode(doc, config); err != nil {
+		return nil, err
 	}
 	if err = refuseRemappedInputs(doc, config); err != nil {
 		return nil, err
