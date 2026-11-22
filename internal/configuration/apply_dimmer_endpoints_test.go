@@ -104,7 +104,7 @@ func TestUnsupportedNightWarmup(t *testing.T) {
 		{"unset", DimmingConfig{}, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.ElementsMatch(t, tc.want, unsupportedNightWarmup(&tc.d))
+			assert.ElementsMatch(t, tc.want, unsupportedNightWarmup(&tc.d, "SHDM-1"))
 		})
 	}
 }

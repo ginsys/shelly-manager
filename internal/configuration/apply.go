@@ -682,8 +682,11 @@ func (a *ConfigApplier) applyLightSettings(ctx context.Context, client ShellyCli
 		return failSection(result, "lights", errNoLightClient)
 	}
 	keys := gen1LightKeys
-	if isGen1Bulb(deviceType) {
+	switch {
+	case isGen1Bulb(deviceType):
 		keys = gen1BulbLightKeys
+	case isGen1WhiteBulb(deviceType):
+		keys = gen1WhiteBulbLightKeys
 	}
 	return applyChannels(ctx, result, "lights", lights, keys, lightClient.SetLightSettings, lightClient.GetLightSettings)
 }

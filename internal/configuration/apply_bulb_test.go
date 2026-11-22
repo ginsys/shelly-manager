@@ -294,22 +294,12 @@ func TestApplyBulb_RefusesRelayAndDimmingSections(t *testing.T) {
 	assert.True(t, converter.hasLight("SHBLB-1"))
 }
 
-// The Duo and the Vintage stay refused as models: a desired light on either is not applied.
-func TestApplyBulb_DuoAndVintageStayRefused(t *testing.T) {
-	supported := NewGen1Converter(nil).SupportedDeviceTypes()
-	assert.Contains(t, supported, "SHBLB-1")
-	assert.NotContains(t, supported, "SHBDUO-1")
-	assert.NotContains(t, supported, "SHVIN-1")
-	for _, model := range []string{"SHBDUO-1", "SHVIN-1"} {
-		t.Run(model, func(t *testing.T) {
-			svc, repo := newServiceWithDesiredName(t, "bulb")
-			setDesired(t, repo, bulbLights(SingleLightConfig{Effect: IntPtr(1)}))
-			dev := newBulbDevice("white")
-
-			_, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, model)
-
-			require.Error(t, err)
-			dev.nothingWritten(t)
-		})
-	}
+// The Bulb is neither a Duo or Vintage nor a Dimmer: it takes an effect and no name, and has no night
+// mode.
+func TestApplyBulb_IsNotAWhiteBulbOrADimmer(t *testing.T) {
+	converter := NewGen1Converter(nil)
+	assert.False(t, isGen1WhiteBulb("SHBLB-1"))
+	assert.False(t, hasLightName("SHBLB-1"))
+	assert.False(t, converter.hasNightMode("SHBLB-1"))
+	assert.True(t, hasLightEffect("SHBLB-1"))
 }

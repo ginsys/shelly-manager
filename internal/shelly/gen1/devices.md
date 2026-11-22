@@ -88,7 +88,7 @@
   - ✅ `/settings` `mode=color|white` - Switch modes (`system.device.mode`; apply writes it first and reads it back, unconfirmed on hardware; the page has no `/settings/mode` path)
 
 #### **Shelly Bulb**
-- **Type ID**: `SHBLB-1` (the Duo `SHBDUO-1` and the Vintage `SHVIN-1` are not supported)
+- **Type ID**: `SHBLB-1`
 - **Channels**: 1 light channel, mode white or color
 - **Features**:
   - RGBW LEDs in color mode, color temperature and brightness in white mode
@@ -97,6 +97,18 @@
   - ❌ `/light/0` - Control (color, brightness, temperature, timer)
   - ✅ `/settings/light/0` - Channel settings (`light.lights`: `default_state`, `auto_on`, `auto_off`, `effect`, `schedule`, `schedule_rules`; apply writes the keys that are set and reads them back, unconfirmed on hardware; `reset` is never sent)
   - ✅ `/settings` `mode=white|color` - Switch modes (`system.device.mode`; apply writes it first and reads it back, unconfirmed on hardware)
+
+#### **Shelly Duo and Shelly Vintage**
+- **Type IDs**: `SHBDUO-1` (Duo) and `SHVIN-1` (Vintage); the reference gives them in its CoIoT examples only, so a device's own report is unconfirmed
+- **Channels**: 1 white light channel, no mode switch and no effect
+- **Features**:
+  - Duo: dimmable white, color temperature 2700K to 6500K; Vintage: dimmable white
+  - Wake-up and night mode
+- **API Endpoints**:
+  - ❌ `/light/0` - Control (brightness, white and temperature on the Duo, timer, transition)
+  - ✅ `/settings/light/0` - Channel settings (`light.lights`: `name`, `default_state`, `auto_on`, `auto_off`, `schedule`, `schedule_rules`; apply writes the keys that are set and reads them back, unconfirmed on hardware; `reset` is never sent)
+  - ✅ `/settings/night_mode` - Night mode (`dimming.night_mode`, `night_mode_start`, `night_mode_end`, `night_mode_brightness` 0 to 100; apply writes it and reads it back from `GET /settings`, unconfirmed on hardware)
+  - ❌ `/settings` `transition` (0 to 5000 ms) and, on the Duo, `device_submodel` - not applied
 
 ### 🏠 Other Devices
 

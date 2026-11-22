@@ -39,7 +39,7 @@ type LoginHooks interface {
 // btn_reverse are written per input (POST /settings/relay/<n> on a Shelly 1, 1PM or 2.5, POST
 // /settings/input/<n> on a Shelly i3), and the wifi_sta and wifi_ap sections, which are written
 // with POST /settings/sta and /settings/ap (unsupportedWiFi names what stays refused), and the lights
-// section of a Dimmer, a Bulb or an RGBW2, which is written per channel (POST /settings/light/<n>,
+// section of a Dimmer, a Bulb, a Duo, a Vintage or an RGBW2, which is written per channel (POST /settings/light/<n>,
 // or color and white for an RGBW2). Every other
 // section is refused before the device is touched, because the applier would send it in a shape the
 // device ignores. A relay key outside gen1RelayKeys
@@ -78,7 +78,7 @@ var gen1ApplyKeys = map[string]bool{
 	"zcross_debounce": true,
 	"pulse_mode":      true,
 
-	"night_mode": true, // a Dimmer's own endpoints, see applyDimmerEndpoints
+	"night_mode": true, // the own endpoints of a Dimmer, a Duo and a Vintage, see applyDimmerEndpoints
 	"warm_up":    true,
 }
 
@@ -138,9 +138,10 @@ var gen1ApplicablePaths = map[string]bool{
 	"relay.relays[].schedule_rules": true,
 	"relay.relays[].max_power":      true,
 
-	// A Dimmer's or a Bulb's lights are written per channel with POST /settings/light/<n> and read
-	// back from GET /settings/light/<n>; an RGBW2's with /settings/color/0 or /settings/white/<n>.
-	// name, transition and btn_reverse are the RGBW2's; effect is the RGBW2's and the Bulb's.
+	// The lights of a Dimmer, a Bulb, a Duo or a Vintage are written per channel with POST
+	// /settings/light/<n> and read back from GET /settings/light/<n>; an RGBW2's with
+	// /settings/color/0 or /settings/white/<n>. transition and btn_reverse are the RGBW2's; name is the
+	// RGBW2's, the Duo's and the Vintage's; effect is the RGBW2's and the Bulb's.
 	"light.lights[].name":           true,
 	"light.lights[].effect":         true,
 	"light.lights[].transition":     true,
@@ -389,8 +390,8 @@ func unsupportedApplySettings(converter ConfigConverter, desired *DeviceConfigur
 			switch {
 			case hasColorWhiteChannels(deviceType):
 				unsupported = append(unsupported, unsupportedRGBW2LightValues(i, light)...)
-			case isGen1Bulb(deviceType):
-				unsupported = append(unsupported, unsupportedBulbLightValues(i, light)...)
+			case isGen1Bulb(deviceType), isGen1WhiteBulb(deviceType):
+				unsupported = append(unsupported, unsupportedSingleLightValues(i, light, deviceType)...)
 			default:
 				unsupported = append(unsupported, unsupportedLightValues(i, light)...)
 			}
@@ -398,7 +399,7 @@ func unsupportedApplySettings(converter ConfigConverter, desired *DeviceConfigur
 	}
 	if desired.Dimming != nil {
 		unsupported = append(unsupported, unsupportedDimmingValues(desired.Dimming)...)
-		unsupported = append(unsupported, unsupportedNightWarmup(desired.Dimming)...)
+		unsupported = append(unsupported, unsupportedNightWarmup(desired.Dimming, deviceType)...)
 	}
 	if desired.PowerMetering != nil && desired.PowerMetering.MaxPower != nil && *desired.PowerMetering.MaxPower < 0 {
 		unsupported = append(unsupported, "power_metering.max_power")

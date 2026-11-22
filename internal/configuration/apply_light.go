@@ -42,6 +42,9 @@ const gen1BulbMaxEffect = 6
 // is an action, and the page's other light rows are runtime state of /light/0.
 var gen1BulbLightKeys = []string{"default_state", "auto_on", "auto_off", "effect", "schedule", "schedule_rules"}
 
+// gen1WhiteBulbLightKeys are the same on the Duo and the Vintage: their page lists name and no effect.
+var gen1WhiteBulbLightKeys = []string{"name", "default_state", "auto_on", "auto_off", "schedule", "schedule_rules"}
+
 // unsupportedLightTimersAndRules is the check every light model shares: a negative timer and a
 // schedule that unsupportedScheduleRules refuses.
 func unsupportedLightTimersAndRules(path string, light SingleLightConfig) []string {
@@ -80,9 +83,10 @@ func unsupportedLightValues(channel int, light SingleLightConfig) []string {
 	return unsupported
 }
 
-// unsupportedBulbLightValues is the Bulb's channel: one channel, the page's three default states and
-// effect list, and none of the RGBW2's or the Dimmer's other keys.
-func unsupportedBulbLightValues(channel int, light SingleLightConfig) []string {
+// unsupportedSingleLightValues is the channel of the Bulb, the Duo and the Vintage: one channel, the
+// page's three default states, the Bulb's effect list where the model has one, a name where the page
+// lists it, and none of the RGBW2's or the Dimmer's other keys.
+func unsupportedSingleLightValues(channel int, light SingleLightConfig, deviceType string) []string {
 	path := fmt.Sprintf("light.lights[%d].", channel)
 	var unsupported []string
 	if light.ID != channel {
@@ -94,14 +98,14 @@ func unsupportedBulbLightValues(channel int, light SingleLightConfig) []string {
 	if s := light.DefaultState; s != nil && !slices.Contains(gen1RGBW2States, *s) {
 		unsupported = append(unsupported, path+"default_state")
 	}
-	if e := light.Effect; e != nil && (*e < 0 || *e > gen1BulbMaxEffect) {
+	if e := light.Effect; e != nil && (!hasLightEffect(deviceType) || *e < 0 || *e > gen1BulbMaxEffect) {
 		unsupported = append(unsupported, path+"effect")
 	}
 	for _, key := range []struct {
 		name string
 		set  bool
 	}{
-		{"name", light.Name != nil}, {"transition", light.Transition != nil}, {"btn_reverse", light.ButtonReverse != nil},
+		{"name", light.Name != nil && !hasLightName(deviceType)}, {"transition", light.Transition != nil}, {"btn_reverse", light.ButtonReverse != nil},
 		{"btn_type", light.ButtonType != nil}, {"btn_debounce", light.ButtonDebounce != nil}, {"swap_inputs", light.SwapInputs != nil},
 	} {
 		if key.set {
