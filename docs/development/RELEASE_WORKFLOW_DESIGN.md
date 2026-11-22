@@ -20,7 +20,7 @@ the only `ARG` lines are `TARGETPLATFORM` and `BUILDPLATFORM` (`deploy/docker/Do
 `Dockerfile.provisioner:16-17`), so the value is passed and dropped. The build flags are
 `-ldflags '-s -w'` (`:21`), with no version in them.
 
-**Eight values, none of them a release.**
+**Eight rows of version values, none of them a release.**
 
 | Where | Value |
 |---|---|
@@ -34,7 +34,7 @@ the only `ARG` lines are `TARGETPLATFORM` and `BUILDPLATFORM` (`deploy/docker/Do
 | image labels, `docker-build.yml:153`, `:168` | the date and sha name |
 
 What does carry a build identity is the revision: the server reads `vcs.revision` from the Go build
-information (`internal/api/build_info.go:8-14`) and reports it as `git_sha` (`handlers.go:252`); the UI
+information (`internal/api/build_info.go:8-19`) and reports it as `git_sha` (`handlers.go:252`); the UI
 takes `GIT_SHA` or `git rev-parse` (`ui/vite.config.ts:9-13`), and a banner shows when the two differ
 (`ui/src/App.vue:49`). Whether an image carries it is not read here: `deploy/docker/.dockerignore:5`
 lists `.git`, but Docker reads that file from the build context root, and a build would settle it.
@@ -142,8 +142,11 @@ Bronzeward's pair is `release-create.yml` (guard, wait for CI, tag, call publish
 
 **A. Release PR, then a dispatched workflow tags and publishes.** The maintainer runs
 `make changelog-assemble VERSION=X.Y.Z` in a branch, opens the release PR, and merges it through the
-normal checks. A dispatch on `main` then reads the newest `## [X.Y.Z...]` heading, checks it, makes
-the tag from the merge commit and publishes. *Order:* release PR, then tag. *What ties the tag to the
+normal checks. A dispatch on `main` then reads the newest `## [X.Y.Z...]` heading, checks it, tags
+**the head of `main` at the moment of the dispatch** (as bronzeward does, `release-create.yml:113`,
+not necessarily the release PR's merge commit) and publishes. A pull request merged between the two
+would ship a change the changelog section omits, so the workflow refuses while any fragment is left
+in `changelog.d/` at that commit. *Order:* release PR, then tag. *What ties the tag to the
 heading:* the workflow derives the tag **from** the heading, so they cannot differ. *Cost to build:*
 one workflow, plus a version variable and a callable image build (slices 1 to 3). *Cost to run:* one
 PR and one button; the dry run is the default.
@@ -171,7 +174,9 @@ operator's questions, so it is not an option here.
 fragments include 21 Changed and 3 Removed, so a minor step is honest. Breaking, while below 1.0, means
 a minor bump: a changed or removed route inside `/api/v1`, a database change that needs the repair step
 or refuses start-up (`database-upgrade.md:49`), a new SMA `FormatVersion` (`sma.go:19`), and a removed
-or renamed configuration key (an unknown key is ignored, not refused, so a rename is silent). Anything
+or renamed configuration key (an unknown key is ignored, not refused: the loader calls a plain `viper.Unmarshal`,
+`internal/config/config.go:248`, and a binary test starts with removed keys still set,
+`cmd/shelly-manager/main_test.go:237`; so a rename is silent). Anything
 else is the next `alpha.N`. One wrinkle: each cut deletes the fragments it used, so the final stable
 section lists only what came after the last alpha; it is merged by hand once.
 
@@ -199,6 +204,7 @@ prevents:
 | Gate | Failure it prevents |
 |---|---|
 | Heading exists, is not empty, and no such tag exists | a release with empty notes, or a second use of a tag, which is permanent |
+| No fragment is left in `changelog.d/` at the tagged commit | a release that ships a change its notes omit, because a pull request merged between the release PR and the dispatch |
 | CI passed on this commit (the whole `Test` workflow, database provider job included) | shipping a commit nobody tested |
 | Dry run by default | making a permanent tag by a mistaken click |
 | `SHA256SUMS` | a truncated or corrupted download of the host binary |
@@ -258,7 +264,7 @@ Each slice is one pull request with its own tests; none is a release.
    values from section 1 (chart `appVersion`, the bug template placeholder, the OpenAPI `version`).
 5. **Only if decision 6 changes:** signing, SBOM and attestations.
 
-Recommended: the first tag is cut by the owner from a dry run, not by an agent session, and
+Recommended: the first tag is cut by the owner, from a dry run, and
 ginsys/shelly-manager#846 stays open until slice 3 has run once. Both are the owner's to confirm.
 
 ## 8. What this note does not do
