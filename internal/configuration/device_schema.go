@@ -345,17 +345,17 @@ func withDimmerNightBrightness(dimming map[string]interface{}, isDimmer bool) ma
 	return dimming
 }
 
-// nightModeOnly keeps the four night-mode leaves of the dimming schema, the only part of it the Duo
-// and the Vintage have.
+// nightModeOnly keeps the four night-mode leaves and the transition of the dimming schema, the only
+// part of it the Duo and the Vintage have.
 func nightModeOnly(dimming map[string]interface{}) map[string]interface{} {
 	props := schemaProperties(dimming)
 	for key := range props {
-		if !strings.HasPrefix(key, "night_mode") {
+		if !strings.HasPrefix(key, "night_mode") && key != "transition" {
 			delete(props, key)
 		}
 	}
-	dimming["title"] = "Night Mode"
-	dimming["description"] = "Configure night mode"
+	dimming["title"] = "Night Mode and Transition"
+	dimming["description"] = "Configure night mode and the on/off transition"
 	return dimming
 }
 
