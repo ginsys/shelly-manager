@@ -2,7 +2,10 @@
 
 Status: proposal for ginsys/shelly-manager#638. Slice 1 is built: the tables and the store
 (merged as ginsys/shelly-manager#724), the handlers that use them, the admin delete route and the
-hourly purge of old rows. Slices 2 to 4 are not built. Serge chose the enrolment design on
+hourly purge of old rows. Slice 2, the manager half of Option F, is built: the columns and the keyless refusals
+(ginsys/shelly-manager#845, ginsys/shelly-manager#851), the purge by state (ginsys/shelly-manager#854), the admin routes
+(ginsys/shelly-manager#857), the keyed register (ginsys/shelly-manager#862) and the `strict` mode. Slices 3 and 4 (the
+agent and the UI) are not built. Serge chose the enrolment design on
 2026-11-21 (14:13 CET, typed "F"): **Option F, fingerprint approval of a seeded agent key**. Options
 A to E stay below as the options that were weighed. Sections below that describe the registry
 "today" describe the code before slice 1.
@@ -877,8 +880,8 @@ usual rule above) is `open` or `strict`. Any other value stops the start.
 | Token of a `legacy` row | Authorizes as today | Never authorizes: in `strict` only an `approved` row does, and a NULL state counts as `legacy` |
 | Start-up | No new requirement | Refuses to start without an admin key |
 
-In `strict` the one check sits in `agentByToken` (`provisioner_store.go:90`). `lockAgent`'s
-non-admin path calls it (`:111`), so poll, task status and report are all covered, on every
+In `strict` the one check sits in `agentByToken` (`provisioner_store.go:129`). `lockAgent`'s
+non-admin path calls it (`:155`), so poll, task status and report are all covered, on every
 replica, whatever the age of the token. Its admin path stays unchecked: the admin key acts for any
 row. Without that check a keyless row from before `strict` would keep polling and claiming
 unassigned tasks with a token that now survives restarts.
