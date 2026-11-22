@@ -28,6 +28,7 @@ import (
 	"github.com/ginsys/shelly-manager/internal/security/apikey"
 	"github.com/ginsys/shelly-manager/internal/service"
 	"github.com/ginsys/shelly-manager/internal/shelly"
+	"github.com/ginsys/shelly-manager/internal/version"
 )
 
 // Handler contains dependencies for API handlers
@@ -244,9 +245,10 @@ func (h *Handler) FastHealthz(w http.ResponseWriter, r *http.Request) {
 
 // Version returns minimal API version/build info for UI mismatch banner. git_sha is the revision
 // the server binary was built from; it is empty when the build carries none, and the UI then
-// shows no banner.
+// shows no banner. version is the application version the binary was stamped with ("dev" if none).
 func (h *Handler) Version(w http.ResponseWriter, r *http.Request) {
 	resp := map[string]any{
+		"version":           version.Version,
 		"api_version":       "dev",
 		"server_started_at": h.serverStartedAt.Format(time.RFC3339),
 		"git_sha":           h.gitSHA,

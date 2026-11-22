@@ -17,6 +17,7 @@ import (
 
 	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/shelly"
+	"github.com/ginsys/shelly-manager/internal/version"
 )
 
 // TemplateEngine handles variable substitution in device configurations
@@ -334,7 +335,7 @@ func (te *TemplateEngine) CreateTemplateContext(device *Device, variables map[st
 	// Populate system information
 	context.System.Timestamp = time.Now()
 	context.System.Environment = "production" // Could be configurable
-	context.System.Version = "1.0.0"          // Could be injected from build
+	context.System.Version = version.Version
 
 	// Populate custom variables
 	for key, value := range variables {

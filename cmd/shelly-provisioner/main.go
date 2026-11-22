@@ -19,6 +19,7 @@ import (
 	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/provisioning"
 	"github.com/ginsys/shelly-manager/internal/security/secrets"
+	"github.com/ginsys/shelly-manager/internal/version"
 )
 
 // Global variables
@@ -46,8 +47,9 @@ const noInit = "noinit"
 
 // Root command
 var rootCmd = &cobra.Command{
-	Use:   "shelly-provisioner",
-	Short: "Shelly device provisioning agent",
+	Use:     "shelly-provisioner",
+	Version: version.Version, // adds --version, which cobra answers before any config is loaded
+	Short:   "Shelly device provisioning agent",
 	Long: `A specialized provisioning agent for discovering and configuring 
 Shelly smart home devices in AP mode and connecting them to WiFi networks.
 
@@ -537,7 +539,7 @@ func registrationDetails() (hostname string, capabilities []string, metadata map
 	hostname, _ = os.Hostname()
 	capabilities = []string{"wifi-provisioning", "device-discovery", "shelly-gen1", "shelly-gen2"}
 	metadata = map[string]string{
-		"version":  "0.5.0-alpha",
+		"version":  version.Version,
 		"platform": "golang",
 	}
 	return hostname, capabilities, metadata

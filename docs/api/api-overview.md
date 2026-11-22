@@ -41,7 +41,7 @@ UI, the device list answers 401 and the UI opens the key dialog.
 |--------|----------|-------------|-------|--------|
 | GET | `/healthz` | Liveness probe | - | `{"status": "ok"}` |
 | GET | `/readyz` | Readiness probe | - | `{"status": "ready"}` |
-| GET | `/version`, `/api/v1/version` | API version info. The UI uses the `/api/v1` path. | - | Standard envelope; `data` holds `api_version`, `server_started_at`, `git_sha` (the revision the server was built from, empty when the build has none) and, when known, `database_provider_name` and `database_provider_version` |
+| GET | `/version`, `/api/v1/version` | API version info. The UI uses the `/api/v1` path. | - | Standard envelope; `data` holds `version` (the application version the binary was stamped with at build time, `dev` when it was not; a `-dev` build such as `v0.6.0-alpha.1-dev` is not ordered before its release, and the template variable `System.Version` carries the same value), `api_version`, `server_started_at`, `git_sha` (the revision the server was built from, empty when the build has none) and, when known, `database_provider_name` and `database_provider_version` |
 
 ---
 

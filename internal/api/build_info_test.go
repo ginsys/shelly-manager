@@ -10,7 +10,30 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ginsys/shelly-manager/internal/version"
 )
+
+// The version answers beside the revision: "dev" for an unstamped build, the stamped value otherwise.
+func TestVersionReportsVersion(t *testing.T) {
+	for _, stamped := range []string{version.Version, "v9.9.9-test"} {
+		old := version.Version
+		version.Version = stamped
+		h := &Handler{serverStartedAt: time.Now(), gitSHA: "abc"}
+		rec := httptest.NewRecorder()
+		h.Version(rec, httptest.NewRequest(http.MethodGet, "/api/v1/version", nil))
+		version.Version = old
+		require.Equal(t, http.StatusOK, rec.Code)
+
+		var body struct {
+			Data map[string]any
+		}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+		assert.Equal(t, stamped, body.Data["version"])
+		assert.Equal(t, "abc", body.Data["git_sha"], "the revision stays beside it")
+		assert.Contains(t, body.Data, "api_version")
+	}
+}
 
 func TestRevisionFromSettings(t *testing.T) {
 	tests := []struct {

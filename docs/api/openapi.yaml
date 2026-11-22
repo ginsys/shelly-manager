@@ -1214,6 +1214,9 @@ components:
       description: The `data` payload of the version response
       required: [api_version, server_started_at]
       properties:
+        version:
+          type: string
+          description: The application version the binary was stamped with at build time (`-ldflags -X` on `internal/version.Version`), `dev` when it was not. A plain `make build` adds `-dev` to the `VERSION` file value, and that is not ordered before the release. Not in `required`, so a client written for an older server stays valid.
         api_version:
           type: string
         server_started_at:

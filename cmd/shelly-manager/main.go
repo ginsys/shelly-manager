@@ -35,6 +35,7 @@ import (
 	"github.com/ginsys/shelly-manager/internal/security/secrets"
 	"github.com/ginsys/shelly-manager/internal/service"
 	"github.com/ginsys/shelly-manager/internal/sync"
+	"github.com/ginsys/shelly-manager/internal/version"
 )
 
 // Global variables
@@ -56,8 +57,9 @@ var (
 
 // Root command
 var rootCmd = &cobra.Command{
-	Use:   "shelly-manager",
-	Short: "Manage Shelly IoT devices",
+	Use:     "shelly-manager",
+	Version: version.Version, // adds --version, which cobra answers before any config is loaded
+	Short:   "Manage Shelly IoT devices",
 	Long: `A comprehensive tool for discovering, configuring, and managing 
 Shelly smart home devices on your network.`,
 }
@@ -503,7 +505,7 @@ func startServer() {
 
 	// Start server
 	address := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
-	logger.LogAppStart("1.0.0", address)
+	logger.LogAppStart(version.Version, address)
 
 	fmt.Printf("Starting server on %s\n", address)
 	fmt.Printf("Web interface: http://%s\n", address)
