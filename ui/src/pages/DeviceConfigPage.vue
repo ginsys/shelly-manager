@@ -367,16 +367,17 @@ const openEntries = ref<Set<number>>(new Set())
 
 // "View History" and the old history address open this page at #history-card. The page moves to the card
 // once, at the first moment no read of the device on screen is in flight: the page's own read, the stored import,
-// the history, the versions and a read from the device. The cards above the History card grow with those answers and push it down. The
-// check runs a tick after each read ends, so a read that the end of another one starts (the versions card reads
-// again when the page has finished) is counted. A later read (after a save, a template change or a rollback)
+// the history, the versions and a read from the device. The cards above the History card grow with those
+// answers and push it down. The check runs a tick after each read ends, so a read that the end of another one
+// starts (the versions card reads again when the page has finished) is counted. A later read (after a save, a template change or a rollback)
 // must not move the page again while the address keeps the hash.
 const historyCardEl = ref<HTMLElement | null>(null)
 let landAtHistory = false
-let readsInFlight = 0 // the stored import and the history, one count per read, whichever device it was for
+let readsInFlight = 0 // the stored import and the history of the device on screen, one count per read
 let versionsReading = false
 function armLanding() {
   landAtHistory = route.hash === '#history-card'
+  readsInFlight = 0 // reads of the device that went are not waited for
 }
 function landAtHistoryCard() {
   if (!landAtHistory) return
@@ -486,6 +487,7 @@ async function loadStored() {
   const current = () => routeGeneration === generation && storedReadSeq === seq
   readsInFlight += 2
   const readEnded = () => {
+    if (routeGeneration !== generation) return
     readsInFlight--
     landAtHistoryCard()
   }
