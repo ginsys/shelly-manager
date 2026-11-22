@@ -1763,8 +1763,8 @@ func getDimmingSchema() map[string]interface{} {
 			"night_mode_brightness": map[string]interface{}{
 				"type":        "integer",
 				"title":       "Night Mode Brightness",
-				"description": "Brightness during night mode (1-100)",
-				"minimum":     gen1DimmerMinNightBrightness,
+				"description": "Brightness during night mode: 0-100 on a Duo or Vintage, 1-100 on a Dimmer (a model's own schema narrows it)",
+				"minimum":     gen1WhiteBulbMinNightBrightness,
 				"maximum":     gen1DimmerMaxNightBrightness,
 			},
 			"night_mode_start": map[string]interface{}{

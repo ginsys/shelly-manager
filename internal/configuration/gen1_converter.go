@@ -79,7 +79,7 @@ func (c *Gen1Converter) FromAPIConfig(apiJSON json.RawMessage, deviceType string
 	// Convert Light settings (a Dimmer's channels)
 	c.convertLight(gen1, config, deviceType)
 
-	// Convert Dimming settings (a Dimmer's device-level parameters)
+	// Convert Dimming settings (a Dimmer's device-level parameters, and the night mode of a Duo or Vintage)
 	c.convertDimming(gen1, config, deviceType)
 
 	// Convert PowerMetering settings (device-specific)
@@ -160,16 +160,18 @@ func (c *Gen1Converter) ToAPIConfig(config *DeviceConfiguration, deviceType stri
 // SupportedDeviceTypes returns list of supported Gen1 device types
 func (c *Gen1Converter) SupportedDeviceTypes() []string {
 	return []string{
-		"SHPLG-S", // Smart Plug with metering
-		"SHPLG-1", // Smart Plug
-		"SHSW-1",  // Shelly 1
-		"SHSW-PM", // Shelly 1PM
-		"SHSW-25", // Shelly 2.5
-		"SHIX3-1", // Shelly i3
-		"SHDM-1",  // Shelly Dimmer
-		"SHDM-2",  // Shelly Dimmer 2 (read as the same channel as SHDM-1; unverified)
-		"SHRGBW2", // Shelly RGBW2 (color mode: one channel, white mode: four)
-		"SHBLB-1", // Shelly Bulb (one light channel; mode white or color)
+		"SHPLG-S",  // Smart Plug with metering
+		"SHPLG-1",  // Smart Plug
+		"SHSW-1",   // Shelly 1
+		"SHSW-PM",  // Shelly 1PM
+		"SHSW-25",  // Shelly 2.5
+		"SHIX3-1",  // Shelly i3
+		"SHDM-1",   // Shelly Dimmer
+		"SHDM-2",   // Shelly Dimmer 2 (read as the same channel as SHDM-1; unverified)
+		"SHRGBW2",  // Shelly RGBW2 (color mode: one channel, white mode: four)
+		"SHBLB-1",  // Shelly Bulb (one light channel; mode white or color)
+		"SHBDUO-1", // Shelly Duo (one white channel with a name and a night mode)
+		"SHVIN-1",  // Shelly Vintage (as the Duo)
 	}
 }
 
@@ -501,8 +503,8 @@ func scheduleRulesOf(raw interface{}) (*[]string, bool) {
 	return &list, true
 }
 
-// convertLight reads the lights array of a model whose channels are lights. The name is read for an
-// RGBW2 only: a Dimmer's page lists it as an attribute, not a parameter.
+// convertLight reads the lights array of a model whose channels are lights. The name is read where
+// hasLightName says the page lists it as a parameter.
 func (c *Gen1Converter) convertLight(gen1 map[string]interface{}, config *DeviceConfiguration, deviceType string) {
 	if !c.hasLight(deviceType) {
 		return
@@ -520,10 +522,12 @@ func (c *Gen1Converter) convertLight(gen1 map[string]interface{}, config *Device
 				single.Effect = IntPtr(effect)
 			}
 		}
-		if hasColorWhiteChannels(deviceType) {
+		if hasLightName(deviceType) {
 			if name, ok := lightMap["name"].(string); ok {
 				single.Name = StringPtr(name)
 			}
+		}
+		if hasColorWhiteChannels(deviceType) {
 			if transition, ok := shelly.WholeNumber(lightMap["transition"]); ok {
 				single.Transition = IntPtr(transition)
 			}
@@ -561,38 +565,41 @@ func (c *Gen1Converter) convertLight(gen1 map[string]interface{}, config *Device
 	config.Light = light
 }
 
-// convertDimming reads a Dimmer's device-level settings, the flat parameters of GET /settings.
+// convertDimming reads the night mode of a Dimmer, a Duo or a Vintage, and a Dimmer's other
+// device-level settings, the flat parameters and the warm-up of GET /settings.
 // pulse_mode 1 and 2 are the stored edge; any other value (the page's example shows 0 before the mode
 // is detected) is no value at all.
 func (c *Gen1Converter) convertDimming(gen1 map[string]interface{}, config *DeviceConfiguration, deviceType string) {
-	if !c.hasDimmerSettings(deviceType) {
+	if !c.hasNightMode(deviceType) {
 		return
 	}
 	dimming := &DimmingConfig{}
 	found := false
-	for key, dst := range map[string]**int{
-		"min_brightness": &dimming.MinBrightness, "fade_rate": &dimming.FadeRate,
-		"transition": &dimming.TransitionTime, "zcross_debounce": &dimming.ZcrossDebounce,
-	} {
-		if n, ok := shelly.WholeNumber(gen1[key]); ok {
-			*dst = IntPtr(n)
+	if c.hasDimmerSettings(deviceType) {
+		for key, dst := range map[string]**int{
+			"min_brightness": &dimming.MinBrightness, "fade_rate": &dimming.FadeRate,
+			"transition": &dimming.TransitionTime, "zcross_debounce": &dimming.ZcrossDebounce,
+		} {
+			if n, ok := shelly.WholeNumber(gen1[key]); ok {
+				*dst = IntPtr(n)
+				found = true
+			}
+		}
+		if mode, ok := shelly.WholeNumber(gen1["pulse_mode"]); ok && (mode == gen1DimmerLeadingEdge || mode == gen1DimmerTrailingEdge) {
+			dimming.LeadingEdge = BoolPtr(mode == gen1DimmerLeadingEdge)
 			found = true
 		}
+		warm, _ := gen1["warm_up"].(map[string]interface{})
+		found = readDimmerObject(warm, map[string]interface{}{
+			"enabled": &dimming.WarmupEnabled, "brightness": &dimming.WarmupBrightness, "time": &dimming.WarmupTime,
+		}) || found
 	}
-	if mode, ok := shelly.WholeNumber(gen1["pulse_mode"]); ok && (mode == gen1DimmerLeadingEdge || mode == gen1DimmerTrailingEdge) {
-		dimming.LeadingEdge = BoolPtr(mode == gen1DimmerLeadingEdge)
-		found = true
-	}
-	// The top-level objects night_mode and warm_up; the copy of night_mode inside a light is not read.
-	// A value is stored as the device reports it, in range or not.
+	// The top-level object night_mode; the copy of it inside a light is not read. A value is stored
+	// as the device reports it, in range or not.
 	night, _ := gen1["night_mode"].(map[string]interface{})
-	warm, _ := gen1["warm_up"].(map[string]interface{})
 	found = readDimmerObject(night, map[string]interface{}{
 		"enabled": &dimming.NightModeEnabled, "start_time": &dimming.NightModeStart,
 		"end_time": &dimming.NightModeEnd, "brightness": &dimming.NightModeBrightness,
-	}) || found
-	found = readDimmerObject(warm, map[string]interface{}{
-		"enabled": &dimming.WarmupEnabled, "brightness": &dimming.WarmupBrightness, "time": &dimming.WarmupTime,
 	}) || found
 	if found {
 		config.Dimming = dimming
@@ -1003,13 +1010,23 @@ func (c *Gen1Converter) exportLight(config *DeviceConfiguration, gen1 map[string
 	gen1["lights"] = lights
 }
 
-// exportDimming writes a Dimmer's device-level settings as flat parameters. A field with no Gen1
-// parameter is left out, so the round trip reports it.
+// exportDimming writes the night mode of a Dimmer, a Duo or a Vintage, and a Dimmer's other
+// device-level settings as flat parameters and the warm-up. A field with no Gen1 parameter is left
+// out, so the round trip reports it.
 func (c *Gen1Converter) exportDimming(config *DeviceConfiguration, gen1 map[string]interface{}, deviceType string) {
-	if !c.hasDimmerSettings(deviceType) || config.Dimming == nil {
+	if !c.hasNightMode(deviceType) || config.Dimming == nil {
 		return
 	}
 	d := config.Dimming
+	if night := dimmerObject(map[string]interface{}{
+		"enabled": d.NightModeEnabled, "start_time": d.NightModeStart, "end_time": d.NightModeEnd,
+		"brightness": d.NightModeBrightness,
+	}); len(night) > 0 {
+		gen1["night_mode"] = night
+	}
+	if !c.hasDimmerSettings(deviceType) {
+		return
+	}
 	for key, value := range map[string]*int{
 		"min_brightness": d.MinBrightness, "fade_rate": d.FadeRate,
 		"transition": d.TransitionTime, "zcross_debounce": d.ZcrossDebounce,
@@ -1023,12 +1040,6 @@ func (c *Gen1Converter) exportDimming(config *DeviceConfiguration, gen1 map[stri
 		if *d.LeadingEdge {
 			gen1["pulse_mode"] = gen1DimmerLeadingEdge
 		}
-	}
-	if night := dimmerObject(map[string]interface{}{
-		"enabled": d.NightModeEnabled, "start_time": d.NightModeStart, "end_time": d.NightModeEnd,
-		"brightness": d.NightModeBrightness,
-	}); len(night) > 0 {
-		gen1["night_mode"] = night
 	}
 	if warm := dimmerObject(map[string]interface{}{
 		"enabled": d.WarmupEnabled, "brightness": d.WarmupBrightness, "time": d.WarmupTime,
@@ -1411,7 +1422,7 @@ func (c *Gen1Converter) hasRelay(deviceType string) bool {
 	case "SHIX3-1":
 		// Input-only device, no relays
 		return false
-	case "SHDM-1", "SHDM-2", "SHRGBW2", "SHBLB-1":
+	case "SHDM-1", "SHDM-2", "SHRGBW2", "SHBLB-1", "SHBDUO-1", "SHVIN-1":
 		// A light model's channel is /settings/light/<n> (or color, white), and its settings carry a
 		// lights array and no relays array. A relay sent to /settings/relay/<n> goes to a path the
 		// device does not have.
@@ -1428,8 +1439,9 @@ func hasColorWhiteChannels(deviceType string) bool {
 }
 
 // hasDimmerSettings reports whether a model has a Dimmer's device-level settings (the dimming
-// section: flat parameters of POST /settings). It is a list of its own, never derived from hasLight,
-// because another light model (the RGBW2) has light channels and none of these parameters.
+// section: flat parameters of POST /settings, and the warm-up). It is a list of its own, never derived
+// from hasLight, because another light model (the RGBW2) has light channels and none of these
+// parameters. The Duo and Vintage have the night mode of that section only: see hasNightMode.
 func (c *Gen1Converter) hasDimmerSettings(deviceType string) bool {
 	switch deviceType {
 	case "SHDM-1", "SHDM-2":
@@ -1451,11 +1463,30 @@ func isGen1Bulb(deviceType string) bool {
 	return deviceType == "SHBLB-1"
 }
 
-// hasLight reports whether a model's channels are lights: /settings/light/<n> for a Dimmer or a Bulb,
-// /settings/color/0 or /settings/white/<n> for an RGBW2.
+// isGen1WhiteBulb reports whether a model is the Shelly Duo or Vintage: one white channel with a name
+// and a night mode, no mode and no effect.
+func isGen1WhiteBulb(deviceType string) bool {
+	return deviceType == "SHBDUO-1" || deviceType == "SHVIN-1"
+}
+
+// hasLightName reports whether the page lists name as a parameter of the model's light channel: the
+// RGBW2, the Duo and the Vintage. A Dimmer's and a Bulb's page lists it as an attribute only.
+func hasLightName(deviceType string) bool {
+	return hasColorWhiteChannels(deviceType) || isGen1WhiteBulb(deviceType)
+}
+
+// hasNightMode reports whether a model has POST /settings/night_mode: the Dimmers, the Duo and the
+// Vintage. The Duo and the Vintage have none of a Dimmer's other device-level settings, so this is a
+// list of its own and hasDimmerSettings stays the Dimmers'.
+func (c *Gen1Converter) hasNightMode(deviceType string) bool {
+	return c.hasDimmerSettings(deviceType) || isGen1WhiteBulb(deviceType)
+}
+
+// hasLight reports whether a model's channels are lights: /settings/light/<n> for a Dimmer, a Bulb, a
+// Duo or a Vintage, /settings/color/0 or /settings/white/<n> for an RGBW2.
 func (c *Gen1Converter) hasLight(deviceType string) bool {
 	switch deviceType {
-	case "SHDM-1", "SHDM-2", "SHRGBW2", "SHBLB-1":
+	case "SHDM-1", "SHDM-2", "SHRGBW2", "SHBLB-1", "SHBDUO-1", "SHVIN-1":
 		return true
 	default:
 		return false

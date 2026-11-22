@@ -2067,6 +2067,10 @@ paths:
         device mode is written first; not confirmed on hardware), for a Bulb (SHBLB-1) a light written
         to /settings/light/0 (default_state, auto_on, auto_off, effect of 0 to 6, schedule and
         schedule_rules; the mode, white or color, is written first; not confirmed on hardware), for a
+        Duo (SHBDUO-1) or Vintage (SHVIN-1) a light written to /settings/light/0 (name, default_state,
+        auto_on, auto_off, schedule and schedule_rules; no mode and no effect) and its night mode
+        (enabled, start and end as hh:mm, brightness 0 to 100, through POST /settings/night_mode, read
+        back from GET /settings; not confirmed on hardware), for a
         model with roller mode
         (SHSW-25) rollers (max_open_time and max_close_time in seconds, motor_direction, swap_inputs and
         input_mode, each read back), and input button types (mode as btn_type and inverted as

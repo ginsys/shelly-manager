@@ -3,6 +3,7 @@ package configuration
 import (
 	"maps"
 	"slices"
+	"strings"
 )
 
 // Schema extension keywords added by GetDeviceConfigurationSchema.
@@ -73,7 +74,9 @@ func GetDeviceConfigurationSchema(deviceType string) map[string]interface{} {
 	if !supported || converter.hasDimmerSettings(deviceType) {
 		// Five fields of the Dimmer's device-level group are applied (gen1ApplicablePaths); the rest of
 		// it is stored and not written, so those fields are not applicable.
-		sections["dimming"] = withoutEdgeOfDimmerWithoutDetection(getDimmingSchema(), deviceType)
+		sections["dimming"] = withDimmerNightBrightness(withoutEdgeOfDimmerWithoutDetection(getDimmingSchema(), deviceType), converter.hasDimmerSettings(deviceType))
+	} else if converter.hasNightMode(deviceType) {
+		sections["dimming"] = nightModeOnly(getDimmingSchema())
 	}
 
 	schema := map[string]interface{}{
@@ -151,10 +154,17 @@ func lightSchemaOf(schema map[string]interface{}, deviceType string, supported b
 	for _, key := range gen2LightOnlyKeys {
 		delete(items, key)
 	}
-	if isGen1Bulb(deviceType) {
-		// The Bulb's page: six keys, effect 0 to 6, the three default states; none of the button keys.
-		for _, key := range []string{"name", "transition", "btn_reverse", "btn_type", "btn_debounce", "swap_inputs"} {
+	if isGen1Bulb(deviceType) || isGen1WhiteBulb(deviceType) {
+		// The page of the Bulb, Duo and Vintage: six keys (the Bulb's effect 0 to 6, the other two's
+		// name instead), the three default states; none of the button keys.
+		for _, key := range []string{"transition", "btn_reverse", "btn_type", "btn_debounce", "swap_inputs"} {
 			delete(items, key)
+		}
+		if !hasLightName(deviceType) {
+			delete(items, "name")
+		}
+		if !hasLightEffect(deviceType) {
+			delete(items, "effect")
 		}
 		if state, ok := items["default_state"].(map[string]interface{}); ok {
 			state["enum"] = gen1RGBW2States
@@ -310,6 +320,30 @@ func withoutEdgeOfDimmerWithoutDetection(dimming map[string]interface{}, deviceT
 	if deviceType == "SHDM-1" {
 		delete(schemaProperties(dimming), "leading_edge")
 	}
+	return dimming
+}
+
+// withDimmerNightBrightness narrows the night brightness minimum to the Dimmer's 1 for a supported
+// Dimmer. The generic schema, which a template with no model reads, holds the Duo's and Vintage's 0.
+func withDimmerNightBrightness(dimming map[string]interface{}, isDimmer bool) map[string]interface{} {
+	if brightness, ok := schemaProperties(dimming)["night_mode_brightness"].(map[string]interface{}); ok && isDimmer {
+		brightness["minimum"] = gen1DimmerMinNightBrightness
+		brightness["description"] = "Brightness during night mode (1-100)"
+	}
+	return dimming
+}
+
+// nightModeOnly keeps the four night-mode leaves of the dimming schema, the only part of it the Duo
+// and the Vintage have.
+func nightModeOnly(dimming map[string]interface{}) map[string]interface{} {
+	props := schemaProperties(dimming)
+	for key := range props {
+		if !strings.HasPrefix(key, "night_mode") {
+			delete(props, key)
+		}
+	}
+	dimming["title"] = "Night Mode"
+	dimming["description"] = "Configure night mode"
 	return dimming
 }
 

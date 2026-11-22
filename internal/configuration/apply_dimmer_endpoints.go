@@ -19,20 +19,29 @@ const (
 	gen1DimmerMaxWarmupTime       = 200
 )
 
+// The Duo and Vintage page gives the night brightness as "0..100", and its own example shows 0; the
+// maximum is the Dimmer's.
+const gen1WhiteBulbMinNightBrightness = 0
+
 const gen1ClockPattern = `^([01][0-9]|2[0-3]):[0-5][0-9]$`
 
 var gen1ClockTime = regexp.MustCompile(gen1ClockPattern)
 
 // unsupportedNightWarmup returns the paths of a desired night mode and warm-up the page does not
-// accept. A warm-up that is switched off is checked for its enabled flag only.
-func unsupportedNightWarmup(d *DimmingConfig) []string {
+// accept. A warm-up that is switched off is checked for its enabled flag only. The Duo and the
+// Vintage page gives the night brightness as 0 to 100, the Dimmer's as 1 to 100.
+func unsupportedNightWarmup(d *DimmingConfig, deviceType string) []string {
 	var unsupported []string
 	outside := func(v *int, min, max int) bool { return v != nil && (*v < min || *v > max) }
 	notClock := func(s *string) bool { return s != nil && !gen1ClockTime.MatchString(*s) }
+	minNight := gen1DimmerMinNightBrightness
+	if isGen1WhiteBulb(deviceType) {
+		minNight = gen1WhiteBulbMinNightBrightness
+	}
 	for path, bad := range map[string]bool{
 		"dimming.night_mode_start":      notClock(d.NightModeStart),
 		"dimming.night_mode_end":        notClock(d.NightModeEnd),
-		"dimming.night_mode_brightness": outside(d.NightModeBrightness, gen1DimmerMinNightBrightness, gen1DimmerMaxNightBrightness),
+		"dimming.night_mode_brightness": outside(d.NightModeBrightness, minNight, gen1DimmerMaxNightBrightness),
 	} {
 		if bad {
 			unsupported = append(unsupported, path)

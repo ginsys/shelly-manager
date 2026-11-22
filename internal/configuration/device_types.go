@@ -10,16 +10,18 @@ type DeviceTypeInfo struct {
 // deviceTypeNames gives each supported code a readable name. A test pins the keys to
 // SupportedDeviceTypes, so a model cannot be added to the converter without a name here.
 var deviceTypeNames = map[string]string{
-	"SHPLG-S": "Shelly Plug S",
-	"SHPLG-1": "Shelly Plug",
-	"SHSW-1":  "Shelly 1",
-	"SHSW-PM": "Shelly 1PM",
-	"SHSW-25": "Shelly 2.5",
-	"SHIX3-1": "Shelly i3",
-	"SHDM-1":  "Shelly Dimmer",
-	"SHDM-2":  "Shelly Dimmer 2",
-	"SHRGBW2": "Shelly RGBW2",
-	"SHBLB-1": "Shelly Bulb",
+	"SHPLG-S":  "Shelly Plug S",
+	"SHPLG-1":  "Shelly Plug",
+	"SHSW-1":   "Shelly 1",
+	"SHSW-PM":  "Shelly 1PM",
+	"SHSW-25":  "Shelly 2.5",
+	"SHIX3-1":  "Shelly i3",
+	"SHDM-1":   "Shelly Dimmer",
+	"SHDM-2":   "Shelly Dimmer 2",
+	"SHRGBW2":  "Shelly RGBW2",
+	"SHBLB-1":  "Shelly Bulb",
+	"SHBDUO-1": "Shelly Duo",
+	"SHVIN-1":  "Shelly Vintage",
 }
 
 // SupportedDeviceTypeInfos lists the models a device-type template can name, in the converter's order.
