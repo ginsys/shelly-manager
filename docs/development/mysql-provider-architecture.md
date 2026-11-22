@@ -121,24 +121,19 @@ func (t *mysqlTransaction) Rollback() error {
 
 ### 1. Security-First Architecture
 
-**DSN Security Validation**
-```go
-func (m *MySQLProvider) validateDSNInput(dsn string) error {
-    dangerousPatterns := []string{
-        "DROP TABLE", "DROP DATABASE", "DELETE FROM", "INSERT INTO",
-        "UPDATE SET", "CREATE TABLE", "ALTER TABLE", "TRUNCATE",
-        "--", "/*", "*/", ";", "EXEC", "EXECUTE",
-        "sp_", "xp_", "UNION SELECT", "INFORMATION_SCHEMA",
-        "<script", "javascript:", "onload=", "onerror=",
-    }
-    // ... validation logic
-}
-```
+**DSN Reading**
+
+The provider reads the DSN as the driver reads it and adds its defaults from the
+keys of the parameter section; it does not read the DSN or its options for content
+and does not filter session settings.
 
 **Decision Rationale:**
-- Prevents SQL injection attacks through DSN parameters
-- Protects against XSS attempts in configuration
-- Validates all user input before connection attempts
+- A match on the text of the DSN reads it before the driver decodes it, so it stops
+  nothing real and refuses valid input (a host, a database name or a password
+  holding a word it lists)
+- The driver owns what a DSN means; the provider keeps the defaults, reads the
+  timeout options as durations and escapes the other options it adds
+- The DSN is operator input: the operator's configuration is the only way to set it
 
 **No Driver Text In Connect Errors**
 ```go
@@ -221,12 +216,12 @@ func (m *MySQLProvider) validateSSLConfig(options map[string]string) error {
 ### 1. Connection Establishment Flow
 
 ```
-User Config → DSN Validation → SSL Validation → Connection Pool Config → Database Connection → Version Discovery → Statistics Initialization
+User Config → DSN Reading → SSL Validation → Connection Pool Config → Database Connection → Version Discovery → Statistics Initialization
 ```
 
 **Detailed Flow:**
 1. **Configuration Parsing**: Parse and validate user configuration
-2. **Security Validation**: Validate DSN for injection patterns
+2. **DSN Reading**: Read the parameter section of the DSN as the driver does
 3. **SSL Configuration**: Validate SSL settings and certificates
 4. **DSN Construction**: Build complete DSN with security defaults
 5. **Connection Establishment**: Create GORM database instance
@@ -400,13 +395,12 @@ func (m *MySQLProvider) Migrate(models ...interface{}) error {
 
 ## Security Architecture
 
-### 1. Input Validation
+### 1. DSN Reading
 
-**Multi-Layer Validation**
-- DSN format validation
-- SQL injection pattern detection
-- XSS pattern detection
-- Certificate file validation
+**What is read**
+- DSN format: one parse, the driver's own
+- TLS mode and certificate files
+- Values are not checked: they reach the server as the driver sends them
 
 ### 2. Credential Protection
 

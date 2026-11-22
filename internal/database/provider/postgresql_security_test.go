@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -186,33 +187,38 @@ func TestPostgreSQLSecurityCredentialProtection(t *testing.T) {
 	}
 }
 
-// TestPostgreSQLSecurityDSNInjection tests protection against DSN injection attacks
-func TestPostgreSQLSecurityDSNInjection(t *testing.T) {
-	logger := logging.GetDefault()
-	provider := NewPostgreSQLProvider(logger)
+// TestPostgreSQLBuildDSN_TextInRows reads DSNs that hold text which looks like SQL,
+// and says for each whether it is refused and by which read of the structure. The
+// provider reads no DSN for content: a word in the user, the database name or a
+// setting is part of that value. A refused row names the text its refusal holds, so
+// a row that fails for another reason fails the test.
+func TestPostgreSQLBuildDSN_TextInRows(t *testing.T) {
+	provider := NewPostgreSQLProvider(logging.GetDefault())
 
-	maliciousDSNs := []string{
-		"postgres://user:pass@localhost:5432/test?sslmode=disable'; DROP TABLE users; --",
-		"postgres://user'; DELETE FROM sensitive_data; --:pass@localhost:5432/db",
-		"postgres://user:pass@localhost:5432/db'; INSERT INTO admin_users VALUES ('hacker', 'admin'); --",
-		"postgres://user:pass@localhost/db?application_name=app'; DROP DATABASE production; --",
+	rows := []struct {
+		dsn     string
+		refusal string // "" when accepted, else text of the error that refuses it
+		reason  string
+	}{
+		{"postgres://user:pass@localhost:5432/test?sslmode=disable'; DROP TABLE users; --", "failed to parse as URL", "net/url refuses a semicolon in the query"},
+		{"postgres://user'; DELETE FROM sensitive_data; --:pass@localhost:5432/db", "not a valid URL", "net/url cannot read the user part of the DSN"},
+		{"postgres://user:pass@localhost:5432/db'; INSERT INTO admin_users VALUES ('hacker', 'admin'); --", "one path segment", "the database name check wants one path segment without blanks"},
+		{"postgres://user:pass@localhost/db?application_name=app'; DROP DATABASE production; --", "failed to parse as URL", "net/url refuses a semicolon in the query"},
+		{"postgres://user:pass@localhost/db?application_name=shelly-app", "", "the text is part of the application name"},
 	}
 
-	for i, dsn := range maliciousDSNs {
-		t.Run(fmt.Sprintf("InjectionAttempt_%d", i+1), func(t *testing.T) {
-			// DSN parsing should either fail or sanitize the input
-			_, err := provider.buildDSN(dsn, nil)
-
-			// Either the DSN should be rejected as invalid, or if accepted,
-			// it should be properly escaped/sanitized
+	for i, row := range rows {
+		t.Run(fmt.Sprintf("Row_%d", i+1), func(t *testing.T) {
+			built, err := provider.buildDSN(row.dsn, nil)
 			if err == nil {
-				// If DSN is accepted, verify it doesn't contain dangerous SQL
-				builtDSN, _ := provider.buildDSN(dsn, nil)
-				assert.NotContains(t, builtDSN, "DROP TABLE", "Built DSN should not contain SQL injection")
-				assert.NotContains(t, builtDSN, "DELETE FROM", "Built DSN should not contain SQL injection")
-				assert.NotContains(t, builtDSN, "INSERT INTO", "Built DSN should not contain SQL injection")
+				_, err = pgx.ParseConfig(built)
 			}
-			// If DSN is rejected, that's also acceptable security behavior
+			if row.refusal == "" {
+				assert.NoError(t, err, row.reason)
+			} else {
+				require.Error(t, err, row.reason)
+				assert.Contains(t, err.Error(), row.refusal, row.reason)
+			}
 		})
 	}
 }

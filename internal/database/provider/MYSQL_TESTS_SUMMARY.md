@@ -25,13 +25,13 @@ Comprehensive test suite for the MySQL database provider implementation, followi
 - `TestMySQLConnectError_HoldsNoDSNText` (`mysql_connect_error_test.go`): a password typed into
   the tls name, a bool value, the user or the host is absent from the returned error and the log
 
-**DSN Injection Protection Tests**
-- `TestMySQLSecurityDSNInjection`: Protection against SQL injection in DSN strings
-  - Tests 8 different malicious injection attempts
-  - SQL injection: DROP TABLE, DELETE FROM, INSERT INTO
-  - XSS injection: `<script>` tags
-  - Command injection: EXEC, xp_cmdshell
-  - Comment injection: --, /* */
+**DSN Reading Tests**
+- `TestMySQLBuildDSN_TextInRows` (`mysql_security_test.go`): 8 DSNs holding text that looks like SQL
+  - Each row states whether the driver's parse accepts it or refuses it, and by which rule
+  - Values are not checked: a word in a host, database name or password is part of that value
+- `TestMySQLBuildDSN_*` (`mysql_dsn_text_test.go`): defaults come from the keys of the DSN,
+  timeout options must be durations, the other options are escaped as one value,
+  the key cut matches the driver's parse
 
 **Connection Security Tests**
 - `TestMySQLSecurityConnectionTimeout`: Timeout enforcement for security
@@ -61,10 +61,9 @@ Comprehensive test suite for the MySQL database provider implementation, followi
   - Validates thread-safe operations
 
 **MySQL-Specific Security Tests**
-- `TestMySQLSecurityDSNValidation`: Comprehensive DSN validation
-  - Valid/invalid DSN format testing
-  - SQL injection pattern detection
-  - XSS and command injection protection
+- `TestMySQLBuildDSN_Format`: DSN format testing
+  - Valid and invalid DSN formats
+  - Text that looks like SQL is part of the value it sits in
 - `TestMySQLSecurityCharsetValidation`: Character set security
   - UTF8MB4 default validation
   - Custom charset handling
@@ -109,10 +108,10 @@ Comprehensive test suite for the MySQL database provider implementation, followi
 - `TestMySQLProviderCreateGormLogger`: GORM logger creation
 - `TestMySQLProviderValidateSSLConfig`: SSL configuration validation
 
-**Input Validation**
-- `TestMySQLProviderValidateDSNInput`: DSN input security validation
-- Tests valid inputs (user:pass@tcp, database names, parameters)
-- Tests dangerous inputs (SQL injection, XSS, command injection)
+**DSN Reading**
+- `TestMySQLBuildDSN_*`: the DSN is read as the driver reads it; defaults come from
+  the keys of the parameter section, the timeout options must be durations, and the other options the provider adds are escaped
+- Session settings and option values are not filtered by content
 
 **Performance and Concurrency**
 - `TestMySQLProviderConcurrentSafety`: Thread safety validation
@@ -127,8 +126,7 @@ Comprehensive test suite for the MySQL database provider implementation, followi
 ### Security Focus (80% of testing effort)
 ✅ **SSL/TLS Security**: All modes validated, certificate checking
 ✅ **Credential Protection**: No leakage in errors, logging, health checks
-✅ **Injection Protection**: SQL, XSS, command injection prevention
-✅ **Input Validation**: Comprehensive DSN and option validation
+✅ **DSN Reading**: one parse, defaults from keys, timeout options read as durations, other options escaped as one value
 ✅ **Connect Error Text**: No driver text in connect errors or logs
 ✅ **Concurrency Safety**: Thread-safe operations validated
 ✅ **Timeout Security**: Connection timeout enforcement
@@ -152,13 +150,13 @@ Comprehensive test suite for the MySQL database provider implementation, followi
 ## Performance Validation
 - All benchmark tests show excellent performance
 - GetStats operations: sub-20ns performance
-- DSN operations: sub-3μs performance with full validation
+- DSN operations: sub-3μs performance
 - Concurrent operations: No performance degradation
 
 ## Security Compliance
-- **OWASP Compliance**: Input validation, error handling, injection prevention
+- **Error handling**: connect errors carry a fixed classification, never driver text
 - **Zero Trust**: No credential leakage, secure by default configuration
-- **Defense in Depth**: Multiple layers of security validation
+- **TLS and credentials**: TLS mode and certificate checks, credential sanitization
 - **Secure Defaults**: TLS preferred, secure timeouts, connection limits
 
 ## Test Execution

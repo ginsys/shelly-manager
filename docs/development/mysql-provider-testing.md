@@ -6,7 +6,7 @@ The MySQL database provider includes a comprehensive test suite with 65+ test ca
 
 **Test Coverage Highlights:**
 - **Functional Tests**: Complete interface implementation validation
-- **Security Tests**: Comprehensive SSL/TLS, credential protection, and injection prevention
+- **Security Tests**: Comprehensive SSL/TLS and credential protection, and DSN reading
 - **Performance Tests**: Connection pool optimization and query performance validation
 - **Integration Tests**: Real MySQL server connectivity and compatibility testing
 
@@ -21,7 +21,7 @@ The MySQL database provider includes a comprehensive test suite with 65+ test ca
 │  Unit Tests (30+)    │  Security Tests (25+)  │  Benchmarks │
 │  • Interface Tests   │  • SSL/TLS Validation  │  • DSN Build │
 │  • DSN Processing    │  • Credential Protection│  • Statistics│
-│  • Error Handling    │  • Injection Prevention │  • Host Parse│
+│  • Error Handling    │  • DSN Reading Tests    │  • Host Parse│
 │  • Connection Mgmt   │  • Timeout Security     │             │
 ├─────────────────────────────────────────────────────────────┤
 │             Integration Tests (10+) [Optional]             │
@@ -350,69 +350,24 @@ sealed.
 - Server errors reduced to their number
 - The retry sentinel `driver.ErrBadConn` passes through unchanged
 
-### Injection Prevention Tests
+### DSN Reading Tests
 
-#### SQL Injection Protection
-```go
-func TestMySQLSecurityDSNInjection(t *testing.T) {
-    provider := NewMySQLProvider(logging.GetDefault())
-    
-    maliciousDSNs := []string{
-        "user:pass@tcp(localhost:3306)/test'; DROP TABLE users; --",
-        "user'; DELETE FROM sensitive_data; --:pass@tcp(localhost:3306)/db",
-        "user:pass@tcp(localhost:3306)/db'; INSERT INTO admin_users VALUES ('hacker', 'admin'); --",
-        "user:pass@tcp(localhost:3306)/db?timeout=5s'; DROP DATABASE production; --",
-        // ... more injection scenarios
-    }
-    
-    for i, dsn := range maliciousDSNs {
-        t.Run(fmt.Sprintf("InjectionAttempt_%d", i+1), func(t *testing.T) {
-            // DSN parsing should either fail or sanitize the input
-            _, err := provider.buildDSN(dsn, nil)
-            
-            if err == nil {
-                // If DSN is accepted, verify it doesn't contain dangerous SQL
-                builtDSN, _ := provider.buildDSN(dsn, nil)
-                assert.NotContains(t, builtDSN, "DROP TABLE")
-                assert.NotContains(t, builtDSN, "DELETE FROM")
-                assert.NotContains(t, builtDSN, "INSERT INTO")
-                // ... more injection pattern checks
-            }
-        })
-    }
-}
-```
+The provider reads a DSN as the driver does and filters nothing by content. These
+tests read what `buildDSN` returns the way the driver does:
 
-#### XSS and Command Injection Protection
-```go
-func TestMySQLProviderValidateDSNInput(t *testing.T) {
-    provider := NewMySQLProvider(logging.GetDefault())
-    
-    dangerousInputs := []string{
-        "DROP TABLE users",
-        "DELETE FROM sensitive_data",
-        "<script>alert('xss')</script>",
-        "EXEC xp_cmdshell",
-        "/* comment */",
-        "-- sql comment",
-        "; additional command",
-    }
-    
-    for _, input := range dangerousInputs {
-        t.Run(fmt.Sprintf("Dangerous_%s", input), func(t *testing.T) {
-            err := provider.validateDSNInput(input)
-            assert.Error(t, err)
-            assert.Contains(t, err.Error(), "potentially dangerous DSN content detected")
-        })
-    }
-}
-```
-
-**Injection Prevention Features Tested:**
-- SQL injection pattern detection
-- XSS attempt prevention
-- Command injection protection
-- Comment injection prevention
+- `TestMySQLBuildDSN_TextInRows`: DSNs holding text that looks like SQL or markup;
+  each row says whether the driver's parse of the built DSN accepts it, and why.
+- `TestMySQLBuildDSN_StructureAndText`: a host, a database name or a password
+  holding a reserved-looking word is accepted; a DSN the driver cannot parse
+  reports a fixed message and none of its text.
+- `TestMySQLBuildDSN_OptionsAreEscaped`: a timeout option that is not a duration is
+  refused with a message naming the option, every duration spelling the driver reads
+  is kept, and the other options stay one value.
+- `TestMySQLBuildDSN_CharsetListStaysAList`: a `charset` option naming several
+  character sets keeps its comma.
+- `TestMySQLBuildDSN_DefaultsFromKeys` and `TestMySQLBuildDSN_CutterMatchesDriver`:
+  a default is added when the parameter section does not give its key, and the
+  keys are found the way the driver finds them.
 
 ### Security Timeout Tests
 
@@ -658,8 +613,8 @@ go test ./internal/database/provider -v -run Credential
 # Run SSL/TLS tests
 go test ./internal/database/provider -v -run SSL
 
-# Run injection prevention tests
-go test ./internal/database/provider -v -run Injection
+# Run DSN reading tests
+go test ./internal/database/provider -v -run 'TestMySQLBuildDSN_'
 ```
 
 #### Performance Testing
@@ -759,7 +714,7 @@ jobs:
 **100% Coverage Areas:**
 - SSL/TLS configuration validation
 - Credential sanitization patterns
-- DSN security validation
+- DSN reading and defaults
 - Error message sanitization
 
 **90%+ Coverage Areas:**
@@ -774,7 +729,7 @@ jobs:
 - All 8 MySQL TLS modes
 - Certificate validation scenarios
 - Credential protection patterns
-- Injection prevention mechanisms
+- DSN reading: defaults from keys, timeout options read as durations, other options escaped
 - Timeout security enforcement
 
 **Performance Test Coverage**: Benchmark tests for:
@@ -794,7 +749,7 @@ jobs:
 ### Test Development Guidelines
 
 1. **Comprehensive Security Testing**:
-   - Test all attack vectors (SQL injection, XSS, command injection)
+   - Read a DSN holding odd text the way the driver does, and state per row whether it is accepted
    - Validate credential protection in all error scenarios
    - Test all SSL/TLS modes with various configurations
 

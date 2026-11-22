@@ -2,11 +2,11 @@
 
 ## Executive Summary
 
-The MySQL database provider implements a comprehensive security framework designed to protect against common database vulnerabilities while maintaining operational flexibility. Built on defense-in-depth principles, it provides SSL/TLS encryption, input validation, credential protection, and security monitoring for enterprise-grade deployments.
+The MySQL database provider implements a comprehensive security framework designed to protect against common database vulnerabilities while maintaining operational flexibility. Built on defense-in-depth principles, it provides SSL/TLS encryption, a check of the TLS mode and the timeout options, credential protection, and security monitoring for enterprise-grade deployments.
 
 **Security Features:**
 - **Default SSL Enforcement**: Preferred SSL mode with certificate validation support
-- **Input Validation**: Multi-layer protection against SQL injection and XSS attacks
+- **DSN Reading**: The DSN is read as the driver reads it; its content and the session settings in it are not filtered
 - **Credential Protection**: Comprehensive credential sanitization in logs and error messages
 - **Connection Security**: Timeout enforcement and resource protection
 
@@ -18,9 +18,9 @@ The MySQL database provider implements a comprehensive security framework design
 ┌─────────────────────────────────────────────────────────────┐
 │                    Application Layer                        │
 ├─────────────────────────────────────────────────────────────┤
-│                  Input Validation Layer                    │
-│  • DSN Format Validation     • SQL Injection Prevention   │
-│  • XSS Pattern Detection     • Command Injection Prevention│
+│                      DSN Reading Layer                     │
+│  • DSN Format (driver parse) • Checked Timeout Options    │
+│  • Defaults From Keys        • No Content Filter          │
 ├─────────────────────────────────────────────────────────────┤
 │                   Transport Security Layer                 │
 │  • SSL/TLS Encryption        • Certificate Validation     │
@@ -38,7 +38,7 @@ The MySQL database provider implements a comprehensive security framework design
 
 ### Zero-Trust Principles
 
-1. **Never Trust Input**: All user input is validated and sanitized
+1. **Read Input As The Driver Does**: The DSN is operator input; the provider adds its defaults from the keys of the DSN, reads the timeout options as durations and escapes the other options it adds
 2. **Always Encrypt**: Default SSL enforcement for all connections
 3. **Minimize Attack Surface**: Limited connection exposure and resource usage
 4. **Continuous Monitoring**: Real-time security event monitoring
@@ -133,69 +133,33 @@ provider to register a TLS config with the driver, which it does not do.
    - Install a private CA in the image's system trust store
    - Use a separate CA or certificate for each environment
 
-## Input Validation and Injection Prevention
+## What the Provider Reads in a DSN
 
-### DSN Security Validation
+The provider does not read a DSN or an option for content, and it does not filter
+session settings or option values. The DSN comes from the operator's configuration
+only.
 
-```go
-func (m *MySQLProvider) validateDSNInput(dsn string) error {
-    dangerousPatterns := []string{
-        // SQL Injection Patterns
-        "DROP TABLE", "DROP DATABASE", "DELETE FROM", "INSERT INTO",
-        "UPDATE SET", "CREATE TABLE", "ALTER TABLE", "TRUNCATE",
-        "UNION SELECT", "INFORMATION_SCHEMA",
-        
-        // SQL Comments and Operators
-        "--", "/*", "*/", ";", 
-        
-        // Command Execution
-        "EXEC", "EXECUTE", "sp_", "xp_",
-        
-        // XSS Patterns
-        "<script", "javascript:", "onload=", "onerror=",
-    }
-
-    upperDSN := strings.ToUpper(dsn)
-    for _, pattern := range dangerousPatterns {
-        if strings.Contains(upperDSN, strings.ToUpper(pattern)) {
-            return fmt.Errorf("potentially dangerous DSN content detected: contains pattern similar to %s", pattern)
-        }
-    }
-    return nil
-}
-```
-
-### Attack Vector Protection
-
-#### 1. SQL Injection Prevention
-```go
-// Example dangerous DSN that would be rejected:
-badDSN := "user:pass@tcp(localhost:3306)/test'; DROP TABLE users; --"
-
-// Validation result:
-err := provider.validateDSNInput(badDSN)
-// Returns: "potentially dangerous DSN content detected: contains pattern similar to DROP TABLE"
-```
-
-#### 2. XSS Prevention
-```go
-// Example XSS attempt that would be rejected:
-xssDSN := "user:pass@tcp(localhost:3306)/db<script>alert('xss')</script>"
-
-// Validation result:  
-err := provider.validateDSNInput(xssDSN)
-// Returns: "potentially dangerous DSN content detected: contains pattern similar to <script"
-```
-
-#### 3. Command Injection Prevention
-```go
-// Example command injection that would be rejected:
-cmdDSN := "user:pass@tcp(localhost:3306)/db; EXEC xp_cmdshell 'dir'"
-
-// Validation result:
-err := provider.validateDSNInput(cmdDSN)
-// Returns: "potentially dangerous DSN content detected: contains pattern similar to EXEC"
-```
+- The DSN is read as the driver reads it. A word in the user, the password, the
+  host or the database name is part of that value; a parameter is what the driver
+  finds in the parameter section after the last `/` and the first `?`.
+- The provider adds the defaults the DSN does not give (`tls`, `timeout`,
+  `readTimeout`, `writeTimeout`, `charset`) and the options that name a setting
+  (`collation`, `loc`, `maxAllowedPacket`). A default counts as given when the
+  parameter section holds its key, never when a word of the whole text matches.
+- The `timeout`, `readTimeout` and `writeTimeout` options are read as durations with
+  `time.ParseDuration`, the function the driver uses, and any other value is refused
+  with a message that names the option and not its value. Every duration the driver
+  reads (`+5s`, `1.5s`, `1µs`) still works. The other options (`charset`,
+  `collation`, `loc`, `maxAllowedPacket`) are escaped, so each stays one value; a
+  `charset` option may list several names separated by a comma, and each name is
+  escaped.
+- The driver parses the DSN once, in `Connect`. A DSN it refuses reports a fixed
+  message and none of the DSN text.
+- Session settings and option values are not checked. They reach the server as the
+  driver sends them, so a setting the server does not know stops the first
+  connection with `database connection failed: the server rejected the connection
+  (MySQL error 1193, unknown system variable)`. A wrong value for a known setting
+  shows the server's error number alone.
 
 ## Credential Protection
 
@@ -239,32 +203,10 @@ password placed in the DSN is absent from the returned error and the captured lo
 
 Security-focused timeout configuration prevents resource exhaustion and hanging connections:
 
-```go
-func (m *MySQLProvider) buildDSN(baseDSN string, options map[string]string) (string, error) {
-    // Default security timeouts
-    if !strings.Contains(dsn, "timeout=") {
-        timeout := "10s" // 10 seconds default - prevents hanging
-        if t, ok := options["timeout"]; ok {
-            timeout = t
-        }
-        dsn += "&timeout=" + timeout
-    }
-    
-    // Read timeout for security
-    if !strings.Contains(dsn, "readTimeout=") {
-        readTimeout := "30s" // 30 seconds default
-        dsn += "&readTimeout=" + readTimeout
-    }
-    
-    // Write timeout for security
-    if !strings.Contains(dsn, "writeTimeout=") {
-        writeTimeout := "30s" // 30 seconds default
-        dsn += "&writeTimeout=" + writeTimeout
-    }
-    
-    return dsn, nil
-}
-```
+`buildDSN` adds a default for each of `timeout` (10s), `readTimeout` (30s) and
+`writeTimeout` (30s) when the parameter section of the DSN does not give that key. An
+option of the same name replaces the default; the option must be a duration, and any
+other value is refused with a message that names the option. An explicit value in the DSN, including `readTimeout=0`, is kept as written.
 
 ### Connection Pool Security
 
@@ -348,7 +290,7 @@ m.logger.WithFields(map[string]any{
 
 ### Comprehensive Security Test Suite
 
-The MySQL provider includes 65+ security-focused tests covering all attack vectors:
+The MySQL provider includes 65+ security-focused tests covering:
 
 #### 1. SSL/TLS Validation Tests
 ```go
@@ -381,17 +323,10 @@ func TestMySQLSecurityCredentialProtection(t *testing.T) {
 }
 ```
 
-#### 4. Injection Prevention Tests
-```go
-func TestMySQLSecurityDSNInjection(t *testing.T) {
-    maliciousDSNs := []string{
-        "user:pass@tcp(localhost:3306)/test'; DROP TABLE users; --",
-        "user'; DELETE FROM sensitive_data; --:pass@tcp(localhost:3306)/db",
-        "user:pass@tcp(localhost:3306)/db<script>alert('xss')</script>",
-        // ... more injection attempts
-    }
-}
-```
+#### 4. DSN Reading Tests
+`TestMySQLBuildDSN_*` read what `buildDSN` returns the way the driver does: a word that
+looks like SQL in a user or database name is part of that value, an option value
+holding `&` adds no parameter, and a default is decided from the keys of the DSN.
 
 ### Security Test Execution
 
@@ -483,7 +418,7 @@ if !status.Healthy {
 1. **Connection Failures**: Check certificate validity and network connectivity
 2. **Authentication Errors**: Verify credentials and certificate configuration
 3. **SSL/TLS Errors**: Validate certificate chain and TLS configuration
-4. **Injection Attempts**: Review DSN validation and input sanitization
+4. **Unknown Session Setting**: A setting the server does not know stops the first connection with MySQL error 1193; remove or correct it in the DSN
 5. **Performance Issues**: Check connection pool settings and query patterns
 
 ## Compliance and Standards
@@ -492,7 +427,7 @@ if !status.Healthy {
 
 The MySQL provider addresses OWASP Top 10 database security risks:
 
-1. **A03:2021 - Injection**: Comprehensive DSN validation and parameterized queries
+1. **A03:2021 - Injection**: Parameterized queries; the DSN is operator input and is not filtered by content
 2. **A02:2021 - Cryptographic Failures**: Default SSL enforcement and certificate validation
 3. **A05:2021 - Security Misconfiguration**: Secure defaults and validation
 4. **A09:2021 - Security Logging**: Structured logging without credential exposure
@@ -502,7 +437,7 @@ The MySQL provider addresses OWASP Top 10 database security risks:
 
 **Implemented Security Standards:**
 - SSL/TLS encryption with certificate validation
-- Input validation and sanitization
+- A check of the TLS mode and the timeout options; the DSN is read with the driver's own parse
 - Secure error handling and logging
 - Resource limit enforcement
 - Connection timeout protection

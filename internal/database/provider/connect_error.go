@@ -101,6 +101,8 @@ var mysqlErrors = map[uint16]string{
 	1045: "access denied",
 	1049: "unknown database",
 	1040: "too many connections",
+	// A session setting in the DSN that the server does not know.
+	1193: "unknown system variable",
 	// The ones a statement meets.
 	1146: "table does not exist",
 	1054: "unknown column",

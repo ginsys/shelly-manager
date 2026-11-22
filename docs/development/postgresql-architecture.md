@@ -340,7 +340,7 @@ func (p *PostgreSQLProvider) validateSSLConfig(options map[string]string) error 
 ### Connection Security
 
 **Timeout Protection**: Default connection timeouts prevent resource exhaustion attacks
-**Parameter Validation**: All DSN parameters are validated to prevent injection attacks
+**DSN Reading**: The DSN is read as a URL, its structure is checked, and a parameter value is not checked: it reaches the server as the driver sends it
 **Thread Safety**: All operations are thread-safe with proper locking mechanisms
 
 This architectural foundation provides a robust, secure, and performant PostgreSQL integration for the Shelly Manager system, with full compatibility with existing code and deployment patterns.

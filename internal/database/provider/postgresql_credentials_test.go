@@ -15,8 +15,7 @@ import (
 )
 
 // trickyPassword holds every character that breaks a DSN pasted together by
-// hand: userinfo delimiters, a percent sign, and the two sequences
-// validateDSNInput refuses.
+// hand: userinfo delimiters, a percent sign, a semicolon and two dashes.
 const trickyPassword = "p@ss:w/rd%41;--x=y s3cret"
 
 // passwordForms lists every spelling of a password that must never reach an
