@@ -1,6 +1,7 @@
 package configuration
 
 import (
+	"fmt"
 	"math"
 	"reflect"
 	"sort"
@@ -137,6 +138,10 @@ func gen2ChannelsFromDoc(doc map[string]interface{}) (*RelayConfig, *InputConfig
 		if recover, ok := raw["autorecover_voltage_errors"].(bool); ok {
 			relay.AutorecoverVoltageErrors = BoolPtr(recover)
 		}
+		if reverse, ok := raw["reverse"].(bool); ok {
+			relay.Reverse = BoolPtr(reverse)
+		}
+		relay.InputID = gen2WholeFromDoc(raw, "input_id")
 		if mode, ok := raw["in_mode"].(string); ok {
 			// A model with a selectable input (input_id) runs the mode on the input it names.
 			target := id
@@ -284,6 +289,7 @@ func gen2ChannelsToDoc(config *DeviceConfiguration, doc map[string]interface{}) 
 				"power_limit": relay.MaxPower, "voltage_limit": relay.VoltageLimit,
 				"undervoltage_limit": relay.UndervoltageLimit, "current_limit": relay.CurrentLimit,
 				"in_locked": relay.InLocked, "autorecover_voltage_errors": relay.AutorecoverVoltageErrors,
+				"reverse": relay.Reverse, "input_id": relay.InputID,
 			} {
 				if v := reflect.ValueOf(value); !v.IsNil() {
 					body[key] = v.Elem().Interface()
@@ -318,11 +324,12 @@ var gen2ChannelFields = map[string]bool{
 	"type": true, "mode": true, "inverted": true, "enable": true, "factory_reset": true,
 	"max_power": true, "voltage_limit": true, "undervoltage_limit": true, "current_limit": true,
 	"in_locked": true, "autorecover_voltage_errors": true, "power_restore_delay": true,
+	"reverse": true, "input_id": true,
 }
 
 // unmappedLimits names, and clears in r, each limit that no Gen2 value can carry: a negative one, a
-// restore delay outside 0 to 600, and an undervoltage limit above the voltage limit when both are
-// desired. A voltage limit below the undervoltage limit the device holds is the device's to refuse.
+// restore delay outside 0 to 600, an input_id other than 0 or 1, and an undervoltage limit above the
+// voltage limit when both are desired. A voltage limit below the undervoltage limit the device holds is the device's to refuse.
 func unmappedLimits(r *SingleRelayConfig, prefix string) []string {
 	var paths []string
 	drop := func(name string, refused bool, clear func()) {
@@ -335,6 +342,7 @@ func unmappedLimits(r *SingleRelayConfig, prefix string) []string {
 	drop("voltage_limit", r.VoltageLimit != nil && *r.VoltageLimit < 0, func() { r.VoltageLimit = nil })
 	drop("undervoltage_limit", r.UndervoltageLimit != nil && *r.UndervoltageLimit < 0, func() { r.UndervoltageLimit = nil })
 	drop("current_limit", r.CurrentLimit != nil && *r.CurrentLimit < 0, func() { r.CurrentLimit = nil })
+	drop("input_id", r.InputID != nil && (*r.InputID < 0 || *r.InputID > 1), func() { r.InputID = nil })
 	drop("power_restore_delay", r.PowerRestoreDelay != nil && (*r.PowerRestoreDelay < 0 || *r.PowerRestoreDelay > gen2MaxRestoreDelay),
 		func() { r.PowerRestoreDelay = nil })
 	if r.UndervoltageLimit != nil && r.VoltageLimit != nil && *r.UndervoltageLimit > *r.VoltageLimit {
@@ -373,6 +381,8 @@ func unreportedChannelKeys(doc map[string]interface{}, config *DeviceConfigurati
 				{r.CurrentLimit != nil, "current_limit", "current_limit"},
 				{r.InLocked != nil, "in_locked", "in_locked"},
 				{r.AutorecoverVoltageErrors != nil, "autorecover_voltage_errors", "autorecover_voltage_errors"},
+				{r.Reverse != nil, "reverse", "reverse"},
+				{r.InputID != nil, "input_id", "input_id"},
 				{delay != nil, "power_restore_delay", "power_restore_delay_enable"},
 				{delay != nil && *delay > 0, "power_restore_delay", "power_restore_delay"},
 			})
@@ -387,6 +397,56 @@ func unreportedChannelKeys(doc map[string]interface{}, config *DeviceConfigurati
 		}
 	}
 	return missing
+}
+
+// refuseInputIDWithMode refuses a configuration that sets an input_id and an input mode together,
+// before the device is read. The mode of input N is written to switch N, and refuseRemappedInputs
+// checks the live input_id, so a new input_id in the same apply would put the mode on the wrong input.
+func refuseInputIDWithMode(config *DeviceConfiguration) error {
+	if config.Relay == nil || config.Input == nil {
+		return nil
+	}
+	var ids, modes []string
+	for i, r := range config.Relay.Relays {
+		if r.InputID != nil {
+			ids = append(ids, "relay.relays."+strconv.Itoa(i)+".input_id")
+		}
+	}
+	for i, in := range config.Input.Inputs {
+		if in.Mode == nil {
+			continue
+		}
+		if _, ok := gen2InModes[*in.Mode]; ok {
+			modes = append(modes, "input.inputs."+strconv.Itoa(i)+".mode")
+		}
+	}
+	if len(ids) == 0 || len(modes) == 0 {
+		return nil
+	}
+	return &refusedBeforeWriteError{fmt.Errorf("%w: %s: an input_id and an input mode change which input a switch runs, so apply them one at a time",
+		ErrUnsupportedSettings, strings.Join(append(ids, modes...), ", "))}
+}
+
+// reversedSwitches names the switches whose write changes reverse, with the reason the restart is owed.
+// The page says the option requires a restart, so the answer need not say so. A live value that is not
+// read counts as a change. The live section carries the key: unreportedChannelKeys refuses the write
+// otherwise.
+func reversedSwitches(doc map[string]interface{}, config *DeviceConfiguration) map[string]string {
+	owed := map[string]string{}
+	if config.Relay == nil {
+		return owed
+	}
+	for _, r := range config.Relay.Relays {
+		if r.Reverse == nil {
+			continue
+		}
+		key := "switch:" + strconv.Itoa(r.ID)
+		live, _ := doc[key].(map[string]interface{})
+		if current, known := live["reverse"].(bool); !known || current != *r.Reverse {
+			owed[key] = "a changed reverse needs a restart"
+		}
+	}
+	return owed
 }
 
 // unkeyedFields names, and clears in v, every field of the struct that v points to which is set and

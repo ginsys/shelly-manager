@@ -1265,6 +1265,18 @@ func getRelaySchema() map[string]interface{} {
 							"minimum":     0,
 							"maximum":     gen2MaxRestoreDelay,
 						},
+						"reverse": map[string]interface{}{
+							"type":        "boolean",
+							"title":       "Reverse Measurement",
+							"description": "Reverse the measured direction of power and energy; needs a restart. Only on a Gen2 switch that reports it",
+						},
+						"input_id": map[string]interface{}{
+							"type":        "integer",
+							"title":       "Input",
+							"description": "Input that the switch runs on, 0 or 1. Only on a Gen2 switch that reports it; set it apart from an input mode",
+							"minimum":     0,
+							"maximum":     1,
+						},
 					},
 				},
 			},
