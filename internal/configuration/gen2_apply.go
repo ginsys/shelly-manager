@@ -35,7 +35,7 @@ var gen2Sections = []struct {
 }
 
 // gen2ApplyKeys are the fixed top-level keys of a Gen2 config document that apply writes. The
-// channel sections switch:N and input:N are written too (gen2KeyApplies), and wifi is written last.
+// channel sections switch:N, input:N and light:N are written too (gen2KeyApplies), and wifi is last.
 // cover:0 is the one cover the stored roller maps to (gen2_cover.go); eth and ble are the Pro
 // models' components (gen2_eth_ble.go).
 var gen2ApplyKeys = map[string]bool{"sys": true, "mqtt": true, "cloud": true, "wifi": true, gen2CoverKey: true, gen2EthKey: true, gen2BLEKey: true}
@@ -49,7 +49,7 @@ type gen2Write struct {
 }
 
 // gen2WritesOf lists the calls an apply makes, in order: the fixed sections, then each input, then
-// each switch, by id, then the cover, then the Wi-Fi access point, roaming and station. An input
+// each switch, then each light, by id, then the cover, then the Wi-Fi access point, roaming and station. An input
 // comes before the switch it drives, because the type of the input must be set before the in_mode
 // of the switch (follow and flip need an input that has a state). A device in cover profile has no
 // switch, so the cover has no order to keep against one. The station comes last: the device

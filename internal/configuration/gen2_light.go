@@ -81,7 +81,7 @@ func gen2LightToDoc(config *DeviceConfiguration, doc map[string]interface{}) {
 	}
 }
 
-// gen2LightsFromDoc leaves a null, a fraction or an unknown word unset, so it is never matched by a guess.
+// gen2LightsFromDoc leaves a null or a fractional whole-number field unset and keeps an initial_state word as it is, so an unknown one reads as a difference.
 func gen2LightsFromDoc(doc map[string]interface{}) *LightConfig {
 	var lights []SingleLightConfig
 	for _, id := range gen2ChannelIDs(doc, "light") {
