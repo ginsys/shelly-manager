@@ -238,7 +238,10 @@ not refused: the loader calls a plain `viper.Unmarshal`, `internal/config/config
 binary test starts with removed keys still set, `cmd/shelly-manager/main_test.go:237`; so a rename is
 silent). Anything else is the next `alpha.N`. The tag is then the source for everything built:
 `-ldflags -X` sets the version in both binaries, `/api/v1/version` reports it beside `git_sha`, the
-image labels and tags use it, and the UI build receives it with `GIT_SHA`.
+image labels and tags use it. (Revision 2 correction: the manager image carries the web UI, built in
+its own stage (ginsys/shelly-manager#901), and that build does not receive the version;
+`cmd/shelly-manager/main.go:420-423` serves `./ui/dist` only if it exists at run time. Before that
+change neither Dockerfile built or copied it.)
 
 **Changelog: the fragments, assembled by the release; no `git-cliff`.** `scripts/changelog-assemble.sh
 --write` already turns the 149 curated fragments into the section, heads it `## [X.Y.Z-alpha.N] -
@@ -354,7 +357,9 @@ Each slice is one pull request with its own tests; none is a release.
    A root `VERSION` file holding `v0.6.0-alpha.1`. Tests pin the output, with `dev` when unset, and
    that the file parses.
 2. **Callable image build.** `docker-build.yml` gains a version input; both Dockerfiles declare
-   `ARG VERSION` and pass it in `-ldflags`; the UI build receives it. Default behaviour is unchanged.
+   `ARG VERSION` and pass it in `-ldflags`. Default behaviour is unchanged. (Built as slice 2: the input
+   is on `workflow_call` only, so no manual dispatch can push a release-tagged image; the UI build in the
+   manager image (ginsys/shelly-manager#901) does not receive the version.)
 3. **The release script and workflow.** `scripts/release/release.sh` copied from go-kure/.github and
    trimmed as section 5 says, with tests against real git repositories, and `release.yml`: guard, the
    `Test` wait, dry run, the atomic push. It needs point 1 of section 6 first, and its first trial

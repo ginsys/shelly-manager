@@ -15,10 +15,12 @@ COPY . .
 # Build the provisioner application with optimization and static linking
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
+# The release version stamped into the binary; the release build passes it, any other build reads "dev".
+ARG VERSION=dev
 RUN echo "Building for $TARGETPLATFORM on $BUILDPLATFORM"
 RUN CGO_ENABLED=0 go build \
     -a -installsuffix cgo \
-    -ldflags '-s -w' \
+    -ldflags "-s -w -X github.com/ginsys/shelly-manager/internal/version.Version=${VERSION}" \
     -o shelly-provisioner ./cmd/shelly-provisioner
 
 # Final stage

@@ -6,6 +6,18 @@ on:
     types: [completed]
     branches: [main]
   workflow_dispatch:  # Allow manual triggering
+  # The release workflow calls this build from a tag. A non-empty `version` (vX.Y.Z or
+  # vX.Y.Z-alpha|beta|rc.N) builds even when no Docker file changed, adds it as an image
+  # tag beside the date-sha tag, and stamps it into both binaries. A release never moves
+  # latest: that tag stays the newest main image. With no version the build is exactly the one
+  # the two triggers above make. The caller must grant contents: read and packages: write.
+  workflow_call:
+    inputs:
+      version:
+        description: 'Release version to tag and stamp; empty for an ordinary build'
+        required: false
+        type: string
+        default: ''
 
 # Security: Explicitly declare minimum required permissions
 # CodeQL: actions/missing-workflow-permissions - fixed
@@ -22,7 +34,7 @@ jobs:
     name: Check relevant file changes
     runs-on: ubuntu-latest
     outputs:
-      build_needed: ${{ steps.filter.outputs.docker_relevant }}
+      build_needed: ${{ inputs.version != '' && 'true' || steps.filter.outputs.docker_relevant }}
     steps:
       - name: Checkout repository at triggering ref
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -33,6 +45,8 @@ jobs:
 
       - name: Detect changes relevant to Docker images
         id: filter
+        # A release version always builds: a tag has no change set to compare.
+        if: ${{ inputs.version == '' }}
         uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -61,6 +75,7 @@ jobs:
                 - 'LICENSE'
 
       - name: Summarize change detection
+        if: ${{ inputs.version == '' }}
         run: |
           if [ "${{ steps.filter.outputs.docker_relevant }}" = "true" ]; then
             echo "## Docker build eligibility ✅" >> $GITHUB_STEP_SUMMARY
@@ -74,13 +89,27 @@ jobs:
     name: Build and Push Container Images
     runs-on: ubuntu-latest
     needs: [filter-changes]
-    # Run only if tests passed (workflow_run) and relevant changes detected; allow manual trigger + relevant changes
-    if: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch') && needs.filter-changes.outputs.build_needed == 'true' }}
+    # Run only if tests passed (workflow_run) and relevant changes detected; allow manual trigger + relevant changes;
+    # a call with a release version (event name of the caller, so not tested here) always builds
+    if: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' || inputs.version != '') && needs.filter-changes.outputs.build_needed == 'true' }}
     permissions:
       contents: read
       packages: write
-      
+
     steps:
+      - name: Check the release version
+        if: ${{ inputs.version != '' }}
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          # The value becomes an image tag and a -ldflags string: the form release.sh accepts, nothing else.
+          # bash matches the whole value, so a second line cannot ride behind a valid first one (grep tests per line).
+          re='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(alpha|beta|rc)\.(0|[1-9][0-9]*))?$'
+          if [[ ! $RELEASE_VERSION =~ $re ]]; then
+            echo "::error::version must be vX.Y.Z or vX.Y.Z-alpha|beta|rc.N, got '$RELEASE_VERSION'"
+            exit 1
+          fi
+
       - name: Display workflow trigger info
         run: |
           echo "## Docker Build Triggered 🚀" >> $GITHUB_STEP_SUMMARY
@@ -146,11 +175,12 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/shelly-manager
           tags: |
             type=raw,value=${{ steps.version.outputs.version }}
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ inputs.version == '' }}
+            ${{ inputs.version != '' && format('type=raw,value={0}', inputs.version) || '' }}
           labels: |
             org.opencontainers.image.title=Shelly Manager
             org.opencontainers.image.description=Smart home device manager for Shelly devices
-            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.version=${{ inputs.version || steps.version.outputs.version }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.created=${{ steps.version.outputs.date }}
             
@@ -161,11 +191,12 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/shelly-provisioner
           tags: |
             type=raw,value=${{ steps.version.outputs.version }}
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ inputs.version == '' }}
+            ${{ inputs.version != '' && format('type=raw,value={0}', inputs.version) || '' }}
           labels: |
             org.opencontainers.image.title=Shelly Provisioner
             org.opencontainers.image.description=WiFi provisioning agent for Shelly smart home devices
-            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.version=${{ inputs.version || steps.version.outputs.version }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.created=${{ steps.version.outputs.date }}
             
@@ -181,7 +212,7 @@ jobs:
           no-cache: true
           build-args: |
             BUILDTIME=${{ steps.version.outputs.date }}
-            VERSION=${{ steps.version.outputs.version }}
+            ${{ inputs.version != '' && format('VERSION={0}', inputs.version) || '' }}
             REVISION=${{ github.sha }}
             CGO_ENABLED=0
             GOOS=linux
@@ -198,15 +229,21 @@ jobs:
           no-cache: true
           build-args: |
             BUILDTIME=${{ steps.version.outputs.date }}
-            VERSION=${{ steps.version.outputs.version }}
+            ${{ inputs.version != '' && format('VERSION={0}', inputs.version) || '' }}
             REVISION=${{ github.sha }}
             CGO_ENABLED=0
             GOOS=linux
             
       - name: Output image information
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
         run: |
           echo "## Container Images Built and Pushed 🚀" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -n "$RELEASE_VERSION" ]; then
+            echo "- **Release Version**: \`${RELEASE_VERSION}\` (tagged on both images, stamped in both binaries)" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "### Version Information" >> $GITHUB_STEP_SUMMARY
           echo "- **Version Tag**: \`${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Build Date**: \`${{ steps.version.outputs.date }}\`" >> $GITHUB_STEP_SUMMARY
@@ -216,13 +253,13 @@ jobs:
           echo "#### Shelly Manager" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/shelly-manager:${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/shelly-manager:latest" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/shelly-manager:${RELEASE_VERSION:-latest}" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "#### Shelly Provisioner" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/shelly-provisioner:${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/shelly-provisioner:latest" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/shelly-provisioner:${RELEASE_VERSION:-latest}" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Usage" >> $GITHUB_STEP_SUMMARY
