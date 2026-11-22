@@ -2063,7 +2063,10 @@ paths:
         RGBW2 (SHRGBW2) lights written to /settings/color/0 in color mode or /settings/white/<n> in
         white mode (name, effect of 0 to 4 in color mode, transition of 0 to 5000 ms, default_state,
         auto_on, auto_off, schedule, schedule_rules, and btn_type and btn_reverse on channel 0 only; the
-        device mode is written first; not confirmed on hardware), for a model with roller mode
+        device mode is written first; not confirmed on hardware), for a Bulb (SHBLB-1) a light written
+        to /settings/light/0 (default_state, auto_on, auto_off, effect of 0 to 6, schedule and
+        schedule_rules; the mode, white or color, is written first; not confirmed on hardware), for a
+        model with roller mode
         (SHSW-25) rollers (max_open_time and max_close_time in seconds, motor_direction, swap_inputs and
         input_mode, each read back), and input button types (mode as btn_type and inverted as
         btn_reverse per input; the parameter names, the toggle and edge mapping and the i3 mode set

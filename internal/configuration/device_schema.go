@@ -150,6 +150,19 @@ func lightSchemaOf(schema map[string]interface{}, deviceType string, supported b
 	for _, key := range gen2LightOnlyKeys {
 		delete(items, key)
 	}
+	if isGen1Bulb(deviceType) {
+		// The Bulb's page: six keys, effect 0 to 6, the three default states; none of the button keys.
+		for _, key := range []string{"name", "transition", "btn_reverse", "btn_type", "btn_debounce", "swap_inputs"} {
+			delete(items, key)
+		}
+		if state, ok := items["default_state"].(map[string]interface{}); ok {
+			state["enum"] = gen1RGBW2States
+		}
+		if effect, ok := items["effect"].(map[string]interface{}); ok {
+			effect["description"] = "0 off, 1 meteor shower, 2 gradual change, 3 flash, 4 breath, 5 on/off gradual, 6 red/green change (Bulb)"
+		}
+		return schema
+	}
 	if !hasColorWhiteChannels(deviceType) {
 		for _, key := range []string{"name", "effect", "transition", "btn_reverse"} {
 			delete(items, key)
@@ -161,6 +174,10 @@ func lightSchemaOf(schema map[string]interface{}, deviceType string, supported b
 	}
 	delete(items, "btn_debounce")
 	delete(items, "swap_inputs")
+	if effect, ok := items["effect"].(map[string]interface{}); ok {
+		effect["maximum"] = gen1RGBW2MaxEffect
+		effect["description"] = "Color mode only: 0 off, 1 meteor shower, 2 gradual change, 3 flash, 4 red/green change (RGBW2)"
+	}
 	if state, ok := items["default_state"].(map[string]interface{}); ok {
 		state["enum"] = gen1RGBW2States
 	}
@@ -223,6 +240,8 @@ func gen1DeviceModes(deviceType string) []string {
 		return []string{"relay", "roller"}
 	case "SHRGBW2":
 		return []string{"color", "white"}
+	case "SHBLB-1":
+		return []string{"white", "color"}
 	}
 	return nil
 }

@@ -1289,7 +1289,8 @@ func lightStateWords() []string {
 // device reads one back: the page gives auto_on and auto_off no range, and no maximum number of
 // schedule rules (the relay's gen1MaxScheduleRules is used). Its parameter table spells one button
 // word "toglle" where its attribute table says "toggle"; "toggle" is the word, and the word a Dimmer
-// reads back is unconfirmed. name, effect, transition and btn_reverse are the RGBW2's (lightSchemaOf).
+// reads back is unconfirmed. name, transition and btn_reverse are the RGBW2's, and effect is the RGBW2's and the Bulb's
+// (lightSchemaOf).
 func getLightSchema() map[string]interface{} {
 	return map[string]interface{}{
 		"type":                "object",
@@ -1317,9 +1318,9 @@ func getLightSchema() map[string]interface{} {
 						"effect": map[string]interface{}{
 							"type":        "integer",
 							"title":       "Effect",
-							"description": "Color mode only: 0 off, 1 meteor shower, 2 gradual change, 3 flash, 4 red/green change (RGBW2)",
+							"description": "RGBW2 (color mode only): 0 to 4; Bulb: 0 to 6 (lightSchemaOf narrows it per model)",
 							"minimum":     0,
-							"maximum":     gen1RGBW2MaxEffect,
+							"maximum":     gen1BulbMaxEffect,
 						},
 						"transition": map[string]interface{}{
 							"type":        "integer",

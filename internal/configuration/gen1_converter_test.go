@@ -440,7 +440,7 @@ func TestGen1Converter_SupportedDeviceTypes(t *testing.T) {
 	converter := NewGen1Converter(nil)
 	types := converter.SupportedDeviceTypes()
 
-	expectedTypes := []string{"SHPLG-S", "SHPLG-1", "SHSW-1", "SHSW-PM", "SHSW-25", "SHIX3-1", "SHDM-1", "SHDM-2", "SHRGBW2"}
+	expectedTypes := []string{"SHPLG-S", "SHPLG-1", "SHSW-1", "SHSW-PM", "SHSW-25", "SHIX3-1", "SHDM-1", "SHDM-2", "SHRGBW2", "SHBLB-1"}
 	if len(types) != len(expectedTypes) {
 		t.Errorf("Expected %d device types, got %d", len(expectedTypes), len(types))
 	}

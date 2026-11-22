@@ -169,6 +169,7 @@ func (c *Gen1Converter) SupportedDeviceTypes() []string {
 		"SHDM-1",  // Shelly Dimmer
 		"SHDM-2",  // Shelly Dimmer 2 (read as the same channel as SHDM-1; unverified)
 		"SHRGBW2", // Shelly RGBW2 (color mode: one channel, white mode: four)
+		"SHBLB-1", // Shelly Bulb (one light channel; mode white or color)
 	}
 }
 
@@ -383,8 +384,7 @@ func (c *Gen1Converter) convertSystem(gen1 map[string]interface{}, config *Devic
 		device.Discoverable = BoolPtr(discoverable)
 	}
 
-	// Only a model that has the switch reports a mode worth keeping: another model's "mode" (an
-	// RGBW2 or Bulb colour mode) is a different setting that a later slice maps on its own.
+	// Only a model that has the switch reports a mode worth keeping (gen1DeviceModes lists them).
 	if mode, ok := gen1["mode"].(string); ok && slices.Contains(gen1DeviceModes(deviceType), mode) {
 		device.Mode = StringPtr(mode)
 	}
@@ -515,12 +515,14 @@ func (c *Gen1Converter) convertLight(gen1 map[string]interface{}, config *Device
 	light := &LightConfig{Lights: make([]SingleLightConfig, 0, len(lights))}
 	for i, lightMap := range lights {
 		single := SingleLightConfig{ID: i}
+		if hasLightEffect(deviceType) {
+			if effect, ok := shelly.WholeNumber(lightMap["effect"]); ok {
+				single.Effect = IntPtr(effect)
+			}
+		}
 		if hasColorWhiteChannels(deviceType) {
 			if name, ok := lightMap["name"].(string); ok {
 				single.Name = StringPtr(name)
-			}
-			if effect, ok := shelly.WholeNumber(lightMap["effect"]); ok {
-				single.Effect = IntPtr(effect)
 			}
 			if transition, ok := shelly.WholeNumber(lightMap["transition"]); ok {
 				single.Transition = IntPtr(transition)
@@ -1409,9 +1411,10 @@ func (c *Gen1Converter) hasRelay(deviceType string) bool {
 	case "SHIX3-1":
 		// Input-only device, no relays
 		return false
-	case "SHDM-1", "SHDM-2", "SHRGBW2":
-		// A Dimmer's channel is /settings/light/<n>, and its settings carry a lights array and no
-		// relays array. A relay sent to /settings/relay/<n> goes to a path the device does not have.
+	case "SHDM-1", "SHDM-2", "SHRGBW2", "SHBLB-1":
+		// A light model's channel is /settings/light/<n> (or color, white), and its settings carry a
+		// lights array and no relays array. A relay sent to /settings/relay/<n> goes to a path the
+		// device does not have.
 		return false
 	default:
 		return true
@@ -1436,11 +1439,23 @@ func (c *Gen1Converter) hasDimmerSettings(deviceType string) bool {
 	}
 }
 
-// hasLight reports whether a model's channels are lights: /settings/light/<n> for a Dimmer,
+// hasLightEffect reports whether a model's light has the effect parameter: the RGBW2 (color mode) and
+// the Bulb. A Dimmer's page has none.
+func hasLightEffect(deviceType string) bool {
+	return hasColorWhiteChannels(deviceType) || isGen1Bulb(deviceType)
+}
+
+// isGen1Bulb reports whether a model is the Shelly Bulb: one light channel, effect 0 to 6, the mode
+// white or color.
+func isGen1Bulb(deviceType string) bool {
+	return deviceType == "SHBLB-1"
+}
+
+// hasLight reports whether a model's channels are lights: /settings/light/<n> for a Dimmer or a Bulb,
 // /settings/color/0 or /settings/white/<n> for an RGBW2.
 func (c *Gen1Converter) hasLight(deviceType string) bool {
 	switch deviceType {
-	case "SHDM-1", "SHDM-2", "SHRGBW2":
+	case "SHDM-1", "SHDM-2", "SHRGBW2", "SHBLB-1":
 		return true
 	default:
 		return false
