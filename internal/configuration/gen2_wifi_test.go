@@ -252,6 +252,9 @@ func TestApplyDesiredConfig_Gen2RefusesWiFiSettingsItCannotWrite(t *testing.T) {
 		// The Gen2 access point has one secret, pass. The key field has no Gen2 meaning.
 		"access point key":       {&WiFiConfiguration{AccessPoint: &AccessPointConfig{Key: StringPtr("ap-pass-1234")}}, "wifi.ap.key"},
 		"access point key, ssid": {&WiFiConfiguration{AccessPoint: &AccessPointConfig{Key: StringPtr("ap-pass-1234"), SSID: StringPtr("lamp-ap")}}, "wifi.ap.key"},
+		// The roaming flag and the recovery reboot are Gen1 settings: Gen2 has only the threshold.
+		"roaming flag":    {&WiFiConfiguration{RoamEnable: BoolPtr(true)}, "wifi.roam_enable"},
+		"recovery reboot": {&WiFiConfiguration{RecoveryReboot: BoolPtr(true)}, "wifi.recovery_reboot"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {

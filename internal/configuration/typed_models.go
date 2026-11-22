@@ -40,14 +40,25 @@ type TypedConfiguration struct {
 
 // WiFiConfiguration represents WiFi settings
 type WiFiConfiguration struct {
-	Enable        *bool              `json:"enable,omitempty"`
-	SSID          *string            `json:"ssid,omitempty"`
-	Password      *string            `json:"password,omitempty"`
-	IPv4Mode      *string            `json:"ipv4mode,omitempty"`
-	StaticIP      *StaticIPConfig    `json:"static_ip,omitempty"`
-	AccessPoint   *AccessPointConfig `json:"ap,omitempty"`
-	RoamThreshold *int               `json:"roam_threshold,omitempty"`
+	Enable         *bool              `json:"enable,omitempty"`
+	SSID           *string            `json:"ssid,omitempty"`
+	Password       *string            `json:"password,omitempty"`
+	IPv4Mode       *string            `json:"ipv4mode,omitempty"`
+	StaticIP       *StaticIPConfig    `json:"static_ip,omitempty"`
+	AccessPoint    *AccessPointConfig `json:"ap,omitempty"`
+	RoamEnable     *bool              `json:"roam_enable,omitempty"`     // Gen1 only: ap_roaming_enabled
+	RoamThreshold  *int               `json:"roam_threshold,omitempty"`  // dBm
+	RecoveryReboot *bool              `json:"recovery_reboot,omitempty"` // Gen1 only: wifirecovery_reboot_enabled
 }
+
+// The roam threshold the manager accepts, in dBm. Gen2 documents it; the Gen1 reference gives no
+// range, so for Gen1 this is the manager's own bound, unconfirmed on hardware.
+const (
+	roamThresholdMin = -100
+	roamThresholdMax = -50
+)
+
+func validRoamThreshold(dBm int) bool { return dBm >= roamThresholdMin && dBm <= roamThresholdMax }
 
 // StaticIPConfig represents static IP configuration
 type StaticIPConfig struct {
@@ -299,8 +310,8 @@ func (w *WiFiConfiguration) Validate() error {
 		}
 	}
 
-	if w.RoamThreshold != nil && (*w.RoamThreshold < -100 || *w.RoamThreshold > -50) {
-		return fmt.Errorf("roam threshold must be between -100 and -50 dBm")
+	if w.RoamThreshold != nil && !validRoamThreshold(*w.RoamThreshold) {
+		return fmt.Errorf("roam threshold must be between %d and %d dBm", roamThresholdMin, roamThresholdMax)
 	}
 
 	return nil
@@ -782,8 +793,18 @@ func getWiFiSchema() map[string]interface{} {
 				"type":        "integer",
 				"title":       "Roaming Threshold",
 				"description": "Signal strength threshold for roaming (dBm)",
-				"minimum":     -100,
-				"maximum":     -50,
+				"minimum":     roamThresholdMin,
+				"maximum":     roamThresholdMax,
+			},
+			"roam_enable": map[string]interface{}{
+				"type":        "boolean",
+				"title":       "Roaming",
+				"description": "Enable or disable AP roaming (Gen1: ap_roaming_enabled)",
+			},
+			"recovery_reboot": map[string]interface{}{
+				"type":        "boolean",
+				"title":       "Wi-Fi Recovery Reboot",
+				"description": "Wi-Fi recovery reboot (Gen1: wifirecovery_reboot_enabled)",
 			},
 		},
 		"if": map[string]interface{}{

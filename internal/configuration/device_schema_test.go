@@ -152,6 +152,9 @@ func sampleValue(leaf map[string]interface{}) interface{} {
 		if minimum, ok := leaf["minimum"].(int); ok && minimum > 1 {
 			return minimum
 		}
+		if maximum, ok := leaf["maximum"].(int); ok && maximum < 1 {
+			return maximum // a range below zero, such as a signal threshold in dBm
+		}
 		return 1
 	case "number":
 		return 1.5

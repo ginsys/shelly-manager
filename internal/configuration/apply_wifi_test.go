@@ -435,7 +435,8 @@ func TestUnsupportedApplySettings_WiFiRules(t *testing.T) {
 		{"the access point ssid cannot be changed", &WiFiConfiguration{
 			AccessPoint: &AccessPointConfig{SSID: StringPtr("my-own-name")},
 		}, []string{"wifi.ap.ssid"}},
-		{"the roam threshold has no Gen1 setting", &WiFiConfiguration{RoamThreshold: IntPtr(-70)},
+		{"a roam threshold in range", &WiFiConfiguration{RoamThreshold: IntPtr(-70)}, nil},
+		{"a roam threshold out of range", &WiFiConfiguration{RoamThreshold: IntPtr(-40)},
 			[]string{"wifi.roam_threshold"}},
 		{"the access point key field has no Gen1 setting", &WiFiConfiguration{
 			AccessPoint: &AccessPointConfig{Key: StringPtr("other")},

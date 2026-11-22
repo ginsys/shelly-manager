@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/ginsys/shelly-manager/internal/shelly"
 )
@@ -112,7 +113,45 @@ func checkWiFiBeforeWrite(live json.RawMessage, haveLive bool, readErr error, ap
 	if err := wifiPrecheck(live, haveLive, readErr, apiConfig); err != nil {
 		return &refusedBeforeWriteError{err}
 	}
+	if err := unreportedWiFiKeys(live, haveLive, readErr, apiConfig); err != nil {
+		return &refusedBeforeWriteError{err}
+	}
 	return nil
+}
+
+// unreportedWiFiKeys refuses a roaming or recovery write for a key that the device's GET /settings
+// does not report. Such firmware predates the key (the reference adds both in v1.10.0), the
+// reference does not say what it does with the parameter, and the parameter rides the same POST as
+// the name and the location, so a refusal there would fail those too. Nothing is sent.
+func unreportedWiFiKeys(live json.RawMessage, haveLive bool, readErr error, apiConfig map[string]interface{}) error {
+	roaming, _ := apiConfig["ap_roaming"].(map[string]interface{})
+	_, recovery := apiConfig["wifirecovery_reboot_enabled"]
+	if len(roaming) == 0 && !recovery {
+		return nil
+	}
+	if !haveLive {
+		return fmt.Errorf("could not read the device's settings, nothing was written: %w", readErr)
+	}
+	var missing []string
+	reported := liveWiFiSection(live, "ap_roaming")
+	for _, key := range []string{"enabled", "threshold"} {
+		if _, wanted := roaming[key]; !wanted {
+			continue
+		}
+		if _, ok := reported[key]; !ok {
+			missing = append(missing, "ap_roaming."+key)
+		}
+	}
+	var doc map[string]json.RawMessage
+	_ = json.Unmarshal(live, &doc)
+	if _, ok := doc["wifirecovery_reboot_enabled"]; recovery && !ok {
+		missing = append(missing, "wifirecovery_reboot_enabled")
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	return fmt.Errorf("%w: %s: the device's firmware does not report it, so nothing was written",
+		ErrUnsupportedSettings, strings.Join(missing, ", "))
 }
 
 // refusedBeforeWriteError marks an apply that stopped before the first write. The device still
@@ -282,15 +321,16 @@ func failWiFi(result *ApplyResult, section string, form map[string]interface{}, 
 }
 
 // unsupportedWiFi returns the Wi-Fi paths of desired that apply cannot write. The access point
-// SSID cannot be changed on a Gen1 device, the roam threshold and a separate access point key
-// field have no Gen1 setting, and enabling the station disables the access point and the reverse,
-// so both cannot be desired on.
+// SSID cannot be changed on a Gen1 device, a separate access point key field has no Gen1 setting,
+// and enabling the station disables the access point and the reverse, so both cannot be desired
+// on. A roam threshold outside the stored range is refused too (the recovery flag of a model
+// without it is refused by the round trip).
 func unsupportedWiFi(wifi *WiFiConfiguration) []string {
 	if wifi == nil {
 		return nil
 	}
 	var unsupported []string
-	if wifi.RoamThreshold != nil {
+	if wifi.RoamThreshold != nil && !validRoamThreshold(*wifi.RoamThreshold) {
 		unsupported = append(unsupported, "wifi.roam_threshold")
 	}
 	if ap := wifi.AccessPoint; ap != nil {

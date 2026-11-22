@@ -64,6 +64,9 @@ var gen1ApplyKeys = map[string]bool{
 	"inputs":             true,
 	"wifi_sta":           true,
 	"wifi_ap":            true,
+
+	"ap_roaming":                  true, // flattened to ap_roaming_* on POST /settings (applyMainSettings)
+	"wifirecovery_reboot_enabled": true,
 }
 
 // gen1CoIoTMinPeriod and gen1CoIoTMaxPeriod bound the CoIoT update period, in seconds, that a
@@ -155,7 +158,9 @@ var gen1ApplicablePaths = map[string]bool{
 	// Wi-Fi: the station is written with POST /settings/sta and the access point with POST
 	// /settings/ap, and both are read back from GET /settings. wifi.password and wifi.ap.pass are
 	// write-only like mqtt.pass: the device never reports a key, so verify skips them. The access
-	// point SSID, the roam threshold and the access point key field are not applicable.
+	// point SSID and the access point key field are not applicable. Roaming and the recovery flag are
+	// written on POST /settings and read back from ap_roaming and wifirecovery_reboot_enabled; the
+	// schema drops the recovery leaf of a model without the flag.
 	"wifi.enable":               true,
 	"wifi.ssid":                 true,
 	"wifi.password":             true,
@@ -166,6 +171,9 @@ var gen1ApplicablePaths = map[string]bool{
 	"wifi.static_ip.nameserver": true,
 	"wifi.ap.enable":            true,
 	"wifi.ap.pass":              true,
+	"wifi.roam_enable":          true,
+	"wifi.roam_threshold":       true,
+	"wifi.recovery_reboot":      true,
 
 	// Actions are written with POST /settings/actions and read back from GET /settings/actions. The
 	// name and index identify an entry and are written with it. The URL scheme rule and the plug name

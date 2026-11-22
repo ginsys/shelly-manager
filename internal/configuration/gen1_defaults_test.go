@@ -33,6 +33,7 @@ var gen1NoDocumentedDefault = []string{
 	"wifi.enable", "wifi.ssid", "wifi.password", "wifi.ipv4mode",
 	"wifi.static_ip.ip", "wifi.static_ip.netmask", "wifi.static_ip.gw", "wifi.static_ip.nameserver",
 	"wifi.ap.enable", "wifi.ap.pass",
+	"wifi.roam_enable", "wifi.roam_threshold", "wifi.recovery_reboot",
 	"actions[].name", "actions[].index", "actions[].enabled", "actions[].secret_urls",
 }
 
