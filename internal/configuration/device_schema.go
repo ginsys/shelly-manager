@@ -63,7 +63,7 @@ func GetDeviceConfigurationSchema(deviceType string) map[string]interface{} {
 		sections["actions"] = getActionsSchema(deviceType)
 	}
 	if !supported || converter.hasLight(deviceType) {
-		sections["light"] = getLightSchema()
+		sections["light"] = lightSchemaOf(getLightSchema(), deviceType, supported)
 	}
 	if !supported || converter.hasDimmerSettings(deviceType) {
 		// Five fields of the Dimmer's device-level group are applied (gen1ApplicablePaths); the rest of
@@ -122,6 +122,34 @@ func getInputModes(schema map[string]interface{}, deviceType string) map[string]
 	return schema
 }
 
+// lightSchemaOf narrows the light schema of a supported model to its own keys and words. A template
+// with no model keeps every key.
+func lightSchemaOf(schema map[string]interface{}, deviceType string, supported bool) map[string]interface{} {
+	if !supported {
+		return schema
+	}
+	lights, _ := schemaProperties(schema)["lights"].(map[string]interface{})
+	items := schemaProperties(lights["items"])
+	if items == nil {
+		return schema
+	}
+	if deviceType != "SHRGBW2" {
+		for _, key := range []string{"name", "effect", "transition", "btn_reverse"} {
+			delete(items, key)
+		}
+		return schema
+	}
+	delete(items, "btn_debounce")
+	delete(items, "swap_inputs")
+	if state, ok := items["default_state"].(map[string]interface{}); ok {
+		state["enum"] = gen1RGBW2States
+	}
+	if button, ok := items["btn_type"].(map[string]interface{}); ok {
+		button["enum"] = gen1RGBW2ButtonTypes
+	}
+	return schema
+}
+
 // gen1InitialStates are the stored initial states a Gen1 model accepts. restore_last and
 // match_input are the Gen2 words for last and switch.
 var gen1InitialStates = map[string]bool{"off": true, "on": true, "last": true, "switch": true}
@@ -170,22 +198,35 @@ func HasRollerMode(deviceType string) bool {
 // accepts on POST /settings, and nil for a model that has no such switch. It is the one place that
 // decides both whether a model has the setting and which words it takes.
 func gen1DeviceModes(deviceType string) []string {
-	if deviceType == "SHSW-25" {
+	switch deviceType {
+	case "SHSW-25":
 		return []string{"relay", "roller"}
+	case "SHRGBW2":
+		return []string{"color", "white"}
 	}
 	return nil
 }
 
 // withoutModeOfModelsWithoutIt drops the system.device.mode leaf from the schema of a supported
 // model that has no mode switch, so the leaf is never marked applicable where apply refuses it.
+// A model that has one keeps the leaf with its own words only (relay and roller, or color and white).
 // An unsupported model keeps it (marked not applicable), and so does a template with no model.
 func withoutModeOfModelsWithoutIt(sections map[string]interface{}, deviceType string, supported bool) {
-	if !supported || len(gen1DeviceModes(deviceType)) > 0 {
+	if !supported {
 		return
 	}
 	system, _ := sections["system"].(map[string]interface{})
-	if device := schemaProperties(schemaProperties(system)["device"]); device != nil {
+	device := schemaProperties(schemaProperties(system)["device"])
+	if device == nil {
+		return
+	}
+	modes := gen1DeviceModes(deviceType)
+	if len(modes) == 0 {
 		delete(device, "mode")
+		return
+	}
+	if mode, ok := device["mode"].(map[string]interface{}); ok {
+		mode["enum"] = modes
 	}
 }
 

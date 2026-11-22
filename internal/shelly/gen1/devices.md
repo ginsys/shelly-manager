@@ -82,10 +82,10 @@
 - **API Endpoints**:
   - ❌ `/color/0` - RGB control (color mode)
   - ❌ `/white/0-3` - White channel control
-  - ❌ `/settings/color/0` - Color settings
-  - ❌ `/settings/white/0-3` - White settings
+  - ✅ `/settings/color/0` - Color settings (`light.lights`: apply writes the keys that are set and reads them back, unconfirmed on hardware)
+  - ✅ `/settings/white/0-3` - White settings (same, one entry per channel; `btn_type` and `btn_reverse` on channel 0 only)
   - ✅ `/meter/0` - Power consumption
-  - ❌ `/settings/mode` - Switch modes
+  - ✅ `/settings` `mode=color|white` - Switch modes (`system.device.mode`; apply writes it first and reads it back, unconfirmed on hardware; the page has no `/settings/mode` path)
 
 ### 🏠 Other Devices
 

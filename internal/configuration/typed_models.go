@@ -981,8 +981,8 @@ func getSystemSchema() map[string]interface{} {
 					"mode": map[string]interface{}{
 						"type":        "string",
 						"title":       "Operating Mode",
-						"description": "Device-level mode of a model that has one (Shelly 2.5: relay or roller). The Gen1 counterpart of the Gen2 Sys profile",
-						"enum":        []string{"relay", "roller"},
+						"description": "Device-level mode of a model that has one (Shelly 2.5: relay or roller; RGBW2: color or white). The Gen1 counterpart of the Gen2 Sys profile",
+						"enum":        []string{"relay", "roller", "color", "white"},
 					},
 					"discoverable": map[string]interface{}{
 						"type":        "boolean",
@@ -1268,12 +1268,12 @@ func getRelaySchema() map[string]interface{} {
 // device reads one back: the page gives auto_on and auto_off no range, and no maximum number of
 // schedule rules (the relay's gen1MaxScheduleRules is used). Its parameter table spells one button
 // word "toglle" where its attribute table says "toggle"; "toggle" is the word, and the word a Dimmer
-// reads back is unconfirmed. The channel's name is an attribute of the page, not a parameter.
+// reads back is unconfirmed. name, effect, transition and btn_reverse are the RGBW2's (lightSchemaOf).
 func getLightSchema() map[string]interface{} {
 	return map[string]interface{}{
 		"type":                "object",
 		"title":               "Light Settings",
-		"description":         "Configure the light channels of a dimmer",
+		"description":         "Configure the light channels of a dimmer or an RGBW2",
 		"x-device-capability": "light",
 		"properties": map[string]interface{}{
 			"lights": map[string]interface{}{
@@ -1287,6 +1287,30 @@ func getLightSchema() map[string]interface{} {
 							"type":        "integer",
 							"title":       "Light ID",
 							"description": "Light channel index",
+						},
+						"name": map[string]interface{}{
+							"type":        "string",
+							"title":       "Name",
+							"description": "Channel name (RGBW2)",
+						},
+						"effect": map[string]interface{}{
+							"type":        "integer",
+							"title":       "Effect",
+							"description": "Color mode only: 0 off, 1 meteor shower, 2 gradual change, 3 flash, 4 red/green change (RGBW2)",
+							"minimum":     0,
+							"maximum":     gen1RGBW2MaxEffect,
+						},
+						"transition": map[string]interface{}{
+							"type":        "integer",
+							"title":       "Transition",
+							"description": "Transition time in milliseconds (RGBW2)",
+							"minimum":     0,
+							"maximum":     gen1RGBW2MaxTransition,
+						},
+						"btn_reverse": map[string]interface{}{
+							"type":        "boolean",
+							"title":       "Reverse Button",
+							"description": "Reverse the input; shared by the four white channels and written on channel 0 (RGBW2)",
 						},
 						"default_state": map[string]interface{}{
 							"type":  "string",

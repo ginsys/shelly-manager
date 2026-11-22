@@ -2041,8 +2041,11 @@ paths:
         /settings/light/<n>; not confirmed on hardware) and its device-level dimming settings
         (min_brightness 0 to 50, fade_rate 1 to 5, transition 0 to 5000 ms, zcross_debounce 50 to 150
         microseconds, and leading_edge as pulse_mode, only where the device reports pulse_mode_detected,
-        so never on an SHDM-1; the status LED as led_status_disable; not confirmed on hardware), for a
-        model with roller mode
+        so never on an SHDM-1; the status LED as led_status_disable; not confirmed on hardware), for an
+        RGBW2 (SHRGBW2) lights written to /settings/color/0 in color mode or /settings/white/<n> in
+        white mode (name, effect of 0 to 4 in color mode, transition of 0 to 5000 ms, default_state,
+        auto_on, auto_off, schedule, schedule_rules, and btn_type and btn_reverse on channel 0 only; the
+        device mode is written first; not confirmed on hardware), for a model with roller mode
         (SHSW-25) rollers (max_open_time and max_close_time in seconds, motor_direction, swap_inputs and
         input_mode, each read back), and input button types (mode as btn_type and inverted as
         btn_reverse per input; the parameter names, the toggle and edge mapping and the i3 mode set

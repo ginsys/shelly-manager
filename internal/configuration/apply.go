@@ -171,6 +171,9 @@ func (a *ConfigApplier) ApplyConfig(ctx context.Context, client ShellyClient, co
 	if err := checkPulseModeBeforeWrite(liveRaw, currentConfig != nil, readErr, apiConfig); err != nil {
 		return nil, err
 	}
+	if err := checkLightModeBeforeWrite(liveRaw, apiConfig, deviceType); err != nil {
+		return nil, err
+	}
 
 	// Decide the reboot from the settings as they are before any write, and record it before the
 	// first one. A write that fails can still have landed (the answer may be lost), and a later
@@ -247,7 +250,9 @@ func (a *ConfigApplier) applyConfigSections(ctx context.Context, client ShellyCl
 		{"Cloud", a.applyCloudSettings},
 		{"CoIoT", a.applyCoIoTSettings},
 		{"Relay", a.applyRelaySettings},
-		{"Light", a.applyLightSettings},
+		{"Light", func(ctx context.Context, client ShellyClient, apiConfig map[string]interface{}, result *ApplyResult) error {
+			return a.applyLightSettings(ctx, client, apiConfig, live, deviceType, result)
+		}},
 		{"Roller", a.applyRollerSettings},
 		// Inputs follow the relays: on a relay model they are keys of the same channel.
 		{"Input", func(ctx context.Context, client ShellyClient, apiConfig map[string]interface{}, result *ApplyResult) error {
@@ -662,10 +667,13 @@ var errNoLightClient = errors.New("client cannot write per-channel light setting
 // unsupportedApplySettings).
 var gen1LightKeys = []string{"default_state", "auto_on", "auto_off", "schedule", "schedule_rules", "btn_type", "btn_debounce", "swap_inputs"}
 
-func (a *ConfigApplier) applyLightSettings(ctx context.Context, client ShellyClient, apiConfig map[string]interface{}, result *ApplyResult) error {
+func (a *ConfigApplier) applyLightSettings(ctx context.Context, client ShellyClient, apiConfig map[string]interface{}, live json.RawMessage, deviceType string, result *ApplyResult) error {
 	lights := relayMaps(apiConfig["lights"])
 	if len(lights) == 0 {
 		return nil
+	}
+	if deviceType == "SHRGBW2" {
+		return applyRGBW2Lights(ctx, client, lights, apiConfig, live, result)
 	}
 
 	lightClient, ok := client.(LightSettingsClient)

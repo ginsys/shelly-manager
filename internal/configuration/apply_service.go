@@ -135,8 +135,12 @@ var gen1ApplicablePaths = map[string]bool{
 	"relay.relays[].max_power":      true,
 
 	// A Dimmer's lights are written per channel with POST /settings/light/<n> and read back from
-	// GET /settings/light/<n>. The id is an item's position, and the name is an attribute of the
-	// page, not a parameter, so it is not applicable.
+	// GET /settings/light/<n>; an RGBW2's with /settings/color/0 or /settings/white/<n>. name, effect,
+	// transition and btn_reverse are the RGBW2's only.
+	"light.lights[].name":           true,
+	"light.lights[].effect":         true,
+	"light.lights[].transition":     true,
+	"light.lights[].btn_reverse":    true,
 	"light.lights[].default_state":  true,
 	"light.lights[].auto_on":        true,
 	"light.lights[].auto_off":       true,
@@ -370,6 +374,10 @@ func unsupportedApplySettings(converter ConfigConverter, desired *DeviceConfigur
 	// A light channel's id is its position for the same reason.
 	if desired.Light != nil {
 		for i, light := range desired.Light.Lights {
+			if deviceType == "SHRGBW2" {
+				unsupported = append(unsupported, unsupportedRGBW2LightValues(i, light)...)
+				continue
+			}
 			unsupported = append(unsupported, unsupportedLightValues(i, light)...)
 		}
 	}

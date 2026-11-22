@@ -49,10 +49,15 @@ type LightConfig struct {
 	Lights []SingleLightConfig `json:"lights,omitempty"`
 }
 
-// SingleLightConfig is one light channel. The channel's name is an attribute the page lists and no
-// parameter it accepts, so it is not stored. A list element's id is its position.
+// SingleLightConfig is one light channel. A list element's id is its position.
 type SingleLightConfig struct {
 	ID int `json:"id"`
+
+	// The RGBW2's own keys; the Dimmer's page has none of them.
+	Name          *string `json:"name,omitempty"`
+	Effect        *int    `json:"effect,omitempty"`
+	Transition    *int    `json:"transition,omitempty"`
+	ButtonReverse *bool   `json:"btn_reverse,omitempty"`
 
 	// DefaultState is on, off, last or switch.
 	DefaultState *string `json:"default_state,omitempty"`
