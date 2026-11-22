@@ -148,7 +148,7 @@ func TestRemapChannelPaths_LightIndexBecomesThePositionOfItsId(t *testing.T) {
 // The schema enums and the refusal read one list per word set: every word the schema offers is
 // accepted, so the form can never offer a word the apply then refuses.
 func TestLightSchemaEnumsAreTheWordsTheCheckAccepts(t *testing.T) {
-	props := getLightSchema()["properties"].(map[string]interface{})["lights"].(map[string]interface{})["items"].(map[string]interface{})["properties"].(map[string]interface{})
+	props := schemaProperties(schemaProperties(lightSchemaOf(getLightSchema(), "SHDM-1", true))["lights"].(map[string]interface{})["items"])
 	enum := func(key string) []string { return props[key].(map[string]interface{})["enum"].([]string) }
 
 	require.NotEmpty(t, enum("default_state"))
@@ -156,6 +156,10 @@ func TestLightSchemaEnumsAreTheWordsTheCheckAccepts(t *testing.T) {
 		assert.Empty(t, unsupportedLightValues(0, SingleLightConfig{DefaultState: StringPtr(word)}), word)
 	}
 	assert.ElementsMatch(t, []string{"on", "off", "last", "switch"}, enum("default_state"))
+
+	// The unnarrowed schema serves a Gen2 light too, so it offers the Gen2 words the Dimmer refuses.
+	template := schemaProperties(schemaProperties(getLightSchema())["lights"].(map[string]interface{})["items"])
+	assert.Subset(t, template["default_state"].(map[string]interface{})["enum"], []string{"restore_last", "toggle"})
 
 	require.NotEmpty(t, enum("btn_type"))
 	for _, word := range enum("btn_type") {

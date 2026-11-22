@@ -61,7 +61,7 @@ func gen2WritesOf(apiConfig map[string]interface{}) []gen2Write {
 			writes = append(writes, gen2Write{key: section.key, method: section.method, params: map[string]interface{}{"config": body}, body: body})
 		}
 	}
-	for _, channel := range []struct{ kind, method string }{{"input", "Input.SetConfig"}, {"switch", "Switch.SetConfig"}} {
+	for _, channel := range []struct{ kind, method string }{{"input", "Input.SetConfig"}, {"switch", "Switch.SetConfig"}, {"light", "Light.SetConfig"}} {
 		for _, id := range gen2ChannelIDs(apiConfig, channel.kind) {
 			key := channel.kind + ":" + strconv.Itoa(id)
 			if body, ok := apiConfig[key].(map[string]interface{}); ok && len(body) > 0 {
@@ -105,8 +105,8 @@ func (s *ConfigurationService) applyPathFor(client ShellyClient, loginSupported 
 }
 
 // unsupportedGen2Settings returns the sorted paths of desired that the Gen2 apply cannot write
-// and read back. Only the sys, mqtt, cloud, switch and input sections, the cover, the Wi-Fi and the
-// login have a mapping so far, so every other populated setting is reported through the round trip: the
+// and read back. Only the sys, mqtt, cloud, switch, input and light sections, the cover, the Wi-Fi
+// and the login have a mapping so far, so every other populated setting is reported through the round trip: the
 // converter drops it, and it is missing on the way back. loginSupported says whether the caller can
 // store a new login (LoginHooks): without it every login setting is refused. An MQTT password with no user is refused
 // too: the device takes the password only together with the user.
@@ -116,6 +116,9 @@ func unsupportedGen2Settings(converter ConfigConverter, desired *DeviceConfigura
 	unsupported, mapped := unmappedMQTTSettings(desired.MQTT)
 	channelPaths, checkedChannels, keptChannels := unmappedChannelSettings(desired)
 	unsupported = append(unsupported, channelPaths...)
+	lightPaths, lightRest, keptLights := unmappedLightSettings(desired.Light)
+	unsupported = append(unsupported, lightPaths...)
+	keptChannels["light.lights"] = keptLights
 	rollerPaths, rollerRest := unmappedRollerSettings(desired.Roller)
 	unsupported = append(unsupported, rollerPaths...)
 	wifiPaths, wifiRest := unmappedWiFiSettings(desired.WiFi)
@@ -126,6 +129,7 @@ func unsupportedGen2Settings(converter ConfigConverter, desired *DeviceConfigura
 	checked := *checkedChannels
 	checked.MQTT = mapped
 	checked.Roller = rollerRest
+	checked.Light = lightRest
 	checked.WiFi = wifiRest
 	checked.Auth = nil // the login is written with Shelly.SetAuth and read from the device info, not from the document
 
@@ -328,7 +332,8 @@ func refuseFromLiveDevice(ctx context.Context, client ShellyClient, readLive liv
 		withCover = true
 	}
 	withEth, withBLE := len(gen2Body(apiConfig, gen2EthKey)) > 0, len(gen2Body(apiConfig, gen2BLEKey)) > 0
-	if !withMode && !withKeys && !withCover && !withEth && !withBLE {
+	withLight := len(gen2ChannelIDs(apiConfig, "light")) > 0
+	if !withMode && !withKeys && !withCover && !withEth && !withBLE && !withLight {
 		return nil, nil
 	}
 
@@ -342,6 +347,8 @@ func refuseFromLiveDevice(ctx context.Context, client ShellyClient, readLive liv
 		what = "the Ethernet settings"
 	case withBLE:
 		what = "the Bluetooth settings"
+	case withLight:
+		what = "a light"
 	}
 	doc, err := readLive(ctx)
 	if err != nil {
@@ -354,6 +361,9 @@ func refuseFromLiveDevice(ctx context.Context, client ShellyClient, readLive liv
 	missing = append(missing, unreportedEthBLEKeys(doc, apiConfig)...)
 	if len(missing) > 0 {
 		return nil, &refusedBeforeWriteError{fmt.Errorf("%w: %s: the device's firmware does not report the key, so nothing was written", ErrUnsupportedSettings, strings.Join(missing, ", "))}
+	}
+	if err = refuseUnreportedLights(doc, apiConfig); err != nil {
+		return nil, err
 	}
 	reversesCover, err := refuseUncoverableRoller(doc, apiConfig)
 	if err != nil {

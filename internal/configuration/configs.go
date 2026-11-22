@@ -72,6 +72,18 @@ type SingleLightConfig struct {
 	// ButtonDebounce is the input debounce in milliseconds, 60 to 200.
 	ButtonDebounce *int  `json:"btn_debounce,omitempty"`
 	SwapInputs     *bool `json:"swap_inputs,omitempty"`
+
+	// The Gen2 light's own keys. TransitionDuration is seconds, where the RGBW2's Transition is ms.
+	TransitionDuration    *float64 `json:"transition_duration,omitempty"`
+	MinBrightnessOnToggle *int     `json:"min_brightness_on_toggle,omitempty"`
+	ButtonFadeRate        *int     `json:"button_fade_rate,omitempty"`
+	NightMode             *bool    `json:"night_mode,omitempty"`
+	NightModeBrightness   *int     `json:"night_mode_brightness,omitempty"`
+	NightModeStart        *string  `json:"night_mode_start,omitempty"`
+	NightModeEnd          *string  `json:"night_mode_end,omitempty"`
+	WarmupEnabled         *bool    `json:"warmup_enabled,omitempty"`
+	WarmupBrightness      *int     `json:"warmup_brightness,omitempty"`
+	WarmupTime            *int     `json:"warmup_time,omitempty"`
 }
 
 // PowerMeteringConfig represents power metering configuration

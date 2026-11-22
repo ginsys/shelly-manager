@@ -12,7 +12,7 @@ import (
 
 // Gen2Converter converts between the stored configuration and the document that a Gen2 or later
 // device returns from Shelly.GetConfig, which is keyed by component (sys, wifi, mqtt, switch:0 and
-// so on). It reads and writes the sys, mqtt, cloud, switch and input sections, the cover:0 roller,
+// so on). It reads and writes the sys, mqtt, cloud, switch, input and light sections, the cover:0 roller,
 // the Wi-Fi station and the eth and ble.rpc of a Pro model so far: a setting of any other section has no mapping, so the round-trip
 // check in unsupportedGen2Settings refuses it before the device is touched. Each later section is added
 // together with the code that writes it.
@@ -101,6 +101,7 @@ func (c *Gen2Converter) FromAPIConfig(apiJSON json.RawMessage, _ string) (*Devic
 	}
 	config.Relay, config.Input = gen2ChannelsFromDoc(doc)
 	config.Roller = gen2CoverFromDoc(doc)
+	config.Light = gen2LightsFromDoc(doc)
 	config.WiFi = gen2WiFiFromDoc(doc["wifi"])
 	if eth := gen2EthFromDoc(doc[gen2EthKey]); eth != nil {
 		config.Network = &NetworkConfiguration{Ethernet: eth}
@@ -294,6 +295,7 @@ func (c *Gen2Converter) ToAPIConfig(config *DeviceConfiguration, _ string) (json
 	}
 	gen2ChannelsToDoc(config, doc)
 	gen2CoverToDoc(config, doc)
+	gen2LightToDoc(config, doc)
 	if config.WiFi != nil {
 		if wifi := gen2WiFiToDoc(config.WiFi); len(wifi) > 0 {
 			doc["wifi"] = wifi

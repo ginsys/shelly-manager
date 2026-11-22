@@ -52,6 +52,7 @@ var defaultCompareRules = []FieldCompareRule{
 
 	// A Gen1 word and the Gen2 word of the same meaning are one value (gen2_channels.go).
 	{Path: "relay.relays.*.default_state", Normalize: gen2InitialStateWord},
+	{Path: "light.lights.*.default_state", Normalize: gen2LightInitialStateWord},
 	{Path: "input.inputs.*.mode", Normalize: gen2InModeWord},
 
 	// Tolerance for coordinates (about 10 meters)

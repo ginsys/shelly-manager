@@ -1272,6 +1272,18 @@ func getRelaySchema() map[string]interface{} {
 	}
 }
 
+// lightStateWords is the union of the Gen1 and Gen2 words; lightSchemaOf narrows it per model.
+func lightStateWords() []string {
+	words := map[string]bool{}
+	for word := range gen1InitialStates {
+		words[word] = true
+	}
+	for word := range gen2LightInitialStates {
+		words[word] = true
+	}
+	return slices.Sorted(maps.Keys(words))
+}
+
 // getLightSchema is the channel list of a model whose channels are lights (the Shelly Dimmer). The
 // words and ranges are those of the Gen1 Dimmer settings page as relayed, and unverified until a
 // device reads one back: the page gives auto_on and auto_off no range, and no maximum number of
@@ -1324,7 +1336,7 @@ func getLightSchema() map[string]interface{} {
 						"default_state": map[string]interface{}{
 							"type":  "string",
 							"title": "Default State",
-							"enum":  slices.Sorted(maps.Keys(gen1InitialStates)),
+							"enum":  lightStateWords(),
 						},
 						"auto_on": map[string]interface{}{
 							"type":        "integer",
@@ -1338,6 +1350,16 @@ func getLightSchema() map[string]interface{} {
 							"description": "Turn off automatically after this many seconds (0 = disabled)",
 							"minimum":     0,
 						},
+						"transition_duration":      map[string]interface{}{"type": "number", "title": "Transition Duration", "description": "Seconds from 0% to 100% (Gen2)", "minimum": 0},
+						"min_brightness_on_toggle": map[string]interface{}{"type": "integer", "title": "Minimum Brightness On Toggle", "description": "Percent (Gen2)", "minimum": 0, "maximum": 100},
+						"button_fade_rate":         map[string]interface{}{"type": "integer", "title": "Button Fade Rate", "description": "1 slowest to 5 fastest (Gen2)", "minimum": 1, "maximum": 5},
+						"night_mode":               map[string]interface{}{"type": "boolean", "title": "Night Mode", "description": "Limit the brightness between the two times (Gen2)"},
+						"night_mode_brightness":    map[string]interface{}{"type": "integer", "title": "Night Mode Brightness", "description": "Brightness limit while night mode is active; the page gives no unit (Gen2)", "minimum": 0, "maximum": 100},
+						"night_mode_start":         map[string]interface{}{"type": "string", "title": "Night Mode Start", "description": "HH:MM, set together with the end (Gen2)", "pattern": gen2ClockTime.String()},
+						"night_mode_end":           map[string]interface{}{"type": "string", "title": "Night Mode End", "description": "HH:MM, set together with the start (Gen2)", "pattern": gen2ClockTime.String()},
+						"warmup_enabled":           map[string]interface{}{"type": "boolean", "title": "Warm-up", "description": "Warm-up on toggle from off to on below 10% (Gen2, where the device has it)"},
+						"warmup_brightness":        map[string]interface{}{"type": "integer", "title": "Warm-up Brightness", "description": "Percent (Gen2)", "minimum": 10, "maximum": 100},
+						"warmup_time":              map[string]interface{}{"type": "integer", "title": "Warm-up Time", "description": "Milliseconds (Gen2)", "minimum": 20, "maximum": 1000},
 						"schedule": map[string]interface{}{
 							"type":        "boolean",
 							"title":       "Schedule",
