@@ -7,7 +7,9 @@ import (
 	"testing"
 	"time"
 
+	mysqldriver "github.com/go-sql-driver/mysql"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ginsys/shelly-manager/internal/logging"
 )
@@ -195,41 +197,40 @@ func TestMySQLSecurityCredentialProtection(t *testing.T) {
 	}
 }
 
-// TestMySQLSecurityDSNInjection tests protection against DSN injection attacks
-func TestMySQLSecurityDSNInjection(t *testing.T) {
-	logger := logging.GetDefault()
-	provider := NewMySQLProvider(logger)
+// TestMySQLBuildDSN_TextInRows reads DSNs that hold text which looks like SQL or
+// markup, and says for each whether the driver's parse of the built DSN accepts
+// it. The provider reads no DSN for content: a word in the user or the database
+// name is part of that value, and a parameter is read by the driver.
+func TestMySQLBuildDSN_TextInRows(t *testing.T) {
+	provider := NewMySQLProvider(logging.GetDefault())
 
-	maliciousDSNs := []string{
-		"user:pass@tcp(localhost:3306)/test'; DROP TABLE users; --",
-		"user'; DELETE FROM sensitive_data; --:pass@tcp(localhost:3306)/db",
-		"user:pass@tcp(localhost:3306)/db'; INSERT INTO admin_users VALUES ('hacker', 'admin'); --",
-		"user:pass@tcp(localhost:3306)/db?timeout=5s'; DROP DATABASE production; --",
-		"user:pass@tcp(localhost:3306)/db?charset=utf8'; TRUNCATE TABLE payments; --",
-		"user:pass@tcp(localhost:3306)/db?readTimeout=30s/**/UNION SELECT password FROM users; --",
-		"user:pass@tcp(localhost:3306)/db?writeTimeout=30s<script>alert('xss')</script>",
-		"user:pass@tcp(localhost:3306)/db?tls=false; EXEC xp_cmdshell 'dir'; --",
+	rows := []struct {
+		dsn      string
+		accepted bool
+		cause    string // text the driver's error holds, for a refused row
+		why      string
+	}{
+		{"user:pass@tcp(localhost:3306)/test'; DROP TABLE users; --", true, "", "the text is the database name"},
+		{"user'; DELETE FROM sensitive_data; --:pass@tcp(localhost:3306)/db", true, "", "the text is the user name"},
+		{"user:pass@tcp(localhost:3306)/db'; INSERT INTO admin_users VALUES ('hacker', 'admin'); --", true, "", "the text is the database name"},
+		{"user:pass@tcp(localhost:3306)/db?timeout=5s'; DROP DATABASE production; --", false, "unknown unit", "the timeout value is not a duration"},
+		{"user:pass@tcp(localhost:3306)/db?charset=utf8'; TRUNCATE TABLE payments; --", true, "", "a charset value is a list of names the driver sends as written"},
+		{"user:pass@tcp(localhost:3306)/db?readTimeout=30s/**/UNION SELECT password FROM users; --", false, "did you forget to escape a param value", "a slash after the address leaves the address unclosed"},
+		{"user:pass@tcp(localhost:3306)/db?writeTimeout=30s<script>alert('xss')</script>", false, "did you forget to escape a param value", "a slash after the address leaves the address unclosed"},
+		{"user:pass@tcp(localhost:3306)/db?tls=false; EXEC xp_cmdshell 'dir'; --", false, "unknown config name", "the tls value is neither a switch nor a registered name"},
 	}
 
-	for i, dsn := range maliciousDSNs {
-		t.Run(fmt.Sprintf("InjectionAttempt_%d", i+1), func(t *testing.T) {
-			// DSN parsing should either fail or sanitize the input
-			_, err := provider.buildDSN(dsn, nil)
-
-			// Either the DSN should be rejected as invalid, or if accepted,
-			// it should be properly escaped/sanitized
-			if err == nil {
-				// If DSN is accepted, verify it doesn't contain dangerous SQL
-				builtDSN, _ := provider.buildDSN(dsn, nil)
-				assert.NotContains(t, builtDSN, "DROP TABLE", "Built DSN should not contain SQL injection")
-				assert.NotContains(t, builtDSN, "DELETE FROM", "Built DSN should not contain SQL injection")
-				assert.NotContains(t, builtDSN, "INSERT INTO", "Built DSN should not contain SQL injection")
-				assert.NotContains(t, builtDSN, "TRUNCATE", "Built DSN should not contain SQL injection")
-				assert.NotContains(t, builtDSN, "UNION SELECT", "Built DSN should not contain SQL injection")
-				assert.NotContains(t, builtDSN, "<script", "Built DSN should not contain XSS injection")
-				assert.NotContains(t, builtDSN, "EXEC", "Built DSN should not contain command injection")
+	for i, row := range rows {
+		t.Run(fmt.Sprintf("Row_%d", i+1), func(t *testing.T) {
+			built, err := provider.buildDSN(row.dsn, nil)
+			require.NoError(t, err, "buildDSN adds defaults and reads no content")
+			_, err = mysqldriver.ParseDSN(built)
+			if row.accepted {
+				assert.NoError(t, err, row.why)
+			} else {
+				require.Error(t, err, row.why)
+				assert.Contains(t, err.Error(), row.cause, row.why)
 			}
-			// If DSN is rejected, that's also acceptable security behavior
 		})
 	}
 }
@@ -507,8 +508,8 @@ func TestMySQLSecurityConcurrentAccess(t *testing.T) {
 	assert.NotEmpty(t, provider.Version())
 }
 
-// TestMySQLSecurityDSNValidation tests comprehensive DSN validation
-func TestMySQLSecurityDSNValidation(t *testing.T) {
+// TestMySQLBuildDSN_Format tests which DSNs buildDSN accepts and refuses
+func TestMySQLBuildDSN_Format(t *testing.T) {
 	logger := logging.GetDefault()
 	provider := NewMySQLProvider(logger)
 
@@ -545,26 +546,23 @@ func TestMySQLSecurityDSNValidation(t *testing.T) {
 			expectError: true,
 			errorText:   "invalid MySQL DSN format",
 		},
+		// The three rows below were refused for the words in them. buildDSN reads
+		// no content now, so each is accepted: the words are the database name.
+		// Whether the driver parses the result is TestMySQLBuildDSN_TextInRows.
 		{
-			name:        "DSN with SQL injection",
-			dsn:         "user:pass@tcp(localhost:3306)/db'; DROP TABLE users; --",
-			options:     nil,
-			expectError: true,
-			errorText:   "potentially dangerous DSN content detected",
+			name:    "SQL words in the database name",
+			dsn:     "user:pass@tcp(localhost:3306)/db'; DROP TABLE users; --",
+			options: nil,
 		},
 		{
-			name:        "DSN with XSS attempt",
-			dsn:         "user:pass@tcp(localhost:3306)/db<script>alert('xss')</script>",
-			options:     nil,
-			expectError: true,
-			errorText:   "potentially dangerous DSN content detected",
+			name:    "Markup in the database name",
+			dsn:     "user:pass@tcp(localhost:3306)/db<script>alert('xss')</script>",
+			options: nil,
 		},
 		{
-			name:        "DSN with command injection",
-			dsn:         "user:pass@tcp(localhost:3306)/db; EXEC xp_cmdshell 'dir'",
-			options:     nil,
-			expectError: true,
-			errorText:   "potentially dangerous DSN content detected",
+			name:    "A command and a semicolon in the database name",
+			dsn:     "user:pass@tcp(localhost:3306)/db; EXEC xp_cmdshell 'dir'",
+			options: nil,
 		},
 		{
 			name:    "Valid DSN with safe options",

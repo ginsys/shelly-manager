@@ -188,13 +188,14 @@ func TestMySQLProviderConnectInvalidConfig(t *testing.T) {
 			errMsg: "invalid MySQL DSN format",
 		},
 		{
-			name: "Dangerous DSN content",
+			// The address is not closed, so the driver cannot read the DSN.
+			name: "DSN the driver cannot parse",
 			config: DatabaseConfig{
 				Provider: "mysql",
-				DSN:      "user:pass@tcp(localhost:3306)/db'; DROP TABLE users; --",
+				DSN:      "user:pass@tcp(localhost:3306/db",
 				Options:  map[string]string{"tls": "false"},
 			},
-			errMsg: "potentially dangerous DSN content detected",
+			errMsg: errDSNNotParsed.Error(),
 		},
 		{
 			name: "Invalid TLS mode",
@@ -408,45 +409,6 @@ func TestMySQLTransactionMethods(t *testing.T) {
 
 	// Test that the transaction implements the Transaction interface
 	var _ Transaction = tx
-}
-
-// TestMySQLProviderValidateDSNInput tests DSN input validation
-func TestMySQLProviderValidateDSNInput(t *testing.T) {
-	logger := logging.GetDefault()
-	provider := NewMySQLProvider(logger)
-
-	validInputs := []string{
-		"user:pass@tcp(localhost:3306)/database",
-		"simple_database_name",
-		"user=test",
-		"charset=utf8mb4",
-	}
-
-	for _, input := range validInputs {
-		t.Run(fmt.Sprintf("Valid_%s", input), func(t *testing.T) {
-			err := provider.validateDSNInput(input)
-			assert.NoError(t, err)
-		})
-	}
-
-	dangerousInputs := []string{
-		"DROP TABLE users",
-		"DELETE FROM sensitive_data",
-		"INSERT INTO malicious",
-		"<script>alert('xss')</script>",
-		"EXEC xp_cmdshell",
-		"/* comment */",
-		"-- sql comment",
-		"; additional command",
-	}
-
-	for _, input := range dangerousInputs {
-		t.Run(fmt.Sprintf("Dangerous_%s", input), func(t *testing.T) {
-			err := provider.validateDSNInput(input)
-			assert.Error(t, err)
-			assert.Contains(t, err.Error(), "potentially dangerous DSN content detected")
-		})
-	}
 }
 
 // TestMySQLProviderStatisticsTracking tests internal statistics tracking

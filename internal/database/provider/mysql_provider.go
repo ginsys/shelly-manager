@@ -317,37 +317,83 @@ func (m *MySQLProvider) HealthCheck(ctx context.Context) HealthStatus {
 	return status
 }
 
-// validateDSNInput validates and sanitizes DSN components for security
-func (m *MySQLProvider) validateDSNInput(dsn string) error {
-	// Check for SQL injection patterns
-	dangerousPatterns := []string{
-		"DROP TABLE", "DROP DATABASE", "DELETE FROM", "INSERT INTO",
-		"UPDATE SET", "CREATE TABLE", "ALTER TABLE", "TRUNCATE",
-		"--", "/*", "*/", ";", "EXEC", "EXECUTE",
-		"sp_", "xp_", "UNION SELECT", "INFORMATION_SCHEMA",
-		"<script", "javascript:", "onload=", "onerror=",
-	}
+// dsnParamSection returns the parameter section of a MySQL DSN and whether it has
+// one, cut the way the driver cuts it: after the last "/" (the user, the password
+// and the host may hold one) and after the first "?" that follows.
+func dsnParamSection(dsn string) (string, bool) {
+	_, section, found := strings.Cut(dsn[strings.LastIndex(dsn, "/")+1:], "?")
+	return section, found
+}
 
-	upperDSN := strings.ToUpper(dsn)
-	for _, pattern := range dangerousPatterns {
-		if strings.Contains(upperDSN, strings.ToUpper(pattern)) {
-			return fmt.Errorf("potentially dangerous DSN content detected: contains pattern similar to %s", pattern)
+// dsnGivesKey reports whether the parameter section of the DSN sets key. A pair
+// with no "=" sets nothing: the driver skips it.
+func dsnGivesKey(dsn, key string) bool {
+	section, _ := dsnParamSection(dsn)
+	for _, pair := range strings.Split(section, "&") {
+		if k, _, ok := strings.Cut(pair, "="); ok && k == key {
+			return true
 		}
 	}
+	return false
+}
 
+// addDSNParam appends one parameter to the parameter section of the DSN, or starts it.
+func addDSNParam(dsn, key, value string) string {
+	section, found := dsnParamSection(dsn)
+	separator := "?"
+	if found && section != "" {
+		separator = "&"
+	} else if found {
+		separator = ""
+	}
+	return dsn + separator + key + "=" + value
+}
+
+// validateTimeoutOptions refuses a timeout option that is not a duration, the way
+// validateSSLConfig refuses a TLS mode: the driver reads the same string with the
+// same function, so every spelling it reads keeps working. The message names the
+// option and not its value.
+func validateTimeoutOptions(options map[string]string) error {
+	for _, key := range []string{"timeout", "readTimeout", "writeTimeout"} {
+		if value, ok := options[key]; ok {
+			if _, err := time.ParseDuration(value); err != nil {
+				return fmt.Errorf("invalid %s option: not a duration such as 10s or 1m", key)
+			}
+		}
+	}
 	return nil
 }
 
-// buildDSN constructs a MySQL DSN with SSL/TLS settings and security validation
+// escapeOption escapes the value of an option so that it stays one value. A
+// timeout is a checked duration and is added as it is, so that every spelling the
+// driver reads keeps working. A charset option may list several names separated by
+// a comma, and each name is escaped. Any other value, loc included (the driver
+// decodes it), is query-escaped.
+func escapeOption(key, value string) string {
+	switch key {
+	case "timeout", "readTimeout", "writeTimeout":
+		return value
+	case "charset":
+		names := strings.Split(value, ",")
+		for i, name := range names {
+			names[i] = url.QueryEscape(name)
+		}
+		return strings.Join(names, ",")
+	}
+	return url.QueryEscape(value)
+}
+
+// buildDSN adds the TLS, timeout and character set settings the provider wants by
+// default to a MySQL DSN, and the options that name one of them. It reads the DSN
+// as the driver does: a word in the user, the password, the host or the database
+// name is part of that value, and a setting is given when the parameter section
+// holds its key. It does not read the text for content, and it does not filter
+// session settings: those reach the server as the driver sends them. Connect
+// parses the result with the driver.
 func (m *MySQLProvider) buildDSN(baseDSN string, options map[string]string) (string, error) {
 	// Validate DSN format
 	if baseDSN == "" {
 		return "", fmt.Errorf("DSN cannot be empty")
-	}
-
-	// Security validation: Check for dangerous patterns
-	if err := m.validateDSNInput(baseDSN); err != nil {
-		return "", fmt.Errorf("DSN security validation failed: %w", err)
 	}
 
 	// Parse DSN to validate format
@@ -361,96 +407,34 @@ func (m *MySQLProvider) buildDSN(baseDSN string, options map[string]string) (str
 	if err := m.validateSSLConfig(options); err != nil {
 		return "", fmt.Errorf("SSL validation failed: %w", err)
 	}
+	if err := validateTimeoutOptions(options); err != nil {
+		return "", err
+	}
 
 	// Start with the base DSN
 	dsn := baseDSN
 
-	// Add SSL mode if not specified (default to preferred for security)
-	if !strings.Contains(dsn, "tls=") {
-		tlsMode := "preferred" // Default to preferred SSL
-		if mode, ok := options["tls"]; ok {
-			tlsMode = mode
+	// A default is added when the DSN does not give the key: TLS preferred, so a
+	// server that offers TLS gets it, bounded timeouts, and utf8mb4 for full Unicode.
+	// An option of the same name replaces the default.
+	for _, setting := range []struct{ key, fallback string }{
+		{"tls", "preferred"}, {"timeout", "10s"}, {"readTimeout", "30s"},
+		{"writeTimeout", "30s"}, {"charset", "utf8mb4"},
+	} {
+		if dsnGivesKey(dsn, setting.key) {
+			continue
 		}
-
-		if strings.Contains(dsn, "?") {
-			dsn += "&tls=" + tlsMode
-		} else {
-			dsn += "?tls=" + tlsMode
+		value := setting.fallback
+		if option, ok := options[setting.key]; ok {
+			value = option
 		}
+		dsn = addDSNParam(dsn, setting.key, escapeOption(setting.key, value))
 	}
 
-	// Add connection timeout if not specified
-	if !strings.Contains(dsn, "timeout=") {
-		timeout := "10s" // 10 seconds default
-		if t, ok := options["timeout"]; ok {
-			timeout = t
-		}
-
-		if strings.Contains(dsn, "?") {
-			dsn += "&timeout=" + timeout
-		} else {
-			dsn += "?timeout=" + timeout
-		}
-	}
-
-	// Add read timeout if not specified
-	if !strings.Contains(dsn, "readTimeout=") {
-		readTimeout := "30s" // 30 seconds default
-		if t, ok := options["readTimeout"]; ok {
-			readTimeout = t
-		}
-
-		if strings.Contains(dsn, "?") {
-			dsn += "&readTimeout=" + readTimeout
-		} else {
-			dsn += "?readTimeout=" + readTimeout
-		}
-	}
-
-	// Add write timeout if not specified
-	if !strings.Contains(dsn, "writeTimeout=") {
-		writeTimeout := "30s" // 30 seconds default
-		if t, ok := options["writeTimeout"]; ok {
-			writeTimeout = t
-		}
-
-		if strings.Contains(dsn, "?") {
-			dsn += "&writeTimeout=" + writeTimeout
-		} else {
-			dsn += "?writeTimeout=" + writeTimeout
-		}
-	}
-
-	// Set character set to utf8mb4 if not specified (for full Unicode support)
-	if !strings.Contains(dsn, "charset=") {
-		charset := "utf8mb4"
-		if c, ok := options["charset"]; ok {
-			charset = c
-		}
-
-		if strings.Contains(dsn, "?") {
-			dsn += "&charset=" + charset
-		} else {
-			dsn += "?charset=" + charset
-		}
-	}
-
-	// Add other MySQL-specific options with validation
-	for key, value := range options {
-		// Security validation: Check for dangerous patterns in options
-		if err := m.validateDSNInput(key + "=" + value); err != nil {
-			continue // Skip dangerous options silently to prevent information disclosure
-		}
-
-		switch key {
-		case "collation", "loc", "maxAllowedPacket":
-			if !strings.Contains(dsn, key+"=") {
-				if strings.Contains(dsn, "?") {
-					dsn += "&" + key + "=" + url.QueryEscape(value)
-				} else {
-					dsn += "?" + key + "=" + url.QueryEscape(value)
-				}
-			}
+	// The options that only name a setting are added when the DSN does not give it.
+	for _, key := range []string{"collation", "loc", "maxAllowedPacket"} {
+		if value, ok := options[key]; ok && !dsnGivesKey(dsn, key) {
+			dsn = addDSNParam(dsn, key, escapeOption(key, value))
 		}
 	}
 

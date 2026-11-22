@@ -371,7 +371,7 @@ go test ./internal/database/provider -v -run SSL
 4. **PostgreSQL**: [Database Documentation](./database/) for advanced features
 
 ### For Security Requirements
-1. **MySQL**: [Security Guide](./mysql-provider-security.md) - Comprehensive SSL/TLS and injection prevention
+1. **MySQL**: [Security Guide](./mysql-provider-security.md) - SSL/TLS, credentials and how the DSN is read
 2. **PostgreSQL**: [Security Guide](./database/postgresql-security.md) - Advanced security features
 
 ### For Performance Optimization

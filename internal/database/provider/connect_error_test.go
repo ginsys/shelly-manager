@@ -44,6 +44,11 @@ func TestClassifyConnectError(t *testing.T) {
 			want: "database connection failed: the server rejected the connection (MySQL error 1045, access denied)",
 		},
 		{
+			name: "a MySQL server error for a session setting it does not know",
+			err:  &mysql.MySQLError{Number: 1193, Message: "Unknown system variable '" + leakWord + "'"},
+			want: "database connection failed: the server rejected the connection (MySQL error 1193, unknown system variable)",
+		},
+		{
 			name: "a MySQL error with no name for its number",
 			err:  &mysql.MySQLError{Number: 1064, Message: "You have an error near '" + leakWord + "'"},
 			want: "database connection failed: the server rejected the connection (MySQL error 1064)",

@@ -314,27 +314,6 @@ func (p *PostgreSQLProvider) HealthCheck(ctx context.Context) HealthStatus {
 	return status
 }
 
-// validateDSNInput validates and sanitizes DSN components for security
-func (p *PostgreSQLProvider) validateDSNInput(dsn string) error {
-	// Check for SQL injection patterns
-	dangerousPatterns := []string{
-		"DROP TABLE", "DROP DATABASE", "DELETE FROM", "INSERT INTO",
-		"UPDATE SET", "CREATE TABLE", "ALTER TABLE", "TRUNCATE",
-		"--", "/*", "*/", ";", "EXEC", "EXECUTE",
-		"sp_", "xp_", "UNION SELECT", "INFORMATION_SCHEMA",
-		"<script", "javascript:", "onload=", "onerror=",
-	}
-
-	upperDSN := strings.ToUpper(dsn)
-	for _, pattern := range dangerousPatterns {
-		if strings.Contains(upperDSN, strings.ToUpper(pattern)) {
-			return fmt.Errorf("potentially dangerous DSN content detected: contains pattern similar to %s", pattern)
-		}
-	}
-
-	return nil
-}
-
 // credentialSafeQueryKeys are the DSN query keys accepted when
 // database.username or database.password is set. Each is a client option pgx
 // reads itself (pgconn/config.go, conn.go) or a server setting that names no
@@ -342,11 +321,11 @@ func (p *PostgreSQLProvider) validateDSNInput(dsn string) error {
 // listed is refused, so the keys that override them stay out: user, password,
 // passfile, service, servicefile, sslpassword, host, port and database, and
 // any key pgx would send to the server as a setting (role, for one).
-// default_query_exec_mode is not listed either: validateDSNInput refuses the
-// text "EXEC" in any DSN, so listing it here would change nothing.
+// default_query_exec_mode is listed: pgx reads it itself and it names no identity.
 var credentialSafeQueryKeys = map[string]bool{
 	"sslmode": true, "connect_timeout": true, "application_name": true, "search_path": true,
-	"sslcert": true, "sslkey": true, "sslrootcert": true,
+	"default_query_exec_mode": true,
+	"sslcert":                 true, "sslkey": true, "sslrootcert": true,
 	"sslcertmode": true, "sslsni": true, "sslnegotiation": true,
 	"channel_binding": true, "require_auth": true, "target_session_attrs": true,
 	"statement_cache_capacity": true, "description_cache_capacity": true,
@@ -357,16 +336,16 @@ var credentialSafeQueryKeys = map[string]bool{
 // a "/" ends up in the "invalid port" message), so nothing of it is passed on.
 var errDSNNotAURL = errors.New("the DSN is not a valid URL (postgresql://[user[:password]@]host[:port]/database[?options])")
 
-// buildDSN constructs a PostgreSQL DSN with SSL/TLS settings and security validation
+// buildDSN adds the SSL and timeout settings the provider wants by default to a
+// PostgreSQL DSN, and the options that name a setting, and puts the credentials of
+// database.username and database.password in last. It reads the DSN as net/url and
+// pgx do: a word in a host, a database name or a password is part of that value,
+// and a setting is given when the query holds its key. It does not read the text
+// for content.
 func (p *PostgreSQLProvider) buildDSN(baseDSN string, options map[string]string) (string, error) {
 	// Validate DSN format
 	if baseDSN == "" {
 		return "", fmt.Errorf("DSN cannot be empty")
-	}
-
-	// Security validation: Check for dangerous patterns
-	if err := p.validateDSNInput(baseDSN); err != nil {
-		return "", fmt.Errorf("DSN security validation failed: %w", err)
 	}
 
 	// Parse the base DSN to validate format
@@ -418,52 +397,39 @@ func (p *PostgreSQLProvider) buildDSN(baseDSN string, options map[string]string)
 	// Start with the base DSN
 	dsn := baseDSN
 
-	// Add SSL mode if not specified (default to require for security)
-	if !strings.Contains(dsn, "sslmode=") {
-		sslMode := "require" // Default to requiring SSL
-		if mode, ok := options["sslmode"]; ok {
-			// Escaped: the query check above ran on baseDSN only, so a value holding "&"
-			// must not add a key (password, user) next to the configured credentials.
-			sslMode = url.QueryEscape(mode)
+	// A setting is given when the query of the DSN holds its key, read as pgx reads
+	// it (net/url) and kept current as settings are added. A word of the user, the
+	// password or the host is never a key.
+	given := parsedURL.Query()
+	hasQuery := parsedURL.RawQuery != "" || parsedURL.ForceQuery
+	add := func(key, value string) {
+		separator := "?"
+		if hasQuery {
+			separator = "&"
 		}
-
-		if strings.Contains(dsn, "?") {
-			dsn += "&sslmode=" + sslMode
-		} else {
-			dsn += "?sslmode=" + sslMode
-		}
+		dsn += separator + key + "=" + value
+		hasQuery = true
+		given.Set(key, value)
 	}
 
-	// Add connection timeout if not specified
-	if !strings.Contains(dsn, "connect_timeout=") {
-		timeout := "10" // 10 seconds default
-		if t, ok := options["connect_timeout"]; ok {
-			timeout = url.QueryEscape(t)
+	// Defaults: require SSL, and a bounded connect time. An option of the same name
+	// replaces the default. The values are escaped, so a value holding "&" adds no key
+	// (password, user) next to the configured credentials.
+	for _, setting := range []struct{ key, fallback string }{{"sslmode", "require"}, {"connect_timeout", "10"}} {
+		if given.Has(setting.key) {
+			continue
 		}
-
-		if strings.Contains(dsn, "?") {
-			dsn += "&connect_timeout=" + timeout
-		} else {
-			dsn += "?connect_timeout=" + timeout
+		value := setting.fallback
+		if option, ok := options[setting.key]; ok {
+			value = url.QueryEscape(option)
 		}
+		add(setting.key, value)
 	}
 
-	// Add other PostgreSQL-specific options with validation
-	for key, value := range options {
-		// Security validation: Check for dangerous patterns in options
-		if err := p.validateDSNInput(key + "=" + value); err != nil {
-			continue // Skip dangerous options silently to prevent information disclosure
-		}
-
-		switch key {
-		case "sslcert", "sslkey", "sslrootcert", "application_name", "search_path":
-			if !strings.Contains(dsn, key+"=") {
-				if strings.Contains(dsn, "?") {
-					dsn += "&" + key + "=" + url.QueryEscape(value)
-				} else {
-					dsn += "?" + key + "=" + url.QueryEscape(value)
-				}
-			}
+	// The options that only name a setting.
+	for _, key := range []string{"sslcert", "sslkey", "sslrootcert", "application_name", "search_path", "default_query_exec_mode"} {
+		if value, ok := options[key]; ok && !given.Has(key) {
+			add(key, url.QueryEscape(value))
 		}
 	}
 
