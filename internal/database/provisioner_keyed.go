@@ -4,12 +4,13 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"time"
 
 	"gorm.io/gorm"
+
+	"github.com/ginsys/shelly-manager/internal/agentkey"
 )
 
 var (
@@ -24,33 +25,9 @@ var (
 	ErrKeyFormat = errors.New("a public key is 32 bytes and a signature 64")
 )
 
-// registerMessageHeader starts the text an agent signs. It keeps the key from being used to sign anything
-// else, and the zero bytes between the fields keep one field from shifting into the next.
-const registerMessageHeader = "shelly-manager provisioner register v1"
-
-// challengeLifetime is how long an agent has to answer the challenge it was given.
+// challengeLifetime is how long an agent has to answer the challenge it was given. The fingerprint, the agent id
+// and the signed text are defined in internal/agentkey, which the agent shares.
 const challengeLifetime = 60 * time.Second
-
-// KeyFingerprint is the fingerprint of a public key: the first 16 bytes of the SHA-256 of its 32 bytes, as 32
-// lowercase hexadecimal characters.
-func KeyFingerprint(key ed25519.PublicKey) string {
-	sum := sha256.Sum256(key)
-	return hex.EncodeToString(sum[:16])
-}
-
-// KeyedAgentID is the id of an agent enrolled by key: the prefix and its fingerprint.
-func KeyedAgentID(fingerprint string) string { return keyedAgentIDPrefix + fingerprint }
-
-// RegisterMessage is what an agent signs to answer a challenge: the ASCII text of registerMessageHeader, a zero
-// byte, the agent id, a zero byte and the 32 challenge bytes (decoded, never the hex text).
-func RegisterMessage(agentID string, challenge []byte) []byte {
-	msg := make([]byte, 0, len(registerMessageHeader)+len(agentID)+len(challenge)+2)
-	msg = append(msg, registerMessageHeader...)
-	msg = append(msg, 0)
-	msg = append(msg, agentID...)
-	msg = append(msg, 0)
-	return append(msg, challenge...)
-}
 
 // RegisterOutcome is what a keyed register came to.
 type RegisterOutcome string
@@ -96,14 +73,14 @@ func (s *ProvisionerStore) RegisterKeyed(ctx context.Context, reg KeyedRegistrat
 	if len(reg.PublicKey) != ed25519.PublicKeySize || (reg.Signature != nil && len(reg.Signature) != ed25519.SignatureSize) {
 		return KeyedResult{}, ErrKeyFormat
 	}
-	fp, key := KeyFingerprint(reg.PublicKey), hex.EncodeToString(reg.PublicKey)
+	fp, key := agentkey.Fingerprint(reg.PublicKey), hex.EncodeToString(reg.PublicKey)
 	hash, hashErr := neverIssuedTokenHash()
 	if hashErr != nil {
 		return KeyedResult{}, hashErr
 	}
 	pending := EnrolmentPending
 	row := reg.Details
-	row.AgentID, row.TokenHash, row.Status = KeyedAgentID(fp), hash, EnrolmentPending
+	row.AgentID, row.TokenHash, row.Status = agentkey.AgentID(fp), hash, EnrolmentPending
 	row.PublicKey, row.Fingerprint, row.EnrolmentState = &key, &fp, &pending
 	row.LastSeen, row.RegisteredAt = now, now
 
@@ -184,7 +161,7 @@ func verifyChallenge(cur ProvisionerAgent, reg KeyedRegistration, fp, key string
 		return ErrChallengeFailed
 	}
 	challenge, err := hex.DecodeString(*cur.Challenge)
-	if err != nil || !ed25519.Verify(reg.PublicKey, RegisterMessage(cur.AgentID, challenge), reg.Signature) {
+	if err != nil || !ed25519.Verify(reg.PublicKey, agentkey.RegisterMessage(cur.AgentID, challenge), reg.Signature) {
 		return ErrChallengeFailed
 	}
 	return nil

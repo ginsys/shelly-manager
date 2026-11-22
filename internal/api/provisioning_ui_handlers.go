@@ -12,6 +12,7 @@ import (
 
 	"github.com/gorilla/mux"
 
+	"github.com/ginsys/shelly-manager/internal/agentkey"
 	apiresp "github.com/ginsys/shelly-manager/internal/api/response"
 	"github.com/ginsys/shelly-manager/internal/database"
 )
@@ -121,7 +122,7 @@ func toUIAgent(agent *database.ProvisionerAgent) uiProvisioningAgent {
 	}
 	fingerprint := ""
 	if agent.Fingerprint != nil {
-		fingerprint = database.FormatFingerprint(*agent.Fingerprint)
+		fingerprint = agentkey.Readable(*agent.Fingerprint)
 	}
 	return uiProvisioningAgent{
 		ID:             agent.AgentID,

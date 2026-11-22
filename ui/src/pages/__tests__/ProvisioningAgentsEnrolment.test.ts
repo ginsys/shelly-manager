@@ -18,12 +18,12 @@ const fresh = new Date().toISOString()
 const stale = '2026-01-01T00:00:00Z'
 const base = { version: '1.0.0', capabilities: ['wifi'], lastSeen: fresh }
 
-const approved = { ...base, id: 'key-aaaa', name: 'keyed-host', status: 'online', enrolmentState: 'approved', fingerprint: FP_KEYED }
+const approved = { ...base, id: 'keyed-aaaa', name: 'keyed-host', status: 'online', enrolmentState: 'approved', fingerprint: FP_KEYED }
 const legacy = { ...base, id: 'old-one', name: 'legacy-host', status: 'online', enrolmentState: 'legacy' }
 // The manager stores the state name in `status` for a row that is not enrolled, and `offline` once it is stale.
-const pending = { ...base, id: 'key-bbbb', name: 'waiting-host', status: 'pending', enrolmentState: 'pending', fingerprint: FP_PENDING }
-const preapproved = { ...base, id: 'key-cccc', name: '', version: '', capabilities: [], status: 'preapproved', enrolmentState: 'preapproved', fingerprint: FP_PREAPPROVED }
-const rejected = { ...base, id: 'key-dddd', name: 'refused-host', lastSeen: stale, status: 'offline', enrolmentState: 'rejected', fingerprint: FP_REJECTED }
+const pending = { ...base, id: 'keyed-bbbb', name: 'waiting-host', status: 'pending', enrolmentState: 'pending', fingerprint: FP_PENDING }
+const preapproved = { ...base, id: 'keyed-cccc', name: '', version: '', capabilities: [], status: 'preapproved', enrolmentState: 'preapproved', fingerprint: FP_PREAPPROVED }
+const rejected = { ...base, id: 'keyed-dddd', name: 'refused-host', lastSeen: stale, status: 'offline', enrolmentState: 'rejected', fingerprint: FP_REJECTED }
 
 const realCreateElement = Document.prototype.createElement.bind(document)
 
@@ -119,26 +119,26 @@ describe('ProvisioningAgentsPage: enrolment', () => {
     const { wrapper } = mountWith(all)
     await flushPromises()
     const has = (kind: string, id: string) => wrapper.find(`[data-testid="row-${kind}-${id}"]`).exists()
-    expect([has('approve', 'key-aaaa'), has('reject', 'key-aaaa')]).toEqual([false, true]) // approved
+    expect([has('approve', 'keyed-aaaa'), has('reject', 'keyed-aaaa')]).toEqual([false, true]) // approved
     expect([has('approve', 'old-one'), has('reject', 'old-one')]).toEqual([false, false]) // legacy
-    expect([has('approve', 'key-bbbb'), has('reject', 'key-bbbb')]).toEqual([true, true]) // pending
-    expect([has('approve', 'key-cccc'), has('reject', 'key-cccc')]).toEqual([false, true]) // preapproved
-    expect([has('approve', 'key-dddd'), has('reject', 'key-dddd')]).toEqual([true, false]) // rejected
+    expect([has('approve', 'keyed-bbbb'), has('reject', 'keyed-bbbb')]).toEqual([true, true]) // pending
+    expect([has('approve', 'keyed-cccc'), has('reject', 'keyed-cccc')]).toEqual([false, true]) // preapproved
+    expect([has('approve', 'keyed-dddd'), has('reject', 'keyed-dddd')]).toEqual([true, false]) // rejected
   })
 
   it('approves a pending row at once, with no dialog', async () => {
     const { wrapper, store } = mountWith(all)
     await flushPromises()
-    await wrapper.find('[data-testid="approve-key-bbbb"]').trigger('click')
+    await wrapper.find('[data-testid="approve-keyed-bbbb"]').trigger('click')
     await flushPromises()
-    expect(store.approveAgent).toHaveBeenCalledWith('key-bbbb')
+    expect(store.approveAgent).toHaveBeenCalledWith('keyed-bbbb')
     expect(wrapper.find('[data-testid="confirm-dialog"]').exists()).toBe(false)
   })
 
   it('asks before it rejects, and says what rejecting costs', async () => {
     const { wrapper, store } = mountWith(all)
     await flushPromises()
-    await wrapper.find('[data-testid="row-reject-key-aaaa"]').trigger('click')
+    await wrapper.find('[data-testid="row-reject-keyed-aaaa"]').trigger('click')
     const dialog = wrapper.find('[data-testid="confirm-dialog"]')
     expect(dialog.text()).toContain('keyed-host')
     expect(dialog.text()).toContain('token stops working')
@@ -148,24 +148,24 @@ describe('ProvisioningAgentsPage: enrolment', () => {
     expect(store.rejectAgent).not.toHaveBeenCalled()
     expect(wrapper.find('[data-testid="confirm-dialog"]').exists()).toBe(false)
 
-    await wrapper.find('[data-testid="row-reject-key-aaaa"]').trigger('click')
+    await wrapper.find('[data-testid="row-reject-keyed-aaaa"]').trigger('click')
     await wrapper.find('[data-testid="confirm-act"]').trigger('click')
     await flushPromises()
-    expect(store.rejectAgent).toHaveBeenCalledWith('key-aaaa')
+    expect(store.rejectAgent).toHaveBeenCalledWith('keyed-aaaa')
     expect(wrapper.find('[data-testid="confirm-dialog"]').exists()).toBe(false)
   })
 
   it('asks before it approves a rejected row, which lets a refused key back in', async () => {
     const { wrapper, store } = mountWith(all)
     await flushPromises()
-    await wrapper.find('[data-testid="row-approve-key-dddd"]').trigger('click')
+    await wrapper.find('[data-testid="row-approve-keyed-dddd"]').trigger('click')
     const dialog = wrapper.find('[data-testid="confirm-dialog"]')
     expect(dialog.text()).toContain('was rejected')
     expect(dialog.text()).toContain('back in')
     expect(store.approveAgent).not.toHaveBeenCalled()
     await wrapper.find('[data-testid="confirm-act"]').trigger('click')
     await flushPromises()
-    expect(store.approveAgent).toHaveBeenCalledWith('key-dddd')
+    expect(store.approveAgent).toHaveBeenCalledWith('keyed-dddd')
   })
 
   it('pre-approves the typed fingerprint, trimmed, and clears the field', async () => {
@@ -182,9 +182,9 @@ describe('ProvisioningAgentsPage: enrolment', () => {
   })
 
   it.each([
-    ['approve', 'The agent\'s enrolment state does not allow this', async (w: VueWrapper) => w.find('[data-testid="approve-key-bbbb"]').trigger('click')],
+    ['approve', 'The agent\'s enrolment state does not allow this', async (w: VueWrapper) => w.find('[data-testid="approve-keyed-bbbb"]').trigger('click')],
     ['reject', 'Agent not found', async (w: VueWrapper) => {
-      await w.find('[data-testid="row-reject-key-aaaa"]').trigger('click')
+      await w.find('[data-testid="row-reject-keyed-aaaa"]').trigger('click')
       await w.find('[data-testid="confirm-act"]').trigger('click')
     }],
   ])('a refused %s shows the server\'s message once and keeps the rows', async (kind, message, act) => {

@@ -17,6 +17,7 @@ import (
 
 	"github.com/gorilla/mux"
 
+	"github.com/ginsys/shelly-manager/internal/agentkey"
 	apiresp "github.com/ginsys/shelly-manager/internal/api/response"
 	"github.com/ginsys/shelly-manager/internal/database"
 	"github.com/ginsys/shelly-manager/internal/security/apikey"
@@ -64,11 +65,11 @@ func (h *Handler) provisionerActor(r *http.Request) database.ProvisionerActor {
 	}
 }
 
-// hasKeyPrefix reports whether id starts with the four bytes "key-" in any case. The fold is over ASCII
+// hasKeyPrefix reports whether id starts with the keyed-agent prefix in any case. The fold is over ASCII
 // bytes only: strings.EqualFold would also match U+212A (the Kelvin sign) to "k", which a byte
 // comparison of the id never does.
 func hasKeyPrefix(id string) bool {
-	const prefix = "key-"
+	const prefix = agentkey.IDPrefix
 	if len(id) < len(prefix) {
 		return false
 	}
@@ -196,8 +197,8 @@ func (h *Handler) registerKeyed(w http.ResponseWriter, r *http.Request, id, host
 		h.responseWriter().WriteValidationError(w, r, "hostname, version, capabilities and metadata must not contain a NUL character")
 		return
 	}
-	fingerprint := database.KeyFingerprint(key)
-	if id != database.KeyedAgentID(fingerprint) {
+	fingerprint := agentkey.Fingerprint(key)
+	if id != agentkey.AgentID(fingerprint) {
 		h.responseWriter().WriteValidationError(w, r, "The agent id must be the one derived from the public key")
 		return
 	}
@@ -228,7 +229,7 @@ func (h *Handler) registerKeyed(w http.ResponseWriter, r *http.Request, id, host
 		h.purgeRegistryIfDue(r.Context())
 		return
 	}
-	body := map[string]any{"status": string(res.Outcome), "agent_id": id, "fingerprint": database.FormatFingerprint(fingerprint)}
+	body := map[string]any{"status": string(res.Outcome), "agent_id": id, "fingerprint": agentkey.Readable(fingerprint)}
 	switch res.Outcome {
 	case database.OutcomeChallenge:
 		body["challenge"], body["message"] = res.Challenge, "Sign the challenge with the agent key and register again within 60 seconds"
@@ -279,10 +280,10 @@ func (h *Handler) RegisterAgent(w http.ResponseWriter, r *http.Request) {
 		h.responseWriter().WriteError(w, r, http.StatusForbidden, apiresp.ErrCodeForbidden, "This manager enrols agents by key only: register with a public key, and the operator must approve its fingerprint", nil)
 		return
 	}
-	// "key-" is the prefix of an id derived from an agent's key, in any case. A keyless agent never
+	// agentkey.IDPrefix is the prefix of an id derived from an agent's key, in any case. A keyless agent never
 	// gets such an id, so a key's id is never held by somebody else first.
 	if hasKeyPrefix(req.ID) {
-		h.responseWriter().WriteValidationError(w, r, `Agent id must not start with "key-": that prefix is reserved for agents enrolled by key`)
+		h.responseWriter().WriteValidationError(w, r, `Agent id must not start with "`+agentkey.IDPrefix+`": that prefix is reserved for agents enrolled by key`)
 		return
 	}
 	// A NUL is refused before the store for a new id and an existing one alike: PostgreSQL can never hold
@@ -432,7 +433,7 @@ type provisionerAgentView struct {
 func newProvisionerAgentView(agent database.ProvisionerAgent) provisionerAgentView {
 	view := provisionerAgentView{ProvisionerAgent: agent, EnrolmentState: agent.State()}
 	if agent.Fingerprint != nil {
-		view.Fingerprint = database.FormatFingerprint(*agent.Fingerprint)
+		view.Fingerprint = agentkey.Readable(*agent.Fingerprint)
 	}
 	return view
 }

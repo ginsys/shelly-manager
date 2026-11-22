@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ginsys/shelly-manager/internal/agentkey"
 	"github.com/ginsys/shelly-manager/internal/database"
 )
 
@@ -32,7 +33,7 @@ func TestStrictEnrolment_KeylessRegisterIs403ForEveryCaller(t *testing.T) {
 		code, _, body := idRegister(t, srv, "plain-agent", hdr)
 		assert.Equal(t, http.StatusForbidden, code, "%s: %s", name, body)
 	}
-	// A key- id is refused the same way: the mode, not the id, is the answer.
+	// A keyed id is refused the same way: the mode, not the id, is the answer.
 	priv := kdKey(0xc1)
 	code, _, body := idRegister(t, srv, kdID(priv), idAgentHdr(""))
 	assert.Equal(t, http.StatusForbidden, code, body)
@@ -105,7 +106,7 @@ func TestStrictEnrolment_NoOtherStateHoldsAUsableToken(t *testing.T) {
 	for i, state := range []string{database.EnrolmentPending, database.EnrolmentPreapproved, database.EnrolmentRejected} {
 		priv := kdKey(byte(0xc3 + i))
 		id := kdID(priv)
-		fp := id[len("key-"):]
+		fp := id[len(agentkey.IDPrefix):]
 		token := "tok-strict-" + state
 		st := state
 		row := database.ProvisionerAgent{

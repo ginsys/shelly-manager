@@ -4288,7 +4288,7 @@ paths:
                       pattern: '^[0-9a-f]{64}$'
                       description: >-
                         The agent's Ed25519 public key, 32 bytes as lowercase hexadecimal. Makes the request a keyed
-                        register: `id` must then be `key-` and the fingerprint of this key.
+                        register: `id` must then be `keyed-` and the fingerprint of this key.
                     signature:
                       type: string
                       pattern: '^[0-9a-f]{128}$'
@@ -4318,7 +4318,7 @@ paths:
                 $ref: '#/components/schemas/APIResponse'
         '400':
           description: >-
-            The request is refused. Either the id starts with `key-` in any case without a public key (that prefix
+            The request is refused. Either the id starts with `keyed-` in any case without a public key (that prefix
             is reserved for agents enrolled by key), or it would create a new agent and holds a space or a byte
             outside printable ASCII (`0x21` to `0x7E`) without starting with `provisioner-`, or a register
             without a public key holds a NUL character in the id (new or existing), hostname, version,

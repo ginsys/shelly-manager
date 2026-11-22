@@ -13,6 +13,7 @@ Supported secret keys (value or `_FILE`):
 - SHELLY_OPNSENSE_API_KEY
 - SHELLY_OPNSENSE_API_SECRET
 - SHELLY_API_KEY (provisioner agent: send it the agent key, never the admin key)
+- SHELLY_PROVISIONING_AGENT_SEED (provisioner agent: the seed that makes its signing key; 64 hexadecimal characters. `shelly-provisioner seed` prints a new one, so its output belongs in the secret store and nowhere else. The agent never logs, prints or sends it, and it has no flag. The manager reads the variable too, because both programs share one table, and uses it nowhere.)
 
 `SHELLY_SECURITY_AGENT_API_KEY` also takes the `_FILE` form. Kubernetes can keep using `secretKeyRef`.
 

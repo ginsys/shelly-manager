@@ -201,13 +201,13 @@ func checkProvisionerIDRule(t *testing.T, manager *Manager) {
 	})
 
 	t.Run("an id that a folding collation would equate with an enrolled key's is refused either way", func(t *testing.T) {
-		// "kéy-…" is the accent-folded spelling of "key-…". Under a binary collation it is a new id and the
+		// "kéyed-…" is the accent-folded spelling of "keyed-…". Under a binary collation it is a new id and the
 		// id rule refuses it; under a folding collation it finds the keyed row and the state check refuses it.
-		insertEnrolledRow(t, manager, "key-fold-demo", EnrolmentApproved, "tok-key-fold", now.Add(-time.Hour))
-		_, _, err := s.RegisterAgent(ctx, adminActor, agentRow("kéy-fold-demo", "intruder", now), testOfflineAfter)
+		insertEnrolledRow(t, manager, "keyed-fold-demo", EnrolmentApproved, "tok-key-fold", now.Add(-time.Hour))
+		_, _, err := s.RegisterAgent(ctx, adminActor, agentRow("kéyed-fold-demo", "intruder", now), testOfflineAfter)
 		require.Error(t, err)
 		assert.True(t, errors.Is(err, ErrAgentIDInvalid) || errors.Is(err, ErrAgentEnrolled), "got %v", err)
-		row, getErr := s.GetAgent(ctx, "key-fold-demo")
+		row, getErr := s.GetAgent(ctx, "keyed-fold-demo")
 		require.NoError(t, getErr)
 		assert.Equal(t, HashAgentToken("tok-key-fold"), row.TokenHash, "the keyed row is untouched")
 	})

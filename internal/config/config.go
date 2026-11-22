@@ -58,6 +58,14 @@ type Config struct {
 		DeviceNamePattern string `mapstructure:"device_name_pattern"`
 		AutoProvision     bool   `mapstructure:"auto_provision"`
 		ProvisionInterval int    `mapstructure:"provision_interval"`
+		// AgentSeed is the agent's secret: 64 hex characters that make its signing key (shelly-provisioner seed
+		// prints a new one). It is read from SHELLY_PROVISIONING_AGENT_SEED or its _FILE form, never logged,
+		// printed or sent. The manager reads it too (one shared secrets table) and uses it nowhere.
+		AgentSeed string `mapstructure:"agent_seed"`
+		// Enrolment is the agent's side of security.agent_enrolment: EnrolmentOpen (the default) lets an agent
+		// with no seed register as before, EnrolmentStrict refuses to start without a seed and refuses a manager
+		// that hands out a token without a signed challenge. See ValidateProvisioningEnrolment.
+		Enrolment string `mapstructure:"enrolment"`
 	} `mapstructure:"provisioning"`
 	DHCP struct {
 		Network     string `mapstructure:"network"`
@@ -250,20 +258,37 @@ const (
 	EnrolmentStrict = "strict"
 )
 
+// checkEnrolmentMode is the one check of an enrolment mode, for the manager's setting and the agent's.
+func checkEnrolmentMode(key, mode string) error {
+	if mode != EnrolmentOpen && mode != EnrolmentStrict {
+		return fmt.Errorf("%s is %q: it must be %q or %q", key, mode, EnrolmentOpen, EnrolmentStrict)
+	}
+	return nil
+}
+
 // ValidateAgentEnrolment stops the start on a security.agent_enrolment that is neither "open" nor "strict",
 // and on "strict" with no admin key: without an admin key every admin route is open, so anybody could approve
 // an agent and the mode would guard nothing. It runs after the secret overrides, which can supply the key.
 func (c *Config) ValidateAgentEnrolment() error {
-	switch c.Security.AgentEnrolment {
-	case EnrolmentOpen:
-		return nil
-	case EnrolmentStrict:
-		if c.Security.AdminAPIKey == "" {
-			return fmt.Errorf("security.agent_enrolment is %q, which needs an admin key (security.admin_api_key): with none, every admin route is open and anybody could approve an agent", EnrolmentStrict)
-		}
-		return nil
+	if err := checkEnrolmentMode("security.agent_enrolment", c.Security.AgentEnrolment); err != nil {
+		return err
 	}
-	return fmt.Errorf("security.agent_enrolment is %q: it must be %q or %q", c.Security.AgentEnrolment, EnrolmentOpen, EnrolmentStrict)
+	if c.Security.AgentEnrolment == EnrolmentStrict && c.Security.AdminAPIKey == "" {
+		return fmt.Errorf("security.agent_enrolment is %q, which needs an admin key (security.admin_api_key): with none, every admin route is open and anybody could approve an agent", EnrolmentStrict)
+	}
+	return nil
+}
+
+// ValidateProvisioningEnrolment is the agent's side: provisioning.enrolment must be "open" or "strict", and
+// "strict" needs a seed (provisioning.agent_seed), because a strict manager turns a keyless agent away.
+func (c *Config) ValidateProvisioningEnrolment() error {
+	if err := checkEnrolmentMode("provisioning.enrolment", c.Provisioning.Enrolment); err != nil {
+		return err
+	}
+	if c.Provisioning.Enrolment == EnrolmentStrict && c.Provisioning.AgentSeed == "" {
+		return fmt.Errorf("provisioning.enrolment is %q, which needs a seed (provisioning.agent_seed, SHELLY_PROVISIONING_AGENT_SEED or its _FILE form): shelly-provisioner seed makes one", EnrolmentStrict)
+	}
+	return nil
 }
 
 // setDefaults sets default configuration values
@@ -384,6 +409,8 @@ func setDefaults() {
 	viper.SetDefault("security.admin_api_key", "")
 	viper.SetDefault("security.agent_api_key", "")
 	viper.SetDefault("security.agent_enrolment", EnrolmentOpen)
+	viper.SetDefault("provisioning.enrolment", EnrolmentOpen)
+	viper.SetDefault("provisioning.agent_seed", "")
 	// Validation test mode disabled by default (security validations enabled)
 	viper.SetDefault("security.validation_test_mode", false)
 	// Security monitor and IP blocking are off until an operator turns them on. The numbers are

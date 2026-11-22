@@ -20,13 +20,13 @@ func idRows(t *testing.T, db *database.Manager, id string) int64 {
 	return n
 }
 
-// An id that starts with "key-" in any case is the shape of a keyed agent id. A keyless register of one
+// An id that starts with "keyed-" in any case is the shape of a keyed agent id. A keyless register of one
 // is refused before the store, so the shared key cannot reserve an id a key will derive.
 func TestProvisionerEnrolment_KeyPrefixIsRefusedInAnyCase(t *testing.T) {
 	srv, db := idServer(t)
-	ids := []string{"key-an-agent-id-a-key-would-derive", "KEY-", "key-"}
-	for mask := 0; mask < 8; mask++ { // every upper and lower case form of the three letters
-		prefix := []byte("key")
+	ids := []string{"keyed-an-agent-id-a-key-would-derive", "KEYED-", "keyed-"}
+	for mask := 0; mask < 32; mask++ { // every upper and lower case form of the five letters
+		prefix := []byte("keyed")
 		for i := range prefix {
 			if mask&(1<<i) != 0 {
 				prefix[i] -= 'a' - 'A'
@@ -45,7 +45,11 @@ func TestProvisionerEnrolment_KeyPrefixIsRefusedInAnyCase(t *testing.T) {
 
 func TestProvisionerEnrolment_OtherIdsKeepRegistering(t *testing.T) {
 	srv, _ := idServer(t)
-	for _, id := range []string{"key", "keyboard", "ke-y", "monkey-1", "Key", "provisioner-host-1"} {
+	// "key-" ids are keyless ids again, since the keyed prefix is "keyed-" now; the others sit next to the new boundary.
+	for _, id := range []string{
+		"key-", "key-an-agent-id", "KEY-abc", "key", "keyed", "keye-d", "keyed_x", "ke-yed-1", "keyboard", "ke-y",
+		"monkeyed-1", "Keyed", "provisioner-host-1",
+	} {
 		code, _, body := idRegister(t, srv, id, idAgentHdr(""))
 		assert.Equal(t, http.StatusCreated, code, "%q: %s", id, body)
 	}
@@ -53,11 +57,12 @@ func TestProvisionerEnrolment_OtherIdsKeepRegistering(t *testing.T) {
 
 // The fold is over ASCII bytes. strings.EqualFold would match U+212A (the Kelvin sign) to "k".
 func TestProvisionerEnrolment_PrefixFoldIsASCIIOnly(t *testing.T) {
-	assert.True(t, hasKeyPrefix("key-x"))
-	assert.True(t, hasKeyPrefix("KeY-x"))
-	assert.False(t, hasKeyPrefix("Key-x"), "U+212A is not an ASCII k")
-	assert.False(t, hasKeyPrefix("ke"))
-	assert.False(t, hasKeyPrefix("key_x"))
+	assert.True(t, hasKeyPrefix("keyed-x"))
+	assert.True(t, hasKeyPrefix("KeYeD-x"))
+	assert.False(t, hasKeyPrefix("key-x"), "the old prefix is a keyless id again")
+	assert.False(t, hasKeyPrefix("Keyed-x"), "U+212A is not an ASCII k")
+	assert.False(t, hasKeyPrefix("keye"))
+	assert.False(t, hasKeyPrefix("keyed_x"))
 	assert.False(t, hasKeyPrefix(""))
 }
 

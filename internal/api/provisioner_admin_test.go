@@ -12,11 +12,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ginsys/shelly-manager/internal/agentkey"
 	"github.com/ginsys/shelly-manager/internal/database"
 )
 
-// admFingerprint is a stored-form fingerprint made of one repeated byte, built at run time: a literal "key-"
-// and 32 characters in the source reads as an API key to a secret scanner.
+// admFingerprint is a stored-form fingerprint made of one repeated byte, built at run time.
 func admFingerprint(b byte) string { return strings.Repeat(fmt.Sprintf("%02x", b), 16) }
 
 // admAgent is the data of an agent as the admin routes answer it.
@@ -41,7 +41,7 @@ func admCall(t *testing.T, srv *httptest.Server, method, path, body string, hdr 
 // admInsert writes the row of an agent enrolled by key, as a signed register will.
 func admInsert(t *testing.T, db *database.Manager, fp, state string, hasKey bool) string {
 	t.Helper()
-	id := "key-" + fp
+	id := agentkey.IDPrefix + fp
 	now := time.Now()
 	row := database.ProvisionerAgent{
 		AgentID: id, TokenHash: database.HashAgentToken("tok-" + id), Hostname: "h-" + fp[:4], Status: "online",
@@ -157,7 +157,7 @@ func TestProvisionerAdmin_PreapproveRoute(t *testing.T) {
 
 	code, agent, body := admCall(t, srv, "POST", "/api/v1/provisioner/enrolments", `{"fingerprint":"`+fp+`"}`, admin)
 	require.Equal(t, http.StatusCreated, code, body)
-	assert.Equal(t, "key-"+fp, agent.ID)
+	assert.Equal(t, agentkey.IDPrefix+fp, agent.ID)
 	assert.Equal(t, "preapproved", agent.EnrolmentState)
 	assert.Equal(t, "preapproved", agent.Status)
 

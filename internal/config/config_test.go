@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -647,6 +648,57 @@ func TestValidateAgentEnrolment(t *testing.T) {
 		cfg.Security.AgentEnrolment, cfg.Security.AdminAPIKey = c.mode, c.adminKey
 		if err := cfg.ValidateAgentEnrolment(); (err != nil) != c.wantErr {
 			t.Errorf("%s: error = %v, want error %v", c.name, err, c.wantErr)
+		}
+	}
+}
+
+// The agent's own settings (ginsys/shelly-manager#638, slice 3): provisioning.enrolment defaults to open,
+// and the seed is a secret that only the environment fills.
+func TestProvisioningEnrolment_DefaultsToOpenAndTakesTheEnvironment(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "agent.yaml")
+	if err := os.WriteFile(configPath, []byte("server:\n  port: 8080\n"), 0644); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Provisioning.Enrolment != EnrolmentOpen || cfg.Provisioning.AgentSeed != "" {
+		t.Errorf("provisioning.enrolment = %q, agent_seed = %q: want open and no seed by default", cfg.Provisioning.Enrolment, cfg.Provisioning.AgentSeed)
+	}
+
+	t.Setenv("SHELLY_PROVISIONING_ENROLMENT", "strict")
+	cfg, err = Load(configPath)
+	if err != nil {
+		t.Fatalf("Load with env: %v", err)
+	}
+	if cfg.Provisioning.Enrolment != EnrolmentStrict {
+		t.Errorf("SHELLY_PROVISIONING_ENROLMENT=strict gave %q", cfg.Provisioning.Enrolment)
+	}
+}
+
+func TestValidateProvisioningEnrolment(t *testing.T) {
+	cases := []struct {
+		name, mode, seed string
+		wantErr          bool
+	}{
+		{"open, no seed", EnrolmentOpen, "", false},
+		{"open, seed", EnrolmentOpen, "s", false},
+		{"strict, seed", EnrolmentStrict, "s", false},
+		{"strict, no seed", EnrolmentStrict, "", true},
+		{"empty value", "", "s", true},
+		{"another case", "Strict", "s", true},
+		{"another word", "closed", "s", true},
+	}
+	for _, c := range cases {
+		var cfg Config
+		cfg.Provisioning.Enrolment, cfg.Provisioning.AgentSeed = c.mode, c.seed
+		err := cfg.ValidateProvisioningEnrolment()
+		if (err != nil) != c.wantErr {
+			t.Errorf("%s: error = %v, want error %v", c.name, err, c.wantErr)
+		}
+		if err != nil && strings.Contains(err.Error(), "provisioning.enrolment") == false {
+			t.Errorf("%s: the error must name the setting: %v", c.name, err)
 		}
 	}
 }
