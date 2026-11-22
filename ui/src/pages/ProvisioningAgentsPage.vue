@@ -17,8 +17,8 @@
     <section v-if="store.pendingAgents.length" class="pending" data-testid="pending-agents">
       <h2>Waiting for approval ({{ store.pendingAgents.length }})</h2>
       <p class="hint">
-        Compare each fingerprint with the one in the agent's own log before you approve. The name and version
-        are what the agent sent: they prove nothing.
+        Compare each fingerprint with the one in the agent's own log before you approve. The name is what the
+        agent sent: it proves nothing.
       </p>
       <table>
         <thead>
@@ -103,7 +103,7 @@
     <section style="margin-top:24px">
       <h2>Summary</h2>
       <div class="stats">
-        <div class="card">Total: {{ store.workingAgents.length }}</div>
+        <div class="card">Enrolled: {{ store.workingAgents.length }}</div>
         <div class="card">Online: {{ store.onlineAgents.length }}</div>
         <div class="card">Busy: {{ store.busyAgents.length }}</div>
         <div class="card">Offline: {{ store.offlineAgents.length }}</div>

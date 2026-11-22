@@ -18,6 +18,7 @@ import (
 	"gorm.io/gorm"
 
 	apiresp "github.com/ginsys/shelly-manager/internal/api/response"
+	"github.com/ginsys/shelly-manager/internal/config"
 	"github.com/ginsys/shelly-manager/internal/configuration"
 	"github.com/ginsys/shelly-manager/internal/database"
 	"github.com/ginsys/shelly-manager/internal/logging"
@@ -116,7 +117,7 @@ func (h *Handler) SetAgentAPIKey(key string) { h.AgentAPIKey = key }
 // SetAgentEnrolment sets who may enrol a provisioner agent: "strict" lets in only an approved agent (no keyless
 // register, and the token of a row that is not approved authorizes nothing), any other value leaves enrolment
 // open as it was. The config check has refused any other value at start-up.
-func (h *Handler) SetAgentEnrolment(mode string) { h.strictEnrolment = mode == "strict" }
+func (h *Handler) SetAgentEnrolment(mode string) { h.strictEnrolment = mode == config.EnrolmentStrict }
 
 // requireAdmin checks Authorization or X-API-Key against the admin key.
 func (h *Handler) requireAdmin(w http.ResponseWriter, r *http.Request) bool {

@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ginsys/shelly-manager/internal/agentkey"
+	"github.com/ginsys/shelly-manager/internal/config"
 	"github.com/ginsys/shelly-manager/internal/database"
 )
 
@@ -20,7 +21,7 @@ import (
 func strictServerOn(t *testing.T, db *database.Manager) *httptest.Server {
 	t.Helper()
 	router, handler := configRoutesHandlerOn(t, db, idAdminKey, idAgentKey)
-	handler.SetAgentEnrolment("strict")
+	handler.SetAgentEnrolment(config.EnrolmentStrict)
 	srv := httptest.NewServer(router)
 	t.Cleanup(srv.Close)
 	return srv

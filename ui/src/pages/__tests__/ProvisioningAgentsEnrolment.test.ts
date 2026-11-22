@@ -80,7 +80,9 @@ describe('ProvisioningAgentsPage: enrolment', () => {
     expect(activity('waiting-host')).toBe('—')
     expect(activity('refused-host')).toBe('—')
     const summary = wrapper.find('.stats').text()
-    expect(summary).toContain('Total: 2')
+    // "Enrolled" is the complement of "Not enrolled": together they are every row.
+    expect(summary).toContain('Enrolled: 2')
+    expect(summary).not.toContain('Total')
     expect(summary).toContain('Online: 2')
     expect(summary).toContain('Offline: 0')
     expect(summary).toContain('Not enrolled: 3')
@@ -106,7 +108,9 @@ describe('ProvisioningAgentsPage: enrolment', () => {
     expect(section.text()).toContain(FP_PENDING)
     expect(section.text()).not.toContain('keyed-host')
     expect(section.text()).toContain("Compare each fingerprint with the one in the agent's own log")
-    expect(section.text()).toContain('prove nothing')
+    expect(section.text()).toContain('proves nothing')
+    // The pending table has no Version column, so the hint must not name one.
+    expect(section.text().toLowerCase()).not.toContain('version')
   })
 
   it('has no pending section when nothing waits', async () => {

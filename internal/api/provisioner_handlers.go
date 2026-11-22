@@ -114,8 +114,6 @@ func (h *Handler) writeProvisionerError(w http.ResponseWriter, r *http.Request, 
 		h.responseWriter().WriteError(w, r, http.StatusTooManyRequests, apiresp.ErrCodeRateLimitExceeded, "Too many agents wait for approval: the operator must decide some first", nil)
 	case errors.Is(err, database.ErrChallengeFailed):
 		h.responseWriter().WriteError(w, r, http.StatusUnauthorized, apiresp.ErrCodeUnauthorized, "The challenge is missing or expired, or the signature does not verify: register again without a signature", nil)
-	case errors.Is(err, database.ErrKeyFormat):
-		h.responseWriter().WriteValidationError(w, r, "public_key must be 32 bytes and signature 64 bytes")
 	case errors.Is(err, database.ErrFingerprintInvalid):
 		h.responseWriter().WriteValidationError(w, r, "A fingerprint is 32 hexadecimal characters, or eight groups of four joined by hyphens")
 	case errors.Is(err, database.ErrAgentIDInvalid):
