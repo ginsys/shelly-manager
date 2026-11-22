@@ -24,6 +24,7 @@ type modeDevice struct {
 
 	configErrAfterMode bool // GET /settings fails once a mode was written
 	modeWritten        bool
+	omitRelays         bool // the settings hold only the rollers, as before a switch to relay mode
 }
 
 func newModeDevice(mode string) *modeDevice {
@@ -51,11 +52,16 @@ func (d *modeDevice) GetConfig(context.Context) (*shelly.DeviceConfig, error) {
 	if d.configErrAfterMode && d.modeWritten {
 		return nil, errors.New("connection reset")
 	}
-	raw, err := json.Marshal(map[string]interface{}{
+	settings := map[string]interface{}{
 		"mode":      d.mode,
 		"max_power": 4600,
 		"relays":    []interface{}{map[string]interface{}{"max_power": 4600}, map[string]interface{}{"max_power": 4600}},
-	})
+	}
+	if d.omitRelays {
+		delete(settings, "relays")
+		settings["rollers"] = []interface{}{map[string]interface{}{}}
+	}
+	raw, err := json.Marshal(settings)
 	if err != nil {
 		return nil, err
 	}
@@ -235,6 +241,19 @@ func TestApplyConfig_MaxPowerFollowsTheModeThatTheApplyWrites(t *testing.T) {
 		assert.True(t, result.Success, "failures: %+v", result.Failures)
 		assert.Empty(t, d.configs)
 		require.Len(t, d.relayWrites, 2)
+		for _, write := range d.relayWrites {
+			assert.Equal(t, map[string]interface{}{"max_power": float64(3000)}, write.form)
+		}
+	})
+	t.Run("roller to relay with no relay channel reported before the switch", func(t *testing.T) {
+		d := newModeDevice("roller")
+		d.omitRelays = true
+
+		result := applyOnModeDevice(t, d, withMode(power(), "relay"))
+
+		assert.True(t, result.Success, "failures: %+v", result.Failures)
+		assert.Empty(t, d.configs, "relay mode needs per-channel writes, never POST /settings max_power")
+		require.Len(t, d.relayWrites, 2, "a 2.5 has two channels whatever the settings listed")
 		for _, write := range d.relayWrites {
 			assert.Equal(t, map[string]interface{}{"max_power": float64(3000)}, write.form)
 		}
