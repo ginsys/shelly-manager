@@ -242,7 +242,7 @@
       @refresh="handleRefresh"
     />
 
-    <div class="card" data-testid="history-card">
+    <div id="history-card" ref="historyCardEl" class="card" data-testid="history-card">
       <div class="header-row">
         <h2>History</h2>
       </div>
@@ -304,7 +304,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useDeviceConfigNewStore } from '@/stores/deviceConfigNew'
 import ConfigView from '@/components/config/ConfigView.vue'
@@ -363,6 +363,20 @@ const history = ref<ConfigHistoryEntry[]>([])
 const historyLoaded = ref(false)
 const historyError = ref<string | null>(null)
 const openEntries = ref<Set<number>>(new Set())
+
+// "View History" and the old history address open this page at #history-card. The page moves to the card
+// once, when the first read of the history for the device on screen has settled: a later read (after a save,
+// a template change or a rollback) must not move the page again while the address keeps the hash.
+const historyCardEl = ref<HTMLElement | null>(null)
+let landAtHistory = false
+function armLanding() {
+  landAtHistory = route.hash === '#history-card'
+}
+function landAtHistoryCard() {
+  if (!landAtHistory) return
+  landAtHistory = false
+  void nextTick(() => historyCardEl.value?.scrollIntoView?.({ block: 'start' }))
+}
 
 // A failed action shows as an error panel under the toolbar. A failed template add shows inside the
 // add-template dialog instead, which is open and covers the page when it happens.
@@ -470,11 +484,13 @@ async function loadStored() {
       history.value = rows
       historyError.value = null
       historyLoaded.value = true
+      landAtHistoryCard()
     },
     (e: any) => {
       if (!current()) return
       history.value = []
       historyError.value = e?.response?.data?.error?.message || e?.message || 'Failed to read the configuration history'
+      landAtHistoryCard()
     },
   )
   await Promise.all([readStored, readHistory])
@@ -697,6 +713,7 @@ async function handleVerify() {
 // handlers stop when the page is left, so none of them touches what the next page shows.
 onMounted(() => {
   store.reset()
+  armLanding()
   handleRefresh()
 })
 
@@ -724,6 +741,7 @@ watch(deviceId, (next, previous) => {
   liveError.value = null
   liveLoading.value = false
   resetStored()
+  armLanding()
   handleRefresh()
 })
 </script>

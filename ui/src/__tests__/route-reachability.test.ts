@@ -144,7 +144,8 @@ describe('Route reachability', () => {
 
   it('reads a page file for every route in the table', () => {
     // If the table's shape changes and the parser misses a route, its own page would count as a link.
-    expect(Object.keys(own).sort()).toEqual(routes.map(r => r.path).sort())
+    // A redirect has no page file: it only sends an old address to a route that has one.
+    expect(Object.keys(own).sort()).toEqual(routes.filter(r => !r.redirect).map(r => r.path).sort())
   })
 
   it('links every route without a path parameter from the top bar or from another page', () => {
