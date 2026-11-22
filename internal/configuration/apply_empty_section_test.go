@@ -146,13 +146,15 @@ func TestApplyDesiredConfig_Gen2AnEmptySectionBesideARealValueApplies(t *testing
 func TestApplyDesiredConfig_ARealValueBesideAnEmptySectionIsStillRefused(t *testing.T) {
 	t.Run("gen1 cloud server", func(t *testing.T) {
 		svc, repo := newServiceWithDesiredName(t, "x")
-		setStoredDesired(repo, `{"system":{"sntp":{}},"location":{"timezone":"Europe/Brussels"},"cloud":{"server":"x"}}`)
+		setStoredDesired(repo, `{"system":{"sntp":{}},"cloud":{"server":"x"}}`)
 		dev := newFakeGen1Device()
 
 		_, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SHPLG-S")
 
 		require.Error(t, err)
 		assert.True(t, errors.Is(err, ErrUnsupportedSettings))
+		assert.Contains(t, err.Error(), "cloud.server")
+		assert.NotContains(t, err.Error(), "system", "the empty section is not named")
 		assert.Equal(t, 0, dev.setCalls)
 	})
 	t.Run("gen2 time server", func(t *testing.T) {
@@ -303,8 +305,9 @@ func TestDetectDrift_ARealDifferenceBesideAnEmptySectionIsStillDrift(t *testing.
 // The comparator is untouched: it still reports an empty section the way it always did.
 func TestComparator_StillReportsAnEmptySection(t *testing.T) {
 	want := &DeviceConfiguration{System: &SystemConfiguration{SNTP: &SNTPConfig{}}}
-	diffs := NewConfigComparator().Compare(want, &DeviceConfiguration{})
-	require.NotEmpty(t, diffs)
+	result := NewConfigComparator().Compare(want, &DeviceConfiguration{})
+	assert.False(t, result.Match)
+	require.NotEmpty(t, result.Differences)
 }
 
 // dropEmptySections works on the parsed copy: a value, a set zero and a list survive.
