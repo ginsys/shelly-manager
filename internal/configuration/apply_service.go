@@ -374,7 +374,7 @@ func unsupportedApplySettings(converter ConfigConverter, desired *DeviceConfigur
 	// A light channel's id is its position for the same reason.
 	if desired.Light != nil {
 		for i, light := range desired.Light.Lights {
-			if deviceType == "SHRGBW2" {
+			if hasColorWhiteChannels(deviceType) {
 				unsupported = append(unsupported, unsupportedRGBW2LightValues(i, light)...)
 				continue
 			}
