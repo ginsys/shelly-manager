@@ -248,8 +248,11 @@ page imports still counts. The Playwright spec is what proves the links are rend
   the editor only while the editor is closed. If the saved overrides change under an open edit (a rollback does
   this), the edit is kept, a notice says so, and Save is off until Cancel loads the saved overrides. It sees a
   change this page has read: one made from another browser, or one whose refresh failed, is not seen. Text in
-  the JSON view that does not parse yet is still lost on a refresh, because the page shows "Loading..." in place
-  of the editor while it loads (ginsys/shelly-manager#858).
+  the JSON view that does not parse yet is kept too (ginsys/shelly-manager#858): the page holds it while it
+  shows "Loading..." in place of the editor, and the editor opens in the JSON view with it again, Save still off.
+  Cancel, Clear All and another device drop it, and so does text that parses. It is page memory: leaving the page drops it.
+
+  ![The JSON view keeps text that does not parse after a refresh](images/device-config-json-draft-kept.png)
 - **Drift compares with the desired configuration**, the one apply writes and verify reads, and no
   longer with the stored import record (ginsys/shelly-manager#606). A device with no desired
   configuration cannot be checked: the drift route answers 404 and a bulk run marks it skipped.
