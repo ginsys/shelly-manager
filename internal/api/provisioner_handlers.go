@@ -280,8 +280,10 @@ func (h *Handler) RegisterAgent(w http.ResponseWriter, r *http.Request) {
 	}
 	// A NUL is refused before the store for a new id and an existing one alike: PostgreSQL can never hold
 	// such a row, and the id rule of the store runs only after the insert.
-	field := "id"
-	if !hasNUL(req.ID) {
+	var field string
+	if hasNUL(req.ID) {
+		field = "id"
+	} else {
 		field = nulReportedField(req.Hostname, req.Version, req.Capabilities, req.Metadata)
 	}
 	if field != "" {
