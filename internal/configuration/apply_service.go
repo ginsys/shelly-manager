@@ -44,6 +44,7 @@ type LoginHooks interface {
 // is refused through the round-trip check below, and so is a cloud server, which Gen1 neither
 // reports nor accepts.
 var gen1ApplyKeys = map[string]bool{
+	"mode":               true, // written first and alone (applyModeSetting), never with the main settings
 	"name":               true,
 	"timezone":           true,
 	"lat":                true,
@@ -85,6 +86,7 @@ var gen1ApplicablePaths = map[string]bool{
 	"system.device.name":         true,
 	"system.device.eco_mode":     true,
 	"system.device.discoverable": true,
+	"system.device.mode":         true, // the schema drops the leaf of a model without the switch
 	"location.tz":                true,
 	"location.lat":               true,
 	"location.lng":               true,
@@ -263,6 +265,8 @@ func unsupportedApplySettings(converter ConfigConverter, desired *DeviceConfigur
 		unsupported = append(unsupported, unsupportedLogin(desired.Auth)...)
 	}
 
+	unsupported = append(unsupported, unsupportedMode(desired, deviceType)...)
+
 	// The converter drops desired settings it has no Gen1 mapping for (for example system.sntp
 	// or mqtt.update_period), so they never reach apiConfig. Convert back and report every
 	// populated desired field that did not survive the round trip.
@@ -271,7 +275,7 @@ func unsupportedApplySettings(converter ConfigConverter, desired *DeviceConfigur
 		return nil, fmt.Errorf("failed to check converted config: %w", err)
 	}
 	// The converter carries no actions, so the round trip never sees them: unsupportedActions rules.
-	for _, diff := range NewConfigComparator().Compare(withoutActions(desired), back).Differences {
+	for _, diff := range NewConfigComparator().Compare(withoutRoutedMaxPower(withoutActions(desired), deviceType), back).Differences {
 		if diff.Actual == nil {
 			unsupported = append(unsupported, diff.Path)
 		}

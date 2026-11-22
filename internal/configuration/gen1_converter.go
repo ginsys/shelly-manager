@@ -3,6 +3,7 @@ package configuration
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/ginsys/shelly-manager/internal/logging"
@@ -60,7 +61,7 @@ func (c *Gen1Converter) FromAPIConfig(apiJSON json.RawMessage, deviceType string
 	}
 
 	// Convert System settings
-	if err := c.convertSystem(gen1, config); err != nil {
+	if err := c.convertSystem(gen1, config, deviceType); err != nil {
 		return nil, fmt.Errorf("failed to convert System: %w", err)
 	}
 
@@ -337,7 +338,7 @@ func (c *Gen1Converter) convertCoIoT(gen1 map[string]interface{}, config *Device
 	return nil
 }
 
-func (c *Gen1Converter) convertSystem(gen1 map[string]interface{}, config *DeviceConfiguration) error {
+func (c *Gen1Converter) convertSystem(gen1 map[string]interface{}, config *DeviceConfiguration, deviceType string) error {
 	// System settings are scattered in Gen1 API (name, eco_mode_enabled, discoverable)
 	system := &SystemConfiguration{}
 	device := &TypedDeviceConfig{}
@@ -352,7 +353,13 @@ func (c *Gen1Converter) convertSystem(gen1 map[string]interface{}, config *Devic
 		device.Discoverable = BoolPtr(discoverable)
 	}
 
-	if device.Name != nil || device.EcoMode != nil || device.Discoverable != nil {
+	// Only a model that has the switch reports a mode worth keeping: another model's "mode" (an
+	// RGBW2 or Bulb colour mode) is a different setting that a later slice maps on its own.
+	if mode, ok := gen1["mode"].(string); ok && slices.Contains(gen1DeviceModes(deviceType), mode) {
+		device.Mode = StringPtr(mode)
+	}
+
+	if device.Name != nil || device.EcoMode != nil || device.Discoverable != nil || device.Mode != nil {
 		system.Device = device
 		config.System = system
 	}
@@ -694,6 +701,9 @@ func (c *Gen1Converter) exportSystem(config *DeviceConfiguration, gen1 map[strin
 		}
 		if device.Discoverable != nil {
 			gen1["discoverable"] = *device.Discoverable
+		}
+		if device.Mode != nil {
+			gen1["mode"] = *device.Mode
 		}
 	}
 	if sntp := config.System.SNTP; sntp != nil && sntp.Server != "" {

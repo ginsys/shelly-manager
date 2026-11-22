@@ -90,19 +90,47 @@ func comparableChannelMaxPower(desired *DeviceConfiguration, live json.RawMessag
 	return &normalized
 }
 
+// withoutRoutedMaxPower returns desired without the model-wide max_power when desired states relay
+// mode on a Shelly 2.5. The pre-write round trip reads the converted document back by its own
+// mode, and a 2.5 in relay mode keeps no model-wide value, so a value that apply routes onto the
+// channels would otherwise read as dropped. Verify compares it channel by channel
+// (comparableChannelMaxPower). Any other configuration is returned as it is; desired is never changed.
+func withoutRoutedMaxPower(desired *DeviceConfiguration, deviceType string) *DeviceConfiguration {
+	if desired == nil || desired.PowerMetering == nil || desired.PowerMetering.MaxPower == nil ||
+		desired.System == nil || desired.System.Device == nil || desired.System.Device.Mode == nil ||
+		*desired.System.Device.Mode != "relay" || deviceType != "SHSW-25" {
+		return desired
+	}
+	power := *desired.PowerMetering
+	power.MaxPower = nil
+	normalized := *desired
+	normalized.PowerMetering = &power
+	if power == (PowerMeteringConfig{}) {
+		normalized.PowerMetering = nil
+	}
+	return &normalized
+}
+
 // routeGen1MaxPower moves the model-wide max_power of a Shelly 2.5 in relay mode onto its channels.
 // The Gen1 reference says of POST /settings max_power: "Overpower threshold in Watts for roller
 // mode only. For relay mode the device keeps separate, per-channel configurations", and of
 // POST /settings/relay/<n> max_power: "Set per-channel overpower threshold (used in relay mode)".
-// A channel that states its own value keeps it. The mode is read from the settings the device
-// reported before the write; every other model, and the roller mode, is left as it is.
+// A channel that states its own value keeps it. The mode is the one this apply writes (the mode in
+// apiConfig), else the one read from the settings the device reported before the write; every other
+// model, and the roller mode, is left as it is.
 func routeGen1MaxPower(apiConfig map[string]interface{}, live json.RawMessage, deviceType string) {
 	maxPower, ok := apiConfig["max_power"]
 	if !ok || deviceType != "SHSW-25" {
 		return
 	}
 	var liveConfig map[string]interface{}
-	if err := json.Unmarshal(live, &liveConfig); err != nil || !gen1MaxPowerIsPerChannel(deviceType, liveConfig) {
+	if err := json.Unmarshal(live, &liveConfig); err != nil {
+		return
+	}
+	if mode, stated := apiConfig["mode"].(string); stated {
+		liveConfig["mode"] = mode
+	}
+	if !gen1MaxPowerIsPerChannel(deviceType, liveConfig) {
 		return
 	}
 

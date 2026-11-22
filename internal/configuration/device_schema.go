@@ -42,6 +42,7 @@ func GetDeviceConfigurationSchema(deviceType string) map[string]interface{} {
 		"coiot":    getDeviceCoIoTSchema(),
 		"network":  getDeviceNetworkSchema(),
 	}
+	withoutModeOfModelsWithoutIt(sections, deviceType, supported)
 	if !supported || converter.hasRelay(deviceType) {
 		sections["relay"] = getRelayStates(getRelaySchema(), supported)
 	}
@@ -158,6 +159,36 @@ func hasInputSettings(deviceType string) bool {
 // schema and the capabilities route both read it, so one place decides.
 func HasRollerMode(deviceType string) bool {
 	return deviceType == "SHSW-25"
+}
+
+// gen1DeviceModes returns the values of the device-level mode (system.device.mode) a Gen1 model
+// accepts on POST /settings, and nil for a model that has no such switch. It is the one place that
+// decides both whether a model has the setting and which words it takes.
+func gen1DeviceModes(deviceType string) []string {
+	if deviceType == "SHSW-25" {
+		return []string{"relay", "roller"}
+	}
+	return nil
+}
+
+// withoutModeOfModelsWithoutIt drops the system.device.mode leaf from the schema of a supported
+// model that has no mode switch, so the leaf is never marked applicable where apply refuses it.
+// An unsupported model keeps it (marked not applicable), and so does a template with no model.
+func withoutModeOfModelsWithoutIt(sections map[string]interface{}, deviceType string, supported bool) {
+	if !supported || len(gen1DeviceModes(deviceType)) > 0 {
+		return
+	}
+	system, _ := sections["system"].(map[string]interface{})
+	if device := schemaProperties(schemaProperties(system)["device"]); device != nil {
+		delete(device, "mode")
+	}
+}
+
+// schemaProperties returns the properties map of a schema node, or nil.
+func schemaProperties(node interface{}) map[string]interface{} {
+	object, _ := node.(map[string]interface{})
+	props, _ := object["properties"].(map[string]interface{})
+	return props
 }
 
 // getDeviceNetworkSchema describes NetworkConfiguration, the network section DeviceConfiguration

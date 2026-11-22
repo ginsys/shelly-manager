@@ -257,6 +257,19 @@ func (a *ConfigApplier) applyConfigSections(ctx context.Context, client ShellyCl
 		// earlier failure then never leaves a changed login behind.
 		{"Login", a.applyLoginSettings},
 	}
+	// The device mode goes first and alone: the channel endpoints of the other mode are refused until
+	// it holds, so a mode that does not hold stops the apply here.
+	if err := a.applyModeSetting(ctx, client, apiConfig, live, result); err != nil {
+		a.logger.WithFields(map[string]any{
+			"error":     err.Error(),
+			"component": "config_applier",
+		}).Warn("Failed to apply the device mode")
+		if shelly.IsAuthError(err) {
+			return err
+		}
+		result.Warnings = append(result.Warnings, modeLaterSectionsWarning)
+		return nil
+	}
 	for _, section := range sections {
 		if err := section.apply(ctx, client, apiConfig, result); err != nil {
 			a.logger.WithFields(map[string]any{
