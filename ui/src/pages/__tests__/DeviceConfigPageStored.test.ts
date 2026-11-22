@@ -357,6 +357,19 @@ describe('DeviceConfigPage landing at the History card', () => {
     expect(scrolled).toHaveBeenCalledTimes(2)
   })
 
+  it('does not move when the address dropped the hash while the history was pending', async () => {
+    let release: (rows: unknown) => void = () => {}
+    vi.mocked(getConfigHistory).mockReturnValueOnce(new Promise((resolve) => (release = resolve)) as any)
+    const { router } = await mountPage('7', '#history-card')
+    await router.push('/devices/7/config')
+    await flushPromises()
+
+    release([])
+    await flushPromises()
+
+    expect(scrolled).not.toHaveBeenCalled()
+  })
+
   it('does not move a page opened with no hash', async () => {
     await mountPage('7')
     expect(scrolled).not.toHaveBeenCalled()
