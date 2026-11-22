@@ -192,7 +192,7 @@ func checkProvisionerIDRule(t *testing.T, manager *Manager) {
 	t.Run("a new id with an empty, a . or a .. segment, or .. anywhere, is refused and leaves no row", func(t *testing.T) {
 		for _, id := range []string{
 			"a//b", "/a", "a/", "/", "a/./b", "./a", "a/.", ".", "a/../b", "../a", "a/..", "..",
-			"a..b", "..a", "a..", "...x", "provisioner-x//y", "provisioner-x/../y", "provisioner-a..b", "provisioner-x/",
+			"a..b", "..a", "a..", "a../b", "...x", "provisioner-x//y", "provisioner-x/../y", "provisioner-a..b", "provisioner-x/",
 		} {
 			for name, actor := range map[string]ProvisionerActor{"agent key": {}, "admin key": adminActor} {
 				_, created, err := s.RegisterAgent(ctx, actor, agentRow(id, "tok-"+name+id, now), testOfflineAfter)

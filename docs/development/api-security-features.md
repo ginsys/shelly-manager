@@ -143,17 +143,9 @@ GET /api/v1/devices?search=test%27%3B%20DROP%20TABLE%20devices--
 ### Advanced SQL Injection Patterns
 
 #### Encoded Injection Attempts
-The framework detects URL-encoded and hex-encoded injection attempts:
-```go
-// URL decoding before pattern matching
-decodedQuery, err := url.QueryUnescape(r.URL.RawQuery)
-if err == nil {
-    // Check decoded content for SQL patterns
-    if containsSQLPatterns(strings.ToLower(decodedQuery)) {
-        return "sql_injection"
-    }
-}
-```
+The validator reads each query value after Go has URL-decoded it (`r.URL.Query()`), so a percent-encoded
+payload such as `%27%3B%20DROP%20TABLE%20devices--` is matched against the same patterns as the plain one.
+It does not decode a second time: a value that is encoded twice reaches the pattern list still encoded.
 
 #### Second-Order Injection Prevention
 Input validation occurs at multiple layers to prevent stored injection attacks:

@@ -98,7 +98,7 @@ func TestProvisionerAgentRoutes_PlainIdsAndSuffixLookalikes(t *testing.T) {
 // and no row is created. An id with one inner slash still registers.
 func TestProvisionerRegister_RefusesAnIdNoRouteCanReach(t *testing.T) {
 	srv, db := idServer(t)
-	for _, id := range []string{"a//b", "/a", "a/", "a/./b", "./a", "a/.", ".", "a/../b", "../a", "a/..", "..", "a..b"} {
+	for _, id := range []string{"a//b", "/a", "a/", "a/./b", "./a", "a/.", ".", "a/../b", "../a", "a/..", "..", "a..b", "a../b"} {
 		code, _, body := idRegister(t, srv, id, idAgentHdr(""))
 		assert.Equal(t, http.StatusBadRequest, code, "%q: %s", id, body)
 		assert.Contains(t, body, "empty segment", "%q: the refusal names the rule", id)
