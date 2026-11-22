@@ -98,7 +98,11 @@ func TestKeyedRegister_NULInTheIDIs400BeforeTheStore(t *testing.T) {
 	code, _, body := kdRegister(t, srv, priv, kdID(priv), "", "")
 	require.Equal(t, http.StatusInternalServerError, code, "control: a good keyed register reaches the store and fails there: %s", body)
 
-	code, _, body = kdRegister(t, srv, priv, kdID(priv)+"\x00", "", "")
+	// kdRegister builds the hostname from the last four characters of the id, so the NUL goes earlier:
+	// the hostname stays clean and the 400 can only come from the derived-id comparison.
+	id := kdID(priv)
+	code, _, body = kdRegister(t, srv, priv, id[:10]+"\x00"+id[10:], "", "")
 	assert.Equal(t, http.StatusBadRequest, code, body)
+	assert.Contains(t, body, "derived from the public key", "the refusal is the derived-id one, not the NUL check of a reported value")
 	assert.NotContains(t, body, `\u0000`, "the value must not be echoed")
 }
