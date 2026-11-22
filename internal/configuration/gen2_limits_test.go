@@ -300,3 +300,81 @@ func TestApplyDesiredConfig_Gen2ReadsTheDeviceOnceBeforeTheFirstWrite(t *testing
 	assert.Equal(t, one, readsBefore(both), "a limit adds no read to an input mode")
 	assert.Equal(t, one, readsBefore(relayOf(SingleRelayConfig{ID: 0, VoltageLimit: IntPtr(250)})), "a limit alone reads the device as often")
 }
+
+// The page says the safety switch works only when in_mode is single. Enabling it is refused under any
+// other effective mode, and so is a dual input mode under a switch that is already enabled.
+func TestApplyDesiredConfig_Gen2RefusesADualCoverInputModeUnderAnEnabledSafetySwitch(t *testing.T) {
+	enabled := func(d *fakeGen2Device) {
+		d.doc["cover:0"].(map[string]interface{})["safety_switch"].(map[string]interface{})["enable"] = true
+	}
+	noSwitch := func(d *fakeGen2Device) { delete(d.doc["cover:0"].(map[string]interface{}), "safety_switch") }
+	cases := map[string]struct {
+		roller  RollerConfig
+		prepare func(*fakeGen2Device)
+		refused []string
+		not     string
+	}{
+		"dual under an enabled switch":       {RollerConfig{InputMode: StringPtr("dual")}, enabled, []string{"roller.input_mode"}, ""},
+		"dual with only a safety action":     {RollerConfig{InputMode: StringPtr("dual"), SafetyAction: StringPtr("pause")}, enabled, []string{"roller.input_mode"}, ""},
+		"dual beside an enabling mode":       {RollerConfig{InputMode: StringPtr("dual"), SafetyMode: StringPtr("while_opening")}, enabled, []string{"roller.safety_mode"}, "roller.input_mode"},
+		"dual beside an enabling mode, off":  {RollerConfig{InputMode: StringPtr("dual"), SafetyMode: StringPtr("while_opening")}, nil, []string{"roller.safety_mode"}, "roller.input_mode"},
+		"dual beside a disabled mode":        {RollerConfig{InputMode: StringPtr("dual"), SafetyMode: StringPtr("disabled")}, enabled, nil, ""},
+		"dual under a disabled switch":       {RollerConfig{InputMode: StringPtr("dual")}, nil, nil, ""},
+		"dual on a device with no switch":    {RollerConfig{InputMode: StringPtr("dual")}, noSwitch, nil, ""},
+		"single under an enabled switch":     {RollerConfig{InputMode: StringPtr("single")}, enabled, nil, ""},
+		"no input mode under an enabled one": {RollerConfig{MaxOpenTime: IntPtr(30)}, enabled, nil, ""},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			roller := tc.roller
+			svc, _ := newGen2Service(t, &DeviceConfiguration{Roller: &roller})
+			dev := fakeGen2DeviceWithCover()
+			if tc.prepare != nil {
+				tc.prepare(dev)
+			}
+
+			result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SNSW-102P16EU")
+
+			if tc.refused == nil {
+				require.NoError(t, err)
+				assert.True(t, result.ConfigApplied)
+				return
+			}
+			require.Error(t, err)
+			assert.True(t, errors.Is(err, ErrUnsupportedSettings))
+			for _, path := range tc.refused {
+				assert.Contains(t, err.Error(), path)
+			}
+			if tc.not != "" {
+				assert.NotContains(t, err.Error(), tc.not, "the guard of the enabling mode names its own path only")
+			}
+			assert.Empty(t, dev.calls, "nothing is written")
+		})
+	}
+}
+
+// A cover write, an input mode and a limit are checked with one read of the device.
+func TestApplyDesiredConfig_Gen2ReadsTheDeviceOnceForACoverAnInputModeAndALimit(t *testing.T) {
+	readsBefore := func(desired *DeviceConfiguration) int {
+		svc, _ := newGen2Service(t, desired)
+		dev := fakeGen2DeviceWithCover()
+		// A cover-profile device reports no switch of its own: this one reports a switch and an input so that the
+		// input mode and the limit have a section to be written to.
+		dev.doc["switch:0"] = map[string]interface{}{"id": 0.0, "in_mode": "follow", "voltage_limit": 280.0}
+		dev.doc["input:0"] = map[string]interface{}{"id": 0.0, "type": "switch", "enable": true}
+		_, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SNSW-102P16EU")
+		require.NoError(t, err)
+		return dev.getsBeforeFirstWrite
+	}
+	cover := &RollerConfig{MaxOpenTime: IntPtr(30)}
+	all := &DeviceConfiguration{
+		Roller: cover,
+		Input:  &InputConfig{Inputs: []SingleInputConfig{{ID: 0, Mode: StringPtr("flip")}}},
+		Relay:  &RelayConfig{Relays: []SingleRelayConfig{{ID: 0, VoltageLimit: IntPtr(250)}}},
+	}
+
+	one := readsBefore(&DeviceConfiguration{Roller: cover})
+
+	assert.Equal(t, 1, one, "a cover write alone reads the device once")
+	assert.Equal(t, one, readsBefore(all), "an input mode and a limit add no read to a cover write")
+}
