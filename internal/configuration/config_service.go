@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -609,6 +610,39 @@ func parseApplicableDesiredConfig(raw string) (*DeviceConfiguration, error) {
 		return nil, fmt.Errorf("failed to unmarshal desired config: %w", err)
 	}
 	return &config, nil
+}
+
+// parseComparableDesiredConfig parses the stored row for a comparison with a device: Apply's check
+// and write, verify and the drift check. A section that holds nothing, such as {"system":{"sntp":{}}},
+// is nothing: it is dropped from the parsed copy, so the round trip through the device does not report
+// it as a difference (ginsys/shelly-manager#863). The stored row is never rewritten, and
+// StoredDesiredConfig, which hands the row out, keeps it as it is.
+func parseComparableDesiredConfig(raw string) (*DeviceConfiguration, error) {
+	cfg, err := parseApplicableDesiredConfig(raw)
+	if err != nil {
+		return nil, err
+	}
+	dropEmptySections(reflect.ValueOf(cfg).Elem())
+	return cfg, nil
+}
+
+// dropEmptySections sets to nil every pointer to a struct that holds nothing, innermost first, so a
+// section whose only content was an empty section goes too. "Nothing" is the merge's reading of a
+// zero struct: a plain zero is unset. A pointer to a basic type or to a list is a value somebody
+// chose, so a set false, 0 or [] is never touched.
+func dropEmptySections(v reflect.Value) {
+	for i := 0; i < v.NumField(); i++ {
+		f := v.Field(i)
+		if !v.Type().Field(i).IsExported() {
+			continue
+		}
+		if f.Kind() == reflect.Pointer && !f.IsNil() && f.Elem().Kind() == reflect.Struct && !isOpaqueStruct(f.Type().Elem()) {
+			dropEmptySections(f.Elem())
+			if f.Elem().IsZero() {
+				f.Set(reflect.Zero(f.Type()))
+			}
+		}
+	}
 }
 
 // StoredDesiredConfig decodes the desired configuration stored with a device, for a read that hands
