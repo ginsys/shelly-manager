@@ -7,7 +7,7 @@ import { useDeviceConfigNewStore } from '@/stores/deviceConfigNew'
 
 vi.mock('@/api/deviceConfig', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/deviceConfig')>()
-  return { ...actual, getStoredDeviceConfig: vi.fn(), getConfigHistory: vi.fn(), getCurrentDeviceConfig: vi.fn() }
+  return { ...actual, getStoredDeviceConfig: vi.fn(), getConfigHistory: vi.fn() }
 })
 
 vi.mock('@/api/desiredRollback', async (importOriginal) => {
@@ -15,7 +15,7 @@ vi.mock('@/api/desiredRollback', async (importOriginal) => {
   return { ...actual, getDesiredHistory: vi.fn(), rollbackDesired: vi.fn() }
 })
 
-import { getStoredDeviceConfig, getConfigHistory, getCurrentDeviceConfig } from '@/api/deviceConfig'
+import { getStoredDeviceConfig, getConfigHistory } from '@/api/deviceConfig'
 import { getDesiredHistory } from '@/api/desiredRollback'
 
 // ginsys/shelly-manager#747 slice 1: the page shows the configuration an import stored, and the
