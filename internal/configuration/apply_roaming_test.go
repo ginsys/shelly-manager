@@ -150,14 +150,14 @@ func TestApplyConfig_AKeyTheDeviceDoesNotReportIsRefusedBeforeAnyWrite(t *testin
 		wantIn string
 	}{
 		{"no ap_roaming object, a threshold", func(d *fakeWiFiDevice) { delete(d.settings, "ap_roaming") },
-			&WiFiConfiguration{RoamThreshold: IntPtr(-70)}, "ap_roaming"},
+			&WiFiConfiguration{RoamThreshold: IntPtr(-70)}, "wifi.roam_threshold (ap_roaming.threshold)"},
 		{"no ap_roaming object, the enable flag", func(d *fakeWiFiDevice) { delete(d.settings, "ap_roaming") },
-			&WiFiConfiguration{RoamEnable: BoolPtr(true)}, "ap_roaming"},
+			&WiFiConfiguration{RoamEnable: BoolPtr(true)}, "wifi.roam_enable (ap_roaming.enabled)"},
 		{"an ap_roaming object without a threshold, a threshold", func(d *fakeWiFiDevice) {
 			d.settings["ap_roaming"] = map[string]interface{}{"enabled": false}
-		}, &WiFiConfiguration{RoamThreshold: IntPtr(-70)}, "ap_roaming.threshold"},
+		}, &WiFiConfiguration{RoamThreshold: IntPtr(-70)}, "wifi.roam_threshold (ap_roaming.threshold)"},
 		{"no recovery flag", func(d *fakeWiFiDevice) { delete(d.settings, "wifirecovery_reboot_enabled") },
-			&WiFiConfiguration{RecoveryReboot: BoolPtr(true)}, "wifirecovery_reboot_enabled"},
+			&WiFiConfiguration{RecoveryReboot: BoolPtr(true)}, "wifi.recovery_reboot (wifirecovery_reboot_enabled)"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dev := newRoamingDevice()

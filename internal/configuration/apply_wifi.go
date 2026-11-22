@@ -134,18 +134,21 @@ func unreportedWiFiKeys(live json.RawMessage, haveLive bool, readErr error, apiC
 	}
 	var missing []string
 	reported := liveWiFiSection(live, "ap_roaming")
-	for _, key := range []string{"enabled", "threshold"} {
-		if _, wanted := roaming[key]; !wanted {
+	// The refusal names the desired path, with the device key it could not find beside it.
+	for _, key := range []struct{ device, path string }{
+		{"enabled", "wifi.roam_enable"}, {"threshold", "wifi.roam_threshold"},
+	} {
+		if _, wanted := roaming[key.device]; !wanted {
 			continue
 		}
-		if _, ok := reported[key]; !ok {
-			missing = append(missing, "ap_roaming."+key)
+		if _, ok := reported[key.device]; !ok {
+			missing = append(missing, key.path+" (ap_roaming."+key.device+")")
 		}
 	}
 	var doc map[string]json.RawMessage
 	_ = json.Unmarshal(live, &doc)
 	if _, ok := doc["wifirecovery_reboot_enabled"]; recovery && !ok {
-		missing = append(missing, "wifirecovery_reboot_enabled")
+		missing = append(missing, "wifi.recovery_reboot (wifirecovery_reboot_enabled)")
 	}
 	if len(missing) == 0 {
 		return nil
