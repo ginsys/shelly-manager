@@ -349,9 +349,11 @@ patterns := []string{
 
 #### Directory Traversal in Path
 ```
-Attack: GET /api/v1/config/../../etc/passwd
-Detection: "../" pattern in a query value; the path itself is cleaned by the router before it is routed
+Attack: GET /api/v1/devices?path=../../etc/passwd
+Detection: "../" pattern in a query value
 Response: Request refused with 400
+
+A "../" in the URL path is not refused by the validator, which reads query values only: the router cleans the path before it is routed.
 ```
 
 #### Encoded Path Traversal
@@ -498,9 +500,9 @@ func isSuspiciousUserAgent(userAgent string) bool {
 
 #### Nikto Web Scanner
 ```
-User-Agent: Mozilla/5.00 (Nikto/2.1.6) (Evasions:None) (Test:007726)
+User-Agent: Nikto/2.1.6 (Evasions:None) (Test:007726)
 
-Detection: "nikto" pattern match in user agent
+Detection: "nikto" pattern match in user agent (a user agent that also contains "mozilla/" is let through)
 Response: Request refused with 400
 ```
 
@@ -514,7 +516,7 @@ Response: Request refused with 400
 
 #### Burp Suite Professional
 ```
-User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) burpsuite/2021.10.3
+User-Agent: burpsuite/2021.10.3
 
 Detection: "burpsuite" pattern match
 Response: Request refused with 400
