@@ -257,10 +257,21 @@ func refuseUncoverableRoller(ctx context.Context, client ShellyClient, apiConfig
 				paths = append(paths, path)
 			}
 		}
+		// The page says the safety switch works only when in_mode is single, so enabling it under
+		// any other effective mode would be confirmed by the read back and do nothing.
+		if enable, _ := safety["enable"].(bool); enable && held {
+			mode, ok := body["in_mode"].(string)
+			if !ok {
+				mode, _ = cover["in_mode"].(string)
+			}
+			if mode != rollerInputSingle {
+				paths = append(paths, "roller.safety_mode")
+			}
+		}
 	}
 	if len(paths) > 0 {
 		slices.Sort(paths)
-		return false, &refusedBeforeWriteError{fmt.Errorf("%w: %s: the device does not report what these need (inputs for swap_inputs, in_mode and safety_switch, allowed_move reverse for a safety action of reverse)", ErrUnsupportedSettings, strings.Join(paths, ", "))}
+		return false, &refusedBeforeWriteError{fmt.Errorf("%w: %s: the device does not report what these need (inputs for swap_inputs, in_mode and safety_switch, in_mode single for an enabled safety switch, allowed_move reverse for a safety action of reverse)", ErrUnsupportedSettings, strings.Join(paths, ", "))}
 	}
 
 	if want, set := body["invert_directions"].(bool); set {
