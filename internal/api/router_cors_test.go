@@ -66,6 +66,20 @@ func TestCORSAllowlist_ListedOriginIsEchoed(t *testing.T) {
 	}
 }
 
+// A path with no route answers 404, and a page on a listed origin can read that answer: the Metrics
+// page reads the missing security route as "monitoring is off" (ginsys/shelly-manager#861).
+func TestCORSAllowlist_MissingRouteIs404WithCORSHeaders(t *testing.T) {
+	r := corsRouter(t, []string{corsListed})
+	rr := corsDo(r, http.MethodGet, "/api/v1/no-such-route", corsListed)
+	require.Equal(t, http.StatusNotFound, rr.Code)
+	require.Equal(t, corsListed, rr.Header().Get("Access-Control-Allow-Origin"))
+	require.Equal(t, "Origin", rr.Header().Get("Vary"))
+
+	rr = corsDo(r, http.MethodGet, "/api/v1/no-such-route", corsUnlisted)
+	require.Equal(t, http.StatusNotFound, rr.Code)
+	require.Empty(t, corsHeaders(rr), "an unlisted origin still gets no grant")
+}
+
 func TestCORSAllowlist_UnlistedOriginGetsNoCORSHeaders(t *testing.T) {
 	r := corsRouter(t, []string{corsListed})
 	for _, method := range []string{http.MethodGet, http.MethodOptions} {
