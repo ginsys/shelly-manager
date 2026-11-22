@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -30,7 +31,11 @@ var gen2LightFields = map[string]bool{
 	"transition_duration": true, "min_brightness_on_toggle": true, "button_fade_rate": true,
 	"night_mode": true, "night_mode_brightness": true, "night_mode_start": true, "night_mode_end": true,
 	"warmup_enabled": true, "warmup_brightness": true, "warmup_time": true,
+	"max_power": true, "voltage_limit": true, "undervoltage_limit": true, "current_limit": true, "in_mode": true,
 }
+
+// gen2LightInModes are the in_mode words of the Light page; dim and dual_dim are "if applicable".
+var gen2LightInModes = []string{"follow", "flip", "activate", "detached", "dim", "dual_dim"}
 
 // gen2ClockTime takes only the two-digit HH:MM form, so a read-back compares equal.
 var gen2ClockTime = regexp.MustCompile(`^([01][0-9]|2[0-3]):[0-5][0-9]$`)
@@ -59,6 +64,11 @@ func gen2LightToDoc(config *DeviceConfiguration, doc map[string]interface{}) {
 		putIfSet(body, "transition_duration", light.TransitionDuration)
 		putIfSet(body, "min_brightness_on_toggle", light.MinBrightnessOnToggle)
 		putIfSet(body, "button_fade_rate", light.ButtonFadeRate)
+		putIfSet(body, "power_limit", light.MaxPower)
+		putIfSet(body, "voltage_limit", light.VoltageLimit)
+		putIfSet(body, "undervoltage_limit", light.UndervoltageLimit)
+		putIfSet(body, "current_limit", light.CurrentLimit)
+		putIfSet(body, "in_mode", light.InMode)
 
 		night := map[string]interface{}{}
 		putIfSet(night, "enable", light.NightMode)
@@ -103,6 +113,15 @@ func gen2LightsFromDoc(doc map[string]interface{}) *LightConfig {
 		}
 		light.MinBrightnessOnToggle = gen2WholeFromDoc(raw, "min_brightness_on_toggle")
 		light.ButtonFadeRate = gen2WholeFromDoc(raw, "button_fade_rate")
+		light.MaxPower = gen2WholeFromDoc(raw, "power_limit")
+		light.VoltageLimit = gen2WholeFromDoc(raw, "voltage_limit")
+		light.UndervoltageLimit = gen2WholeFromDoc(raw, "undervoltage_limit")
+		if amps, ok := raw["current_limit"].(float64); ok {
+			light.CurrentLimit = &amps
+		}
+		if mode, ok := raw["in_mode"].(string); ok {
+			light.InMode = StringPtr(mode)
+		}
 		if night, ok := raw["night_mode"].(map[string]interface{}); ok {
 			if enable, ok := night["enable"].(bool); ok {
 				light.NightMode = BoolPtr(enable)
@@ -180,7 +199,13 @@ func gen2LightBounds(light *SingleLightConfig, prefix string) []string {
 	refuse("night_mode_brightness", outside(light.NightModeBrightness, 0, 100), func() { light.NightModeBrightness = nil })
 	refuse("warmup_brightness", outside(light.WarmupBrightness, 10, 100), func() { light.WarmupBrightness = nil })
 	refuse("warmup_time", outside(light.WarmupTime, 20, 1000), func() { light.WarmupTime = nil })
-	// The two ends of active_between are one value: one alone, or one that is not HH:MM, names both.
+	// The page gives the limits no range: only a negative one is refused, and no pair is compared.
+	refuse("max_power", outside(light.MaxPower, 0, math.MaxInt32), func() { light.MaxPower = nil })
+	refuse("voltage_limit", outside(light.VoltageLimit, 0, math.MaxInt32), func() { light.VoltageLimit = nil })
+	refuse("undervoltage_limit", outside(light.UndervoltageLimit, 0, math.MaxInt32), func() { light.UndervoltageLimit = nil })
+	refuse("current_limit", light.CurrentLimit != nil && *light.CurrentLimit < 0, func() { light.CurrentLimit = nil })
+	refuse("in_mode", light.InMode != nil && !slices.Contains(gen2LightInModes, *light.InMode), func() { light.InMode = nil })
+	// A span needs both ends as HH:MM; a bad one refuses the ends that were supplied.
 	start, end := light.NightModeStart, light.NightModeEnd
 	badClock := func(clock *string) bool { return clock != nil && !gen2ClockTime.MatchString(*clock) }
 	if (start == nil) != (end == nil) || badClock(start) || badClock(end) {
