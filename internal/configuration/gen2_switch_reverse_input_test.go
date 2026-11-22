@@ -167,6 +167,40 @@ func TestApplyDesiredConfig_Gen2ReverseBesideAnInputModeIsWritten(t *testing.T) 
 	assert.Equal(t, true, dev.doc["switch:1"].(map[string]interface{})["reverse"])
 }
 
+// The mode of input N is written to switch N. A device that reports no such switch (a light device
+// holds light:0 and input:0) would answer the write with a failed row, so it is refused before any write.
+func TestApplyDesiredConfig_Gen2RefusesAnInputModeWhereTheDeviceReportsNoSwitch(t *testing.T) {
+	desired := &DeviceConfiguration{Input: &InputConfig{Inputs: []SingleInputConfig{{ID: 0, Mode: StringPtr("flip")}}}}
+
+	t.Run("no switch: refused", func(t *testing.T) {
+		svc, _ := newGen2Service(t, desired)
+		dev := newFakeGen2Device()
+		dev.strict = true
+		dev.doc["light:0"] = map[string]interface{}{"id": 0.0, "name": nil}
+		dev.doc["input:0"] = map[string]interface{}{"id": 0.0, "name": nil, "type": "switch", "enable": true, "invert": false}
+
+		result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SNDM-0013US")
+
+		require.Error(t, err)
+		assert.Nil(t, result)
+		assert.True(t, errors.Is(err, ErrUnsupportedSettings))
+		assert.Contains(t, err.Error(), "input.inputs.0.mode")
+		assert.Contains(t, err.Error(), "no switch")
+		assert.Empty(t, dev.calls, "nothing is written")
+	})
+	t.Run("switch: written as before", func(t *testing.T) {
+		svc, _ := newGen2Service(t, desired)
+		dev := fakeGen2DeviceWithChannels()
+		dev.doc["input:0"].(map[string]interface{})["type"] = "switch"
+
+		result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SNSW-001X16EU")
+
+		require.NoError(t, err)
+		assert.True(t, result.ConfigApplied)
+		assert.Equal(t, "flip", dev.doc["switch:0"].(map[string]interface{})["in_mode"])
+	})
+}
+
 // A null, a missing key and a fraction have no stored value.
 func TestGen2Converter_ReadsReverseAndInputID(t *testing.T) {
 	read := func(section map[string]interface{}) SingleRelayConfig {
