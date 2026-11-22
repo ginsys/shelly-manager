@@ -112,6 +112,22 @@ describe('DesiredRollbackCard', () => {
     })
 
     // A read that fails is not a reason to take versions away: the list is immutable rows the server reads by id.
+    it('tells the page once that its first read has settled, whichever way', async () => {
+      const ok = mountCard()
+      expect(ok.emitted('settled')).toBeUndefined()
+      await flushPromises()
+      expect(ok.emitted('settled')).toHaveLength(1)
+      await ok.setProps({ ready: false })
+      await ok.setProps({ ready: true })
+      await flushPromises()
+      expect(ok.emitted('settled')).toHaveLength(1)
+
+      vi.mocked(getDesiredHistory).mockRejectedValueOnce(new Error('boom'))
+      const failed = mountCard()
+      await flushPromises()
+      expect(failed.emitted('settled')).toHaveLength(1)
+    })
+
     it('keeps a list that is shown when a later read fails, shows the error, and a later good read clears it and updates the rows', async () => {
       const wrapper = mountCard()
       await flushPromises()
