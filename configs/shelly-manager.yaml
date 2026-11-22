@@ -170,6 +170,7 @@ security:
     rate_limit_threshold: 5         # Block at this many rate limit violations
     attack_type_threshold: 3        # Block at this many distinct attack types
     suspicious_per_hour_threshold: 5  # Block at more than this many suspicious requests inside one hour; at most 1000 (the monitor keeps that many times per client IP), more stops start-up
+  agent_enrolment: "open"          # "open" (default): the agent key can register a keyless agent. "strict": only an agent approved by its key gets in (a keyless register is 403, a token of an unapproved row authorizes nothing); needs admin_api_key, or the start is refused. Env: SHELLY_SECURITY_AGENT_ENROLMENT.
   agent_api_key: ""                # The key the provisioner agent sends; accepted only on the five agent routes (poll, status and report also need the agent's own token). Use a value different from the admin key; no effect while admin_api_key is empty. Prefer env (SHELLY_SECURITY_AGENT_API_KEY or _FILE; a _FILE that cannot be read stops start-up).
 
 # Export subsystem configuration (safe download base directory)

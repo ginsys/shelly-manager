@@ -52,7 +52,7 @@ func (h *Handler) holdsAdminKey(r *http.Request) bool {
 
 // provisionerStore returns the registry store over the handler's database.
 func (h *Handler) provisionerStore() *database.ProvisionerStore {
-	return database.NewProvisionerStore(h.DB.GetDB())
+	return database.NewProvisionerStore(h.DB.GetDB()).WithStrictEnrolment(h.strictEnrolment)
 }
 
 // provisionerActor says who calls: the admin key (or no admin key at all) may act for any agent, anyone
@@ -270,6 +270,13 @@ func (h *Handler) RegisterAgent(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.PublicKey != "" || req.Signature != "" {
 		h.registerKeyed(w, r, req.ID, req.Hostname, req.Version, req.Capabilities, req.Metadata, req.PublicKey, req.Signature)
+		return
+	}
+	// In strict mode only an agent the operator approved by its key gets in, so a keyless register is refused
+	// for every caller, the admin key included: nothing is written and no token is issued. An operator who
+	// wants an agent in pre-approves its fingerprint.
+	if h.strictEnrolment {
+		h.responseWriter().WriteError(w, r, http.StatusForbidden, apiresp.ErrCodeForbidden, "This manager enrols agents by key only: register with a public key, and the operator must approve its fingerprint", nil)
 		return
 	}
 	// "key-" is the prefix of an id derived from an agent's key, in any case. A keyless agent never

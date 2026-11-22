@@ -1,0 +1,2 @@
+Added
+- The manager has a strict enrolment mode, `security.agent_enrolment: strict` (or `SHELLY_SECURITY_AGENT_ENROLMENT=strict`). In it a register without a public key is refused with `403` for every caller, and the token of an agent that is not approved by its key stops working on poll, task status and report, so the agent key alone creates no agent and opens no claim. It needs an admin key and the manager refuses to start without one; any value other than `open` (the default, unchanged behaviour) or `strict` also stops the start. Refs ginsys/shelly-manager#638.

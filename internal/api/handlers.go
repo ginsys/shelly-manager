@@ -47,6 +47,8 @@ type Handler struct {
 	// AgentAPIKey is the second key, accepted next to the admin key on the provisioner agent
 	// routes only. Empty means the agent routes accept the admin key alone.
 	AgentAPIKey string
+	// strictEnrolment is security.agent_enrolment "strict"; set once at start-up.
+	strictEnrolment bool
 	// driftSchedulerEnabled is whether this process runs the drift scheduler; set once at start-up.
 	driftSchedulerEnabled bool
 	// Version/banner support
@@ -110,6 +112,11 @@ func (h *Handler) ShareAdminKey() {
 // SetAgentAPIKey sets the in-memory key the provisioner agents send. It opens the agent routes and
 // nothing else.
 func (h *Handler) SetAgentAPIKey(key string) { h.AgentAPIKey = key }
+
+// SetAgentEnrolment sets who may enrol a provisioner agent: "strict" lets in only an approved agent (no keyless
+// register, and the token of a row that is not approved authorizes nothing), any other value leaves enrolment
+// open as it was. The config check has refused any other value at start-up.
+func (h *Handler) SetAgentEnrolment(mode string) { h.strictEnrolment = mode == "strict" }
 
 // requireAdmin checks Authorization or X-API-Key against the admin key.
 func (h *Handler) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
