@@ -18,8 +18,9 @@ type RGBW2SettingsClient interface {
 
 var errNoRGBW2Client = errors.New("client cannot write per-channel color and white settings")
 
-// A white channel has no effect.
+// A white channel has no effect. gen1RGBW2OwnKeys are the keys a Dimmer's channel lacks (countSettings).
 var (
+	gen1RGBW2OwnKeys   = []string{"name", "effect", "transition", "btn_reverse"}
 	gen1RGBW2ColorKeys = []string{"name", "effect", "transition", "default_state", "auto_on", "auto_off", "schedule", "schedule_rules", "btn_type", "btn_reverse"}
 	gen1RGBW2WhiteKeys = []string{"name", "transition", "default_state", "auto_on", "auto_off", "schedule", "schedule_rules", "btn_type", "btn_reverse"}
 )
