@@ -332,7 +332,7 @@ func refuseFromLiveDevice(ctx context.Context, client ShellyClient, readLive liv
 		withCover = true
 	}
 	withEth, withBLE := len(gen2Body(apiConfig, gen2EthKey)) > 0, len(gen2Body(apiConfig, gen2BLEKey)) > 0
-	withLight := len(gen2ChannelIDs(apiConfig, "light")) > 0
+	withLight := config.Light != nil && len(config.Light.Lights) > 0
 	if !withMode && !withKeys && !withCover && !withEth && !withBLE && !withLight {
 		return nil, nil
 	}
@@ -362,7 +362,7 @@ func refuseFromLiveDevice(ctx context.Context, client ShellyClient, readLive liv
 	if len(missing) > 0 {
 		return nil, &refusedBeforeWriteError{fmt.Errorf("%w: %s: the device's firmware does not report the key, so nothing was written", ErrUnsupportedSettings, strings.Join(missing, ", "))}
 	}
-	if err = refuseUnreportedLights(doc, apiConfig); err != nil {
+	if err = refuseUnreportedLights(doc, apiConfig, config.Light); err != nil {
 		return nil, err
 	}
 	reversesCover, err := refuseUncoverableRoller(doc, apiConfig)

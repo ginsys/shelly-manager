@@ -198,18 +198,18 @@ func stringOrEmpty(s *string) string {
 }
 
 // refuseUnreportedLights refuses a light or key the live device does not report; null counts as reported.
-func refuseUnreportedLights(doc, apiConfig map[string]interface{}) error {
+func refuseUnreportedLights(doc, apiConfig map[string]interface{}, desired *LightConfig) error {
+	if desired == nil {
+		return nil
+	}
 	var missing []string
-	for _, id := range gen2ChannelIDs(apiConfig, "light") {
-		key := "light:" + strconv.Itoa(id)
-		body, _ := apiConfig[key].(map[string]interface{})
-		if len(body) == 0 {
-			continue
-		}
+	for _, light := range desired.Lights {
+		key := "light:" + strconv.Itoa(light.ID)
 		live, ok := doc[key].(map[string]interface{})
 		if !ok {
 			return &refusedBeforeWriteError{fmt.Errorf("%w: light.lights: the device reports no %s, so it has no such light, and apply does not change the profile", ErrUnsupportedSettings, key)}
 		}
+		body, _ := apiConfig[key].(map[string]interface{})
 		for _, leaf := range gen2Leaves("", body) {
 			if !gen2KeyReported(live, strings.Split(strings.TrimPrefix(leaf.path, "."), ".")) {
 				missing = append(missing, key+leaf.path)
