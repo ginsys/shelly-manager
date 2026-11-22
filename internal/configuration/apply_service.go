@@ -39,7 +39,8 @@ type LoginHooks interface {
 // btn_reverse are written per input (POST /settings/relay/<n> on a Shelly 1, 1PM or 2.5, POST
 // /settings/input/<n> on a Shelly i3), and the wifi_sta and wifi_ap sections, which are written
 // with POST /settings/sta and /settings/ap (unsupportedWiFi names what stays refused), and the lights
-// section of a Dimmer, which is written per channel with POST /settings/light/<n>. Every other
+// section of a Dimmer, a Bulb or an RGBW2, which is written per channel (POST /settings/light/<n>,
+// or color and white for an RGBW2). Every other
 // section is refused before the device is touched, because the applier would send it in a shape the
 // device ignores. A relay key outside gen1RelayKeys
 // is refused through the round-trip check below, and so is a cloud server, which Gen1 neither
@@ -137,9 +138,9 @@ var gen1ApplicablePaths = map[string]bool{
 	"relay.relays[].schedule_rules": true,
 	"relay.relays[].max_power":      true,
 
-	// A Dimmer's lights are written per channel with POST /settings/light/<n> and read back from
-	// GET /settings/light/<n>; an RGBW2's with /settings/color/0 or /settings/white/<n>. name, effect,
-	// transition and btn_reverse are the RGBW2's only.
+	// A Dimmer's or a Bulb's lights are written per channel with POST /settings/light/<n> and read
+	// back from GET /settings/light/<n>; an RGBW2's with /settings/color/0 or /settings/white/<n>.
+	// name, transition and btn_reverse are the RGBW2's; effect is the RGBW2's and the Bulb's.
 	"light.lights[].name":           true,
 	"light.lights[].effect":         true,
 	"light.lights[].transition":     true,
@@ -385,11 +386,14 @@ func unsupportedApplySettings(converter ConfigConverter, desired *DeviceConfigur
 	// A light channel's id is its position for the same reason.
 	if desired.Light != nil {
 		for i, light := range desired.Light.Lights {
-			if hasColorWhiteChannels(deviceType) {
+			switch {
+			case hasColorWhiteChannels(deviceType):
 				unsupported = append(unsupported, unsupportedRGBW2LightValues(i, light)...)
-				continue
+			case isGen1Bulb(deviceType):
+				unsupported = append(unsupported, unsupportedBulbLightValues(i, light)...)
+			default:
+				unsupported = append(unsupported, unsupportedLightValues(i, light)...)
 			}
-			unsupported = append(unsupported, unsupportedLightValues(i, light)...)
 		}
 	}
 	if desired.Dimming != nil {

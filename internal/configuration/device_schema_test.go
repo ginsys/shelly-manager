@@ -113,6 +113,8 @@ func TestDeviceSchemaSectionsFollowTheModel(t *testing.T) {
 		"SHDM-2": {"auth", "cloud", "coiot", "dimming", "led", "light", "location", "mqtt", "network", "system", "wifi"},
 		// An RGBW2 has light channels (color: one, white: four) and no relay, and no Dimmer group.
 		"SHRGBW2": {"auth", "cloud", "coiot", "light", "location", "mqtt", "network", "system", "wifi"},
+		// A Bulb has one light channel and no relay, no status LED and no Dimmer group.
+		"SHBLB-1": {"auth", "cloud", "coiot", "light", "location", "mqtt", "network", "system", "wifi"},
 		"unknown": {"actions", "auth", "cloud", "coiot", "dimming", "input", "led", "light", "location", "mqtt", "network", "power_metering", "relay", "roller", "system", "wifi"},
 	}
 	for deviceType, want := range cases {

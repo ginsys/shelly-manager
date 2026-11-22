@@ -87,6 +87,17 @@
   - ✅ `/meter/0` - Power consumption
   - ✅ `/settings` `mode=color|white` - Switch modes (`system.device.mode`; apply writes it first and reads it back, unconfirmed on hardware; the page has no `/settings/mode` path)
 
+#### **Shelly Bulb**
+- **Type ID**: `SHBLB-1` (the Duo `SHBDUO-1` and the Vintage `SHVIN-1` are not supported)
+- **Channels**: 1 light channel, mode white or color
+- **Features**:
+  - RGBW LEDs in color mode, color temperature and brightness in white mode
+  - Seven effects (0 to 6)
+- **API Endpoints**:
+  - ❌ `/light/0` - Control (color, brightness, temperature, timer)
+  - ✅ `/settings/light/0` - Channel settings (`light.lights`: `default_state`, `auto_on`, `auto_off`, `effect`, `schedule`, `schedule_rules`; apply writes the keys that are set and reads them back, unconfirmed on hardware; `reset` is never sent)
+  - ✅ `/settings` `mode=white|color` - Switch modes (`system.device.mode`; apply writes it first and reads it back, unconfirmed on hardware)
+
 ### 🏠 Other Devices
 
 #### **Shelly i3**

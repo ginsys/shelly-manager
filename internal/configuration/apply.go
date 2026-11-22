@@ -681,7 +681,11 @@ func (a *ConfigApplier) applyLightSettings(ctx context.Context, client ShellyCli
 	if !ok {
 		return failSection(result, "lights", errNoLightClient)
 	}
-	return applyChannels(ctx, result, "lights", lights, gen1LightKeys, lightClient.SetLightSettings, lightClient.GetLightSettings)
+	keys := gen1LightKeys
+	if isGen1Bulb(deviceType) {
+		keys = gen1BulbLightKeys
+	}
+	return applyChannels(ctx, result, "lights", lights, keys, lightClient.SetLightSettings, lightClient.GetLightSettings)
 }
 
 // InputSettingsClient is the per-input surface of a Shelly i3: POST and GET on
