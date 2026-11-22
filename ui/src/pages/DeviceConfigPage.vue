@@ -240,7 +240,6 @@
       :editing="editOverrides"
       :ready="!store.loading && !store.error && store.status !== null"
       @refresh="handleRefresh"
-      @reading="onVersionsReading"
     />
 
     <div id="history-card" ref="historyCardEl" class="card" data-testid="history-card">
@@ -365,37 +364,19 @@ const historyLoaded = ref(false)
 const historyError = ref<string | null>(null)
 const openEntries = ref<Set<number>>(new Set())
 
-// "View History" and the old history address open this page at #history-card. The page moves to the card
-// once, at the first moment no read of the device on screen is in flight: the page's own read, the stored import,
-// the history, the versions and a read from the device. The cards above the History card grow with those
-// answers and push it down. The check runs a tick after each read ends, so a read that the end of another one
-// starts (the versions card reads again when the page has finished) is counted. A later read (after a save, a template change or a rollback)
-// must not move the page again while the address keeps the hash.
+// "View History" and the old history address open this page at #history-card. The page moves to the card once,
+// when the first history read for the device on screen has settled. Cards above it may still grow after that
+// and push it down: that is accepted. A later read must not move the page again while the address keeps the hash.
 const historyCardEl = ref<HTMLElement | null>(null)
 let landAtHistory = false
-let readsInFlight = 0 // the stored import and the history of the newest read round of the device on screen
-let versionsReading = false
 function armLanding() {
   landAtHistory = route.hash === '#history-card'
 }
 function landAtHistoryCard() {
   if (!landAtHistory) return
-  void nextTick(() => {
-    if (!landAtHistory || readsInFlight > 0 || versionsReading || liveLoading.value || store.loading) return
-    landAtHistory = false
-    historyCardEl.value?.scrollIntoView?.({ block: 'start' })
-  })
+  landAtHistory = false
+  void nextTick(() => historyCardEl.value?.scrollIntoView?.({ block: 'start' }))
 }
-function onVersionsReading(reading: boolean) {
-  versionsReading = reading
-  landAtHistoryCard()
-}
-watch(() => store.loading, landAtHistoryCard)
-watch(liveLoading, landAtHistoryCard)
-// A visit that drops the hash while a read is pending cancels the landing.
-watch(() => route.hash, (hash) => {
-  if (hash !== '#history-card') landAtHistory = false
-})
 
 // A failed action shows as an error panel under the toolbar. A failed template add shows inside the
 // add-template dialog instead, which is open and covers the page when it happens.
@@ -484,12 +465,6 @@ async function loadStored() {
   const generation = routeGeneration
   const seq = ++storedReadSeq
   const current = () => routeGeneration === generation && storedReadSeq === seq
-  readsInFlight = 2 // a newer round replaces the older one, whose answers fill nothing and are not waited for
-  const readEnded = () => {
-    if (!current()) return
-    readsInFlight--
-    landAtHistoryCard()
-  }
   const readStored = getStoredDeviceConfig(id).then(
     (row) => {
       if (!current()) return
@@ -502,20 +477,22 @@ async function loadStored() {
       stored.value = null
       storedError.value = e?.response?.data?.error?.message || e?.message || 'Failed to read the imported configuration'
     },
-  ).finally(readEnded)
+  )
   const readHistory = getConfigHistory(id).then(
     (rows) => {
       if (!current()) return
       history.value = rows
       historyError.value = null
       historyLoaded.value = true
+      landAtHistoryCard()
     },
     (e: any) => {
       if (!current()) return
       history.value = []
       historyError.value = e?.response?.data?.error?.message || e?.message || 'Failed to read the configuration history'
+      landAtHistoryCard()
     },
-  ).finally(readEnded)
+  )
   await Promise.all([readStored, readHistory])
 }
 
