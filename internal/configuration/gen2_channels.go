@@ -403,7 +403,8 @@ func unreportedChannelKeys(doc map[string]interface{}, config *DeviceConfigurati
 // apply. The mode of input N is written to switch N, and refuseRemappedInputs checks the live input_id,
 // so a new input_id would put the mode on the wrong input. An input_id equal to the live one is no
 // change, so a template imported from the device and applied again passes. A live switch with no
-// number runs its own input, as refuseRemappedInputs reads it.
+// number runs its own input, as refuseRemappedInputs reads it. A switch the device does not report has
+// nothing to compare and is left to unreportedChannelKeys.
 func refuseInputIDWithMode(doc map[string]interface{}, config *DeviceConfiguration) error {
 	if config.Relay == nil || config.Input == nil {
 		return nil
@@ -413,7 +414,10 @@ func refuseInputIDWithMode(doc map[string]interface{}, config *DeviceConfigurati
 		if r.InputID == nil {
 			continue
 		}
-		live, _ := doc["switch:"+strconv.Itoa(r.ID)].(map[string]interface{})
+		live, held := doc["switch:"+strconv.Itoa(r.ID)].(map[string]interface{})
+		if !held {
+			continue // no switch to compare: unreportedChannelKeys refuses the key
+		}
 		running := float64(r.ID)
 		if n, ok := live["input_id"].(float64); ok {
 			running = n
