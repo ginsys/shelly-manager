@@ -1,11 +1,20 @@
 # Design note: a release workflow for shelly-manager
 
-Status: proposal. Section 6 lists the decisions, one recommendation each. Nothing is built, tagged
-or released by this note, and no workflow file changes with it. The build is cut into slices
-(section 7) that are briefed after the owner chooses.
+Status: proposal, revision 2. Section 6 lists the points that are still the owner's, one
+recommendation each. Nothing is built, tagged or released by this note, and no workflow file changes
+with it. The build is cut into slices (section 7) that are briefed after the owner confirms.
+
+**Revision 2, 2026-11-22.** The owner answered the first version, about 21:50 CET: "all should happen
+from a single workflow, automated; I want a similar experience as with other projects; allow bumping
+the version, pre-release type, etc; update recommendations". Revision 1 recommended a release PR that
+carried the version, typed by hand into its changelog heading, and a separate dispatch that read that
+heading and tagged. Sections 5, 6 and 7 now recommend one dispatch with
+an action choice, as go-kure/kure has it. Sections 1 to 4 and 8 are the record of what was read and
+weighed, with a one-line edit where the answer made a sentence untrue.
 
 It answers ginsys/shelly-manager#846. Every `file:line` for this repository is read at origin/main
-`e31982b4`. Other repositories are public and were read live on 2026-11-22.
+`e31982b4`, except where section 5 or 6 names another commit. Other repositories are public and were
+read live on 2026-11-22.
 
 ## 1. What exists today
 
@@ -47,7 +56,9 @@ adds `changelog.d/<issue>-<slug>.md` (149 fragments today: 30 Added, 21 Changed,
 `changelog.d/README.md:17-25` describes it as a **release PR**, which takes the label `no-changelog`
 (`.github/workflows/changelog-fragment.yml:39`; `scripts/check-changelog-fragment.sh:7`). So the
 version is typed into the tree, in a reviewed PR, **before any tag exists**. A design that adds a
-second place to type it competes with this one.
+second place to type it competes with this one. *Revision 2: section 5 keeps this script and takes
+the version from a `VERSION` file instead of a typed argument; the release PR is replaced by the
+workflow's own commit.*
 
 **Branch rules.** `main` has required status checks, linear history and no deletion or non-fast-forward
 (`gh api repos/ginsys/shelly-manager/rules/branches/main`, read 2026-11-22). Whether a workflow token
@@ -121,7 +132,8 @@ Bronzeward's pair is `release-create.yml` (guard, wait for CI, tag, call publish
 - **A tag that must not exist, and a CI run that passed on that exact commit**
   (`release-create.yml:51-58`, `:60-99`). The tested commit is the one that ships.
 - **The workflow makes the tag through the API with the workflow token** (`:113`). A tag the token
-  makes starts no other workflow (`:6-7`), so nothing else can publish.
+  makes starts no other workflow (`:6-7`), so nothing else can publish. *Revision 2: not carried over.
+  The tag must start Publish by itself, so section 5 pushes it with the release bot's token.*
 - **One release at a time** (`:25-28`).
 
 **Does not carry over, and why:**
@@ -131,14 +143,17 @@ Bronzeward's pair is `release-create.yml` (guard, wait for CI, tag, call publish
   The guard would read `## [X.Y.Z] - <date>`, not `## <tag>`.
 - **Licence check** (`guard.sh:21-28`): specific to bronzeward's open licence decision.
 - **A typed `version` input** (`release-create.yml:15-18`). It makes the version typed twice, once in
-  the changelog heading and once at dispatch, and a guard to compare them. Section 5 reads it from
-  the heading instead.
+  the changelog heading and once at dispatch, and a guard to compare them. *Revision 2: section 5
+  reads it from a `VERSION` file and offers an `action` choice instead, as go-kure/kure does.*
 - **SBOM, keyless signing and attestations** (`release-publish.yml:87-124`). Section 5 says what each
   prevents and why the first build leaves them out.
 - **Pre-releases only** (`guard.sh:18`). Fine while this project is alpha; the guard here must also
   accept a stable tag later.
 
 ## 4. Options
+
+*Revision 2: the owner chose the shape of C, with the fragments kept where C replaces them. Section
+5 says how. A and B stay as what was weighed, and C's "throws that one away" below no longer holds.*
 
 **A. Release PR, then a dispatched workflow tags and publishes.** The maintainer runs
 `make changelog-assemble VERSION=X.Y.Z` in a branch, opens the release PR, and merges it through the
@@ -168,32 +183,80 @@ per release. It is a second mechanism beside the one in section 1, and it throws
 **Doing less** (images keep the date name; add a tag by hand when wanted) answers none of the
 operator's questions, so it is not an option here.
 
-## 5. Recommendation: option A, the smallest version of it
+## 5. Recommendation: one dispatch, as in kure, with this repository's own script
 
-**Versioning.** SemVer with a pre-release part, `vX.Y.Z-alpha.N`, matching the project's alpha status.
-**The first tag is `v0.6.0-alpha.1`:** the changelog already used `0.5.4`, and the 149 unreleased
-fragments include 21 Changed and 3 Removed, so a minor step is honest. Breaking, while below 1.0, means
-a minor bump: a changed or removed route inside `/api/v1`, a database change that needs the repair step
-or refuses start-up (`database-upgrade.md:49`), a new SMA `FormatVersion` (`sma.go:19`), and a removed
-or renamed configuration key (an unknown key is ignored, not refused: the loader calls a plain `viper.Unmarshal`,
-`internal/config/config.go:248`, and a binary test starts with removed keys still set,
-`cmd/shelly-manager/main_test.go:237`; so a rename is silent). Anything
-else is the next `alpha.N`. One wrinkle: each cut deletes the fragments it used, so the final stable
-section lists only what came after the last alpha; it is merged by hand once.
+**One workflow.** `release.yml` starts by hand (`workflow_dispatch`) with two inputs: an `action`
+choice and `dry_run`. A real run is allowed from `main` only, and one run at a time. The run checks
+the branch and the action, waits for `Test` on the dispatched commit, then runs
+`scripts/release/release.sh`: it works out the version from a `VERSION` file, assembles the
+changelog, commits `release: vX.Y.Z-alpha.N`, tags it, commits the bump to the next number, and
+pushes `main` and the tag in **one atomic push**. The tag starts `release-publish.yml` by itself, and
+the release run waits for it and turns red if it fails, so one green run means the version is out.
+That is the path of the actions that tag (`release` and the three `release-as-*`). The three that
+only move `VERSION` (`start-next-minor`, `start-next-major`, `skip-prerelease-number`) make no
+tag, assemble no changelog, skip the `Test` wait and wait for no Publish, as kure's workflow has it
+(the CI job runs only for an action that starts with `release`, `release.yml:74`; the Publish wait only
+when the script reports a tag, `:190`). This is the sequence of go-kure/kure: its caller `.github/workflows/release.yml` (40 lines), the shared
+`release.yml` in go-kure/.github and its `scripts/release/release.sh` (read at go-kure/.github
+`f6118283`, 2026-11-22).
 
-**One source.** The version is typed once, by `make changelog-assemble VERSION=...` in the release PR.
-The dispatch takes **no** version input: it reads the newest changelog heading, so the heading is the
-source and the tag is derived from it. The tag is then the source for everything built: `-ldflags -X`
-sets the version in both binaries, `/api/v1/version` reports it beside `git_sha`, the image labels
-and tags use it, and the UI build receives it with `GIT_SHA`.
+**The actions** are kure's seven, each mapped to what it does here (`release.sh` in go-kure/.github,
+`run_main`):
 
-**Trigger and control.** Dispatch on `main`, `dry_run` on by default, one release at a time. Anyone
-with write access to the repository can run it, which here is the owner. The release PR passes the
-fragment check with the label `no-changelog`, and `main`'s rules apply to it like any other PR, so
-the workflow never pushes to `main`.
+| Action | Here |
+|---|---|
+| `release` | kept: tag `VERSION` as it stands; `VERSION` moves to the next number |
+| `release-as-beta`, `release-as-rc` | kept: move to that stage at `.0` and tag it; going back a stage is refused |
+| `release-as-stable` | kept: tag `vX.Y.Z`; `VERSION` moves to the next patch at `-alpha.0` |
+| `start-next-minor`, `start-next-major` | kept for the `VERSION` move to the next line's `alpha.0`, with no tag. The script's `release/vX.Y` branch for patch releases is dropped: it exists only when the line being left has a stable tag, and none does. Add it with the first stable tag |
+| `skip-prerelease-number` | kept: recovery when a tag was used, or to move past one |
+| `dry_run` | kept, and **on by default** (kure's default is off): a tag is permanent |
 
-**Artifacts.** Both images get the tag, as `vX.Y.Z-alpha.N`, built by the existing build made callable
-with a version input, so there is one image build with two callers. The per-commit date names and
+**Reuse or copy: copy and adapt, with the source commit named in the file.** A ginsys repository
+cannot call go-kure's shared workflow today, for four reasons read from its own lines. Every job runs
+on `autops-kube-kure` (`release.yml:35`, `:75`, `:124`), a go-kure runner label; every workflow here
+uses `ubuntu-latest` or `ubuntu-24.04`, and a read of the ginsys org's runners returned none. It signs in
+with the go-kure App (`KURE_BOT_APP_ID` and `KURE_BOT_APP_PRIVATE_KEY`, `:146-147`), which is
+installed on go-kure and not on ginsys. The script writes the changelog with `git-cliff`
+(`release.sh:352`) with no switch, and refuses to push without a downstream-reference check file
+(`FORBIDDEN_TERMS_CHECK`, `:62`). Its publish workflow is GoReleaser, a Go module proxy refresh and a
+docs deploy, none of which this repository has. ginsys/.github holds no release workflow to inherit
+(`ci.yml`, `pr-review.yml`, `settings.yml` and two tracker audits). So this repository carries the
+caller shape, the action choice and the script's version logic, minus the release branches, the
+forbidden-terms check and `git-cliff`. A shim that fakes `git-cliff` would make the shared script
+the owner of a step it cannot do.
+
+**Version.** A root `VERSION` file holds the next version, `vX.Y.Z-alpha.N`, and the actions above
+move it. SemVer with a pre-release part, matching the project's alpha status. **The first value is
+`v0.6.0-alpha.1`:** the changelog already used `0.5.4`, and the 149 unreleased fragments include 21
+Changed and 3 Removed, so a minor step is honest. The first tag is the action `release`, dry run
+first: it tags `v0.6.0-alpha.1` and moves `VERSION` to `v0.6.0-alpha.2`. Breaking, while below 1.0,
+means a minor bump (`start-next-minor`): a changed or removed route inside `/api/v1`, a database
+change that needs the repair step or refuses start-up (`database-upgrade.md:49`), a new SMA
+`FormatVersion` (`sma.go:19`), and a removed or renamed configuration key (an unknown key is ignored,
+not refused: the loader calls a plain `viper.Unmarshal`, `internal/config/config.go:248`, and a
+binary test starts with removed keys still set, `cmd/shelly-manager/main_test.go:237`; so a rename is
+silent). Anything else is the next `alpha.N`. The tag is then the source for everything built:
+`-ldflags -X` sets the version in both binaries, `/api/v1/version` reports it beside `git_sha`, the
+image labels and tags use it, and the UI build receives it with `GIT_SHA`.
+
+**Changelog: the fragments, assembled by the release; no `git-cliff`.** `scripts/changelog-assemble.sh
+--write` already turns the 149 curated fragments into the section, heads it `## [X.Y.Z-alpha.N] -
+<date>` (the version without its `v`; the tag has one) and deletes the fragments. `git-cliff` would
+replace that text with commit subjects, and using both is two generators. The fragment check for pull
+requests stays as it is. The release commit is made by the workflow, not by a pull request, so it needs
+no `no-changelog` label. A run that tags with no fragment left is refused (the script exits 3): empty
+notes. A `VERSION`-only action assembles nothing, so it needs none. One
+wrinkle: each cut deletes the fragments it used, so the final stable section lists only what came
+after the last alpha; it is merged by hand once.
+
+**Trigger and control.** Anyone with write access to the repository can start the run, which here is
+the owner. The push to `main` is the one act that needs more than the workflow token: section 6,
+point 1, gives its cost.
+
+**Artifacts (what Publish builds).** Publish runs on the tag (`push` of `v*`). Both images get the
+tag, as `vX.Y.Z-alpha.N`, built by the existing build made callable with a version input, so there is
+one image build with two callers. The per-commit date names and
 `latest` stay as they are (`latest` keeps meaning the newest `main` image; operators who want a fixed
 version pin the tag). The provisioner binary is built for `linux/amd64` and `linux/arm64` with plain
 `go build`, `CGO_ENABLED=0` (`Dockerfile.provisioner:19`), packed with `tar`, with one `SHA256SUMS`.
@@ -204,12 +267,16 @@ prevents:
 
 | Gate | Failure it prevents |
 |---|---|
-| Heading exists, is not empty, and no such tag exists | a release with empty notes, or a second use of a tag, which is permanent |
-| No fragment is left in `changelog.d/` at the tagged commit | a release that ships a change its notes omit, because a pull request merged between the release PR and the dispatch |
-| A `Test` run passed on this exact commit (the whole workflow, database provider job included). The push trigger skips a changelog-only commit (`test.yml:10-22` lists no `CHANGELOG.md` or `changelog.d/**`), so after a release PR merges there is none: the workflow starts one with the dispatch trigger (`test.yml:26`) and waits | shipping a commit nobody tested |
+| For an action that tags: `VERSION` parses, the tag and the next `VERSION` do not exist yet, and at least one fragment is left. A `VERSION`-only action checks that the `VERSION` it moves to is not an existing tag, and needs no fragment | a second use of a tag, which is permanent, or a release with empty notes; and a recovery action (`skip-prerelease-number`, after a tag was used) refused for lack of fragments that were already consumed |
+| `HEAD` is the tip of `main` on the remote, and the push is atomic | releasing a stale checkout, or a `main` and a tag that disagree: a pull request merged during the wait makes the push non-fast-forward, and nothing is published |
+| For an action that tags, a `Test` run passed on the dispatched commit (the whole workflow, database provider job included), as kure's CI wait does. The push trigger skips a commit that touches no listed path (`test.yml:10-22`), so where no run exists the workflow starts one with the dispatch trigger (`test.yml:26`) and waits | shipping a commit nobody tested |
 | Dry run by default | making a permanent tag by a mistaken click |
 | `SHA256SUMS` | a truncated or corrupted download of the host binary |
 | One release at a time | two runs racing for the same tag |
+
+**The limit of that gate:** the release commit (the changelog section, the deleted fragments, `VERSION`)
+is made after `Test` passed, so the tagged commit differs from the tested one by those files only.
+kure's release has the same shape.
 
 The weekly end-to-end and performance runs are **not** gates: they take hours and their failure is
 reported on their own schedule, and a gate that waits for them would stop every release by default.
@@ -227,49 +294,85 @@ test or document that shows an older binary running on a newer schema, so the re
 promise it. A
 release with a refusing or repairing migration says so in its own `Changed` or `Fixed` fragment.
 
-## 6. Decisions needed
+**Deploy files.** The release edits none of `deploy/` (the kustomize `newTag`, the chart `appVersion`,
+the compose `TAG`): the files carry the owner's choices, and changing them is a second commit to
+`main` that nobody asked for.
 
-The owner decides these on ginsys/shelly-manager#846. The pull request that carries this note decides none.
+## 6. Decisions still the owner's
 
-1. **Scheme and first tag.** Recommend SemVer with `-alpha.N` and `v0.6.0-alpha.1`. Reason: the
-   changelog used `0.5.4`, the unreleased work contains breaking changes, and nothing is stable yet.
-2. **Where the version is typed.** Recommend the release PR's changelog heading, with no dispatch
-   input. Reason: one typing and no mismatch to guard; the review of the PR is the check.
-3. **Trigger.** Recommend a dispatch on `main`, dry run by default (option A). Reason: option B makes
-   the permanent act before the checks, and option C replaces the fragments.
-4. **`latest` and the per-commit names.** Recommend both unchanged. Reason: nothing that works today
-   changes; a release adds a name, it removes none.
-5. **Host binary.** Recommend plain `go build` for linux amd64 and arm64, tar and `SHA256SUMS`, with
-   no GoReleaser. Reason: two binaries and two platforms need a dozen lines; GoReleaser (used by four
-   of the owner's projects) adds a config and a pinned tool.
-6. **Signing, SBOM, attestations.** Recommend none in the first build. Reason: no consumer except the
-   owner; revisit when someone else pulls an artifact.
-7. **Gate.** Recommend the `Test` workflow on the exact commit and no weekly run. Reason: the weekly
-   runs would block every release, and their failures already reach the owner.
-8. **Deploy files.** Recommend that the workflow edits none of `deploy/` (the kustomize `newTag`, the
-   chart `appVersion`, the compose `TAG`). Reason: the files carry the owner's choices, and a
-   workflow that edits them needs a push to `main`.
+The owner decides these on ginsys/shelly-manager#846. The pull request that carries this note decides
+none. His answer of 2026-11-22 settled the trigger (one dispatch), where the version lives (the
+`VERSION` file and the actions), the gate and the deploy files; those are recommendations in section
+5, not questions. What is left:
+
+1. **The release bot, which only he can create.** The real run pushes a commit to `main`, and the
+   ruleset `general` refuses it: it requires status checks on the commit, and its `bypass_actors`
+   list is empty (rulesets API, read 2026-11-22). The same token must also make the tag, because a tag
+   made with the workflow's own token starts no workflow, so Publish would not run. *Recommend:* a
+   GitHub App owned by ginsys, installed on this repository only, added as a bypass actor of
+   `general`, with its id and key as secrets of an environment `release` that only `main` may use.
+   - **What it costs.** A bypass actor passes every rule of `general` for every push it makes, not
+     only a release push: required status checks, linear history, no non-fast-forward, no deletion,
+     the Copilot review rule, code scanning and code quality. The guard then is the App's private key
+     plus the one workflow that holds it. Whoever can read the key, or get a change to that workflow
+     merged to `main`, can push anything to `main` and make any tag. That is the owner, who has admin
+     rights, and anyone else given write access whose workflow change is merged through the checks.
+     The environment limit keeps a workflow on another branch from reading the key.
+   - **A narrower route, not read:** split `general` in two and give the bypass only to the ruleset
+     that holds `required_status_checks`, so the release push still meets the other rules; and a tag
+     ruleset that lets only the App create `v*` tags. Whether the rules for code scanning and code
+     quality, which expect a pull request, refuse a direct push is **unknown**, and so is whether a
+     bypass actor can be an App on this plan. Slice 3 settles both with a trial.
+   - **The fallback keeps every rule:** the workflow opens the release PR itself and starts, on its
+     branch, every workflow the ruleset needs, because a pull request made with the workflow token
+     starts no checks. That is `Test`, which holds the five required status checks (`Validate Go
+     Version`, `Run Tests`, `Frontend Unit Tests`, `Security Tests`, `Build Binary`), and CodeQL for
+     the code scanning rule (`codeql.yml:11` has `workflow_dispatch`; its push trigger covers `main`
+     only). It waits for all of them, merges through the normal route, tags the merge commit and
+     calls Publish in the same run, as bronzeward does (`release-create.yml:113`). It needs no App
+     and no bypass. It costs two waits and more steps in the workflow. **Unknown:** whether the
+     workflow token may merge under `general`, and whether a dispatched CodeQL run satisfies the code
+     scanning rule for the pull request. Not recommended: it is the more complex of the two for a
+     repository with one owner.
+2. **Scheme and first tag.** Recommend SemVer with `-alpha.N` and `v0.6.0-alpha.1`, from a dry run.
+   Reason: the changelog used `0.5.4`, the unreleased work contains breaking changes, and nothing is
+   stable yet.
+3. **The dry-run default.** Recommend on, where kure's is off. Reason: the tag is permanent, and the
+   owner starts the run by hand, so ticking one box costs less than one wrong tag.
+4. **Host binary and signing, one confirmation.** Recommend plain `go build` for linux amd64 and
+   arm64, `tar` and `SHA256SUMS`, with no GoReleaser, and no signing, SBOM or attestations in the
+   first build. Reason: two binaries and two platforms need a dozen lines, GoReleaser adds a config
+   and a pinned tool, and the only consumer is the owner's own cluster; revisit when someone else
+   pulls an artifact.
 
 ## 7. Build slices
 
 Each slice is one pull request with its own tests; none is a release.
 
-1. **A version variable.** A package variable set by `-ldflags -X`, shown by both binaries and by
-   `/api/v1/version`, and the hard-coded `1.0.0` and `0.5.0-alpha` replaced by it. Tests pin the
-   output, with `dev` when unset.
+1. **A version variable and the `VERSION` file.** A package variable set by `-ldflags -X`, shown by
+   both binaries and by `/api/v1/version`, and the hard-coded `1.0.0` and `0.5.0-alpha` replaced by it.
+   A root `VERSION` file holding `v0.6.0-alpha.1`. Tests pin the output, with `dev` when unset, and
+   that the file parses.
 2. **Callable image build.** `docker-build.yml` gains a version input; both Dockerfiles declare
    `ARG VERSION` and pass it in `-ldflags`; the UI build receives it. Default behaviour is unchanged.
-3. **The release workflow.** Guard, start `Test` on the commit and wait for it, dry run, tag by API, images through slice 2,
-   provisioner archives and `SHA256SUMS`, pre-release with the changelog notes.
-4. **Documentation.** The release procedure and the operator's upgrade and rollback page; the stale
-   values from section 1 (chart `appVersion`, the bug template placeholder, the OpenAPI `version`).
-5. **Only if decision 6 changes:** signing, SBOM and attestations.
+3. **The release script and workflow.** `scripts/release/release.sh` copied from go-kure/.github and
+   trimmed as section 5 says, with tests against real git repositories, and `release.yml`: guard, the
+   `Test` wait, dry run, the atomic push. It needs point 1 of section 6 first, and its first trial
+   settles the two unknowns there.
+4. **The Publish workflow.** On the tag: both images through slice 2, the provisioner archives and
+   `SHA256SUMS`, a pre-release with the changelog section as its notes. Slice 3 and this one may merge
+   if together they stay under about 300 lines.
+5. **Documentation.** The release procedure and the operator's upgrade and rollback page; the release-PR
+   paragraph of `changelog.d/README.md:17-25`; the stale values from section 1 (chart `appVersion`, the
+   bug template placeholder, the OpenAPI `version`).
+6. **Only if point 4 of section 6 changes:** signing, SBOM and attestations.
 
 Recommended: the first tag is cut by the owner, from a dry run, and
-ginsys/shelly-manager#846 stays open until slice 3 has run once. Both are the owner's to confirm.
+ginsys/shelly-manager#846 stays open until slice 4 has run once. Both are the owner's to confirm.
 
 ## 8. What this note does not do
 
-It builds nothing and measures nothing: whether an image carries `git_sha` needs a build, and whether
-a workflow token may push past `main`'s rules needs a trial; the recommendation depends on neither.
-It does not audit private projects, and it does not change the stale values it lists.
+It builds nothing and measures nothing: whether an image carries `git_sha` needs a build. Whether a
+bypass actor can be a GitHub App on this plan, and whether a narrower ruleset still lets the release
+push through, need a trial at slice 3 (section 6, point 1). It does not audit private projects, and it
+does not change the stale values it lists.
