@@ -97,6 +97,9 @@ func (s *ConfigurationService) applyPathFor(client ShellyClient, loginSupported 
 		if _, ok := client.(Gen2ConfigClient); ok {
 			converter := NewGen2Converter(s.logger)
 			return converter, func(desired *DeviceConfiguration, _ string) ([]string, error) {
+				if err := refuseInputIDWithMode(desired); err != nil {
+					return nil, err
+				}
 				return unsupportedGen2Settings(converter, desired, loginSupported)
 			}, nil
 		}
@@ -382,6 +385,9 @@ func refuseFromLiveDevice(ctx context.Context, client ShellyClient, readLive liv
 	}
 	if ethChanged {
 		owed[gen2EthKey] = "an Ethernet change needs a restart"
+	}
+	for key, reason := range reversedSwitches(doc, config) {
+		owed[key] = reason
 	}
 	return owed, nil
 }

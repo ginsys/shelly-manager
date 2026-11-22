@@ -60,7 +60,7 @@ var plus1PMSections = map[string]string{
 	"location": `{"tz":"Europe/Brussels","lat":50.85,"lng":4.35}`,
 	"cloud":    `{"enable":true,"server":"iot.shelly.cloud:6012/jrpc"}`,
 	"relay": `{"relays":[{"id":0,"name":"Pump","default_state":"restore_last","auto_on":0,"auto_off":300,
-		"max_power":4480,"voltage_limit":280,"undervoltage_limit":0,"current_limit":16,"autorecover_voltage_errors":false}]}`,
+		"max_power":4480,"voltage_limit":280,"undervoltage_limit":0,"current_limit":16,"autorecover_voltage_errors":false,"input_id":0}]}`,
 	"input": `{"inputs":[{"id":0,"type":"switch","mode":"follow","inverted":false,"enable":true,"factory_reset":true}]}`,
 }
 
@@ -128,8 +128,8 @@ func TestConvertToTypedConfig_Gen2TwoChannelsAndNulls(t *testing.T) {
 		sections := typedSections(t, typed)
 		assert.JSONEq(t, `{"relays":[
 			{"id":0,"name":"Pump","default_state":"restore_last","auto_on":0,"auto_off":300,
-				"max_power":4480,"voltage_limit":280,"undervoltage_limit":0,"current_limit":16,"autorecover_voltage_errors":false},
-			{"id":1,"name":"Lamp","default_state":"on","auto_on":45,"auto_off":0}]}`, string(sections["relay"]))
+				"max_power":4480,"voltage_limit":280,"undervoltage_limit":0,"current_limit":16,"autorecover_voltage_errors":false,"input_id":0},
+			{"id":1,"name":"Lamp","default_state":"on","auto_on":45,"auto_off":0,"input_id":1}]}`, string(sections["relay"]))
 		assert.JSONEq(t, `{"inputs":[
 			{"id":0,"type":"switch","mode":"follow","inverted":false,"enable":true,"factory_reset":true},
 			{"id":1,"name":"Wall","type":"button","mode":"flip","inverted":true,"enable":true}]}`, string(sections["input"]))

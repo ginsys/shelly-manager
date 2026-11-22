@@ -39,6 +39,12 @@ type SingleRelayConfig struct {
 	InLocked                 *bool    `json:"in_locked,omitempty"`
 	AutorecoverVoltageErrors *bool    `json:"autorecover_voltage_errors,omitempty"`
 	PowerRestoreDelay        *int     `json:"power_restore_delay,omitempty"`
+
+	// Reverse flips the measured direction of power and energy on a Gen2 switch that measures returned
+	// energy, and needs a restart. InputID is the input (0 or 1) that a Gen2 switch of a model with a
+	// selectable input runs on. A device that does not report the key refuses it.
+	Reverse *bool `json:"reverse,omitempty"`
+	InputID *int  `json:"input_id,omitempty"`
 }
 
 // LightConfig is the channel list of a Gen1 model whose channels are lights (the Shelly Dimmer),
