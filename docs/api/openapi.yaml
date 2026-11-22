@@ -4320,7 +4320,9 @@ paths:
           description: >-
             The request is refused. Either the id starts with `key-` in any case without a public key (that prefix
             is reserved for agents enrolled by key), or it would create a new agent and holds a space or a byte
-            outside printable ASCII (`0x21` to `0x7E`) without starting with `provisioner-`, or a keyed register
+            outside printable ASCII (`0x21` to `0x7E`) without starting with `provisioner-`, or a register
+            without a public key holds a NUL character in the id (new or existing), hostname, version,
+            capabilities or metadata, or a keyed register
             has a `public_key` or `signature` of the wrong length, upper case or not hexadecimal, an id that the
             key does not derive, or a NUL character in the hostname, version, capabilities or metadata. No agent is
             created.

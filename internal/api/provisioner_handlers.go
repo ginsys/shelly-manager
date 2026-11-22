@@ -148,6 +148,22 @@ const registryPendingCap = 20
 
 func hasNUL(s string) bool { return strings.ContainsRune(s, 0) }
 
+// nulReportedField names the first reported value of a register that holds a NUL byte, or returns "".
+// PostgreSQL refuses a NUL in a text or JSON value, and the insert runs before the row's state is read.
+func nulReportedField(hostname, version string, capabilities []string, metadata map[string]string) string {
+	switch {
+	case hasNUL(hostname):
+		return "hostname"
+	case hasNUL(version):
+		return "version"
+	case slices.ContainsFunc(capabilities, hasNUL):
+		return "capabilities"
+	case slices.ContainsFunc(slices.Collect(maps.Keys(metadata)), hasNUL), slices.ContainsFunc(slices.Collect(maps.Values(metadata)), hasNUL):
+		return "metadata"
+	}
+	return ""
+}
+
 // decodeLowerHex decodes exactly n bytes written as lowercase hexadecimal: any other length, any non-hex
 // character and any upper case is refused, so each value has one spelling.
 func decodeLowerHex(s string, n int) ([]byte, bool) {
@@ -175,10 +191,8 @@ func (h *Handler) registerKeyed(w http.ResponseWriter, r *http.Request, id, host
 			return
 		}
 	}
-	// PostgreSQL refuses a NUL in a text or JSON value, and the insert runs before the row's state is read, so
-	// every reported value is checked here: a NUL is a 400, never a 500.
-	if hasNUL(hostname) || hasNUL(version) || slices.ContainsFunc(capabilities, hasNUL) ||
-		slices.ContainsFunc(slices.Collect(maps.Keys(metadata)), hasNUL) || slices.ContainsFunc(slices.Collect(maps.Values(metadata)), hasNUL) {
+	// Every reported value is checked here: a NUL is a 400, never a 500.
+	if nulReportedField(hostname, version, capabilities, metadata) != "" {
 		h.responseWriter().WriteValidationError(w, r, "hostname, version, capabilities and metadata must not contain a NUL character")
 		return
 	}
@@ -262,6 +276,16 @@ func (h *Handler) RegisterAgent(w http.ResponseWriter, r *http.Request) {
 	// gets such an id, so a key's id is never held by somebody else first.
 	if hasKeyPrefix(req.ID) {
 		h.responseWriter().WriteValidationError(w, r, `Agent id must not start with "key-": that prefix is reserved for agents enrolled by key`)
+		return
+	}
+	// A NUL is refused before the store for a new id and an existing one alike: PostgreSQL can never hold
+	// such a row, and the id rule of the store runs only after the insert.
+	field := "id"
+	if !hasNUL(req.ID) {
+		field = nulReportedField(req.Hostname, req.Version, req.Capabilities, req.Metadata)
+	}
+	if field != "" {
+		h.responseWriter().WriteValidationError(w, r, fmt.Sprintf("Agent %s must not contain a NUL character", field))
 		return
 	}
 
