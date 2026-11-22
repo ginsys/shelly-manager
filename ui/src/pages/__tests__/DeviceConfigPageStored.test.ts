@@ -594,8 +594,8 @@ describe('DeviceConfigPage landing at the History card', () => {
     expect(scrolled).not.toHaveBeenCalled()
   })
 
-  // An older read that a newer one replaced still counts as a read in flight, and its late answer fills nothing.
-  it('waits for an older read that a newer one replaced, and fills nothing from its answer', async () => {
+  // An older read that a newer one replaced is not waited for: its answer fills nothing.
+  it('does not wait for an older read that a newer one replaced, and fills nothing from its answer', async () => {
     let releaseFirst: (rows: unknown) => void = () => {}
     vi.mocked(getConfigHistory)
       .mockReturnValueOnce(new Promise((resolve) => (releaseFirst = resolve)) as any)
@@ -605,12 +605,12 @@ describe('DeviceConfigPage landing at the History card', () => {
 
     await wrapper.findAll('button').find((b) => b.text() === 'Refresh')!.trigger('click')
     await flushPromises()
-    expect(scrolled).not.toHaveBeenCalled()
+    expect(scrolled).toHaveBeenCalledTimes(1) // the newer reads are over; the older one is not waited for
 
     releaseFirst([entry({ id: 99 })])
     await flushPromises()
     expect(scrolled).toHaveBeenCalledTimes(1)
-    expect(wrapper.findAll('[data-testid="history-entry"]').map((e) => e.text())).toHaveLength(1)
+    expect(wrapper.findAll('[data-testid="history-entry"]')).toHaveLength(1)
     expect(wrapper.find('[data-testid="history-toggle-99"]').exists()).toBe(false)
   })
 })

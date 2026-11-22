@@ -373,11 +373,10 @@ const openEntries = ref<Set<number>>(new Set())
 // must not move the page again while the address keeps the hash.
 const historyCardEl = ref<HTMLElement | null>(null)
 let landAtHistory = false
-let readsInFlight = 0 // the stored import and the history of the device on screen, one count per read
+let readsInFlight = 0 // the stored import and the history of the newest read round of the device on screen
 let versionsReading = false
 function armLanding() {
   landAtHistory = route.hash === '#history-card'
-  readsInFlight = 0 // reads of the device that went are not waited for
 }
 function landAtHistoryCard() {
   if (!landAtHistory) return
@@ -485,9 +484,9 @@ async function loadStored() {
   const generation = routeGeneration
   const seq = ++storedReadSeq
   const current = () => routeGeneration === generation && storedReadSeq === seq
-  readsInFlight += 2
+  readsInFlight = 2 // a newer round replaces the older one, whose answers fill nothing and are not waited for
   const readEnded = () => {
-    if (routeGeneration !== generation) return
+    if (!current()) return
     readsInFlight--
     landAtHistoryCard()
   }
