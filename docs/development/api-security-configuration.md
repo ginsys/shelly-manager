@@ -42,14 +42,9 @@ func DefaultSecurityConfig() *SecurityConfig {
         HSTSMaxAge:        31536000,     // 1 year
         PermissionsPolicy: "geolocation=(), camera=(), microphone=(), payment=()",
         
-        // Monitoring and logging
+        // Logging
         LogSecurityEvents: true,
         LogAllRequests:    false,        // Enable for debugging
-        EnableMonitoring:  true,
-        
-        // Attack detection
-        EnableIPBlocking:  true,
-        BlockDuration:     time.Hour,    // Block for 1 hour
     }
 }
 ```
@@ -98,10 +93,9 @@ func StagingSecurityConfig() *SecurityConfig {
     config.RateLimit = 2000           // Slightly higher than production
     config.RateLimitWindow = time.Hour
     
-    // Enhanced monitoring for testing
+    // Enhanced logging for testing
     config.LogAllRequests = true      // Log all requests for analysis
     config.LogSecurityEvents = true
-    config.EnableMonitoring = true
     
     // Production-like security headers
     config.EnableHSTS = true          // Enable for HTTPS staging
@@ -138,7 +132,6 @@ func ProductionSecurityConfig() *SecurityConfig {
     // Production logging (selective)
     config.LogAllRequests = false     // Only log important requests
     config.LogSecurityEvents = true   // Always log security events
-    config.EnableMonitoring = true
     
     // Strict security headers
     config.EnableHSTS = true
@@ -429,94 +422,6 @@ func SetProductionSecurityHeaders(w http.ResponseWriter) {
 }
 ```
 
-## IP Blocking and Monitoring Configuration
-
-### Automatic IP Blocking Configuration
-
-```go
-type IPBlockingConfig struct {
-    // Blocking criteria
-    SuspiciousRequestThreshold int           // 10 suspicious requests
-    RateLimitViolationThreshold int          // 5 rate limit violations  
-    AttackTypeThreshold        int           // 3 different attack types
-    AttackRateThreshold        float64       // 5 attacks per hour
-    
-    // Blocking duration by severity
-    BlockDurations map[string]time.Duration
-    
-    // Whitelist for internal/admin IPs
-    WhitelistedIPs []string
-    
-    // Geographic blocking
-    BlockedCountries []string
-}
-
-var ProductionIPBlockingConfig = IPBlockingConfig{
-    SuspiciousRequestThreshold: 5,           // Stricter in production
-    RateLimitViolationThreshold: 3,          // Lower tolerance
-    AttackTypeThreshold: 2,                  // Block faster
-    AttackRateThreshold: 3.0,                // 3 attacks/hour
-    
-    BlockDurations: map[string]time.Duration{
-        "sql_injection":     24 * time.Hour,    // 24 hours
-        "xss_attempt":       12 * time.Hour,    // 12 hours  
-        "automated_scanner": 48 * time.Hour,    // 48 hours
-        "rate_limit":        1 * time.Hour,     // 1 hour
-        "general_suspicious": 6 * time.Hour,    // 6 hours
-    },
-    
-    WhitelistedIPs: []string{
-        "10.0.0.0/8",     // Internal networks
-        "172.16.0.0/12",  // Private networks
-        "192.168.0.0/16", // Local networks
-    },
-    
-    BlockedCountries: []string{}, // Configure as needed
-}
-```
-
-### Security Monitoring Configuration
-
-```go
-type MonitoringConfig struct {
-    // Alert thresholds
-    AlertThresholds map[string]int
-    
-    // Metrics retention
-    MetricsRetentionHours int
-    
-    // Alert destinations
-    AlertWebhooks []string
-    AlertEmails   []string
-    
-    // Reporting intervals
-    ReportInterval time.Duration
-}
-
-var ProductionMonitoringConfig = MonitoringConfig{
-    AlertThresholds: map[string]int{
-        "attacks_per_minute":     10,  // 10 attacks/minute
-        "blocked_ips_per_hour":   20,  // 20 IPs blocked/hour
-        "rate_violations_per_minute": 50, // 50 violations/minute
-        "validation_failures_per_minute": 100, // 100 failures/minute
-    },
-    
-    MetricsRetentionHours: 168, // 7 days
-    
-    AlertWebhooks: []string{
-        "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK",
-        "https://api.pagerduty.com/integration/YOUR/PAGERDUTY/KEY",
-    },
-    
-    AlertEmails: []string{
-        "security@company.com",
-        "devops@company.com",
-    },
-    
-    ReportInterval: 1 * time.Hour,
-}
-```
-
 ## Deployment Configuration
 
 ### Docker Configuration
@@ -596,7 +501,6 @@ services:
       - LOG_LEVEL=info
       - SECURITY_LEVEL=maximum
       - RATE_LIMIT_ENABLED=true
-      - IP_BLOCKING_ENABLED=true
     
     # Health check
     healthcheck:
@@ -879,13 +783,6 @@ var (
         []string{"status", "attack_type"},
     )
     
-    securityBlockedIPs = prometheus.NewGauge(
-        prometheus.GaugeOpts{
-            Name: "shelly_security_blocked_ips",
-            Help: "Number of currently blocked IP addresses",
-        },
-    )
-    
     securityRateLimitViolations = prometheus.NewCounterVec(
         prometheus.CounterOpts{
             Name: "shelly_security_rate_limit_violations_total",
@@ -903,15 +800,6 @@ var (
 groups:
   - name: shelly-security-alerts
     rules:
-    - alert: HighAttackRate
-      expr: rate(shelly_security_requests_total{status="blocked"}[5m]) > 10
-      for: 2m
-      labels:
-        severity: critical
-      annotations:
-        summary: "High attack rate detected"
-        description: "Attack rate is {{ $value }} requests/second over the last 5 minutes"
-    
     - alert: SecurityServiceDown
       expr: up{job="shelly-manager"} == 0
       for: 1m
@@ -920,15 +808,6 @@ groups:
       annotations:
         summary: "Shelly Manager security service is down"
         description: "The Shelly Manager security service has been down for more than 1 minute"
-    
-    - alert: TooManyBlockedIPs
-      expr: shelly_security_blocked_ips > 100
-      for: 5m
-      labels:
-        severity: warning
-      annotations:
-        summary: "Too many blocked IP addresses"
-        description: "{{ $value }} IP addresses are currently blocked"
 ```
 
 This comprehensive configuration guide provides all necessary details for deploying the API security framework across different environments while maintaining optimal security postures and performance characteristics.

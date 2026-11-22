@@ -30,7 +30,6 @@ func authBodyChain(t *testing.T, adminKey, agentKey string, origins []string) *m
 		secCfg.CORSAllowedOrigins = origins
 	}
 	r := SetupRoutesWithSecurity(h, logger, secCfg, middleware.DefaultValidationConfig())
-	closeMonitor(t, h)
 	return r
 }
 

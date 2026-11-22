@@ -161,15 +161,6 @@ security:
     allowed_headers: ["Content-Type", "Authorization", "X-Requested-With"]
     max_age: 86400
   admin_api_key: ""                # Optional: when set, every /api/v1 route except GET /version and GET /metrics/prometheus needs it (the five agent routes also take agent_api_key; the web UI asks for it in a dialog, or takes it built in as VITE_ADMIN_KEY). Prefer env (SHELLY_SECURITY_ADMIN_API_KEY or _FILE; a _FILE that cannot be read stops start-up, so a typo in the path cannot leave the routes open).
-  monitoring:
-    enabled: false                  # Security monitor: counts suspicious requests, rate limit violations and attack types per client IP, raises alerts, serves GET /api/v1/metrics/security (404 while off). Off by default; before this key existed it was always on. The rate limiter, security headers and request validation do not depend on it.
-  ip_blocking:
-    enabled: false                  # Block a client IP the monitor flags. Needs monitoring.enabled: start-up stops with an error naming both keys if this is true and the monitor is off. Off by default; before this key existed it was always on. A block resets that IP's counters.
-    block_seconds: 3600             # How long a block lasts, in seconds; any length is honoured. Zero or negative stops start-up.
-    suspicious_threshold: 10        # Block at this many suspicious requests
-    rate_limit_threshold: 5         # Block at this many rate limit violations
-    attack_type_threshold: 3        # Block at this many distinct attack types
-    suspicious_per_hour_threshold: 5  # Block at more than this many suspicious requests inside one hour; at most 1000 (the monitor keeps that many times per client IP), more stops start-up
   agent_enrolment: "open"          # "open" (default): the agent key can register a keyless agent. "strict": only an agent approved by its key gets in (a keyless register is 403, a token of an unapproved row authorizes nothing); needs admin_api_key, or the start is refused. Env: SHELLY_SECURITY_AGENT_ENROLMENT.
   agent_api_key: ""                # The key the provisioner agent sends; accepted only on the five agent routes (poll, status and report also need the agent's own token). Use a value different from the admin key; no effect while admin_api_key is empty. Prefer env (SHELLY_SECURITY_AGENT_API_KEY or _FILE; a _FILE that cannot be read stops start-up).
 

@@ -257,14 +257,14 @@ Plugin logs include plugin metadata:
 }
 ```
 
-### Security Monitor
+### Security Events
 
 Security events are logged with detailed context:
 
 ```json
 {
   "level": "warn",
-  "component": "security_monitor",
+  "component": "rate_limiter",
   "security_event": "rate_limit_exceeded",
   "request_id": "8f4c2a1b-3d5e-4f6a...",
   "ip_address": "203.0.113.42",

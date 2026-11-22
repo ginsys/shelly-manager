@@ -74,7 +74,7 @@ w.Header().Set("X-Frame-Options", "DENY")
 ```
 Attack: /api/v1/devices?name=<script>alert('XSS')</script>
 Detection: Pattern matching in query parameter validation
-Response: Request blocked, security alert generated
+Response: Request refused with 400
 ```
 
 #### Scenario 2: JavaScript Injection in Headers
@@ -102,26 +102,10 @@ Response: JSON structure validation failure
 
 #### Pattern-Based Detection
 ```go
-// SQL injection patterns in security_monitor.go
+// SQL injection patterns in validation.go (containsSuspiciousContent)
 sqlPatterns := []string{
-    "' or ", " or 1=1", "union select", "drop table", 
-    "delete from", "insert into", "update set", 
-    "-- ", "/*", "*/", "xp_", "sp_"
-}
-```
-
-#### Content Analysis Implementation
-```go
-func (sm *SecurityMonitor) detectAttackType(r *http.Request) string {
-    path := strings.ToLower(r.URL.Path)
-    query := strings.ToLower(r.URL.RawQuery)
-    
-    for _, pattern := range sqlPatterns {
-        if strings.Contains(path, pattern) || strings.Contains(query, pattern) {
-            return "sql_injection"
-        }
-    }
-    return "general_suspicious"
+    "union select", "drop table", "delete from", "insert into",
+    "update users set", "update set", "' or 1=1", " or 1=1", " or '1'='1",
 }
 ```
 
@@ -133,7 +117,7 @@ func (sm *SecurityMonitor) detectAttackType(r *http.Request) string {
 GET /api/v1/devices?id=1' OR '1'='1
 
 -- Detection trigger: "' or " pattern match
--- Response: Immediate request blocking + security alert
+-- Response: Request refused with 400
 ```
 
 #### Union-Based Injection
@@ -142,7 +126,7 @@ GET /api/v1/devices?id=1' OR '1'='1
 GET /api/v1/devices/1 UNION SELECT password FROM users--
 
 -- Detection trigger: "union select" pattern match
--- Response: Path validation failure + IP reputation update
+-- Response: Request refused with 400
 ```
 
 #### Blind SQL Injection
@@ -292,7 +276,7 @@ Mitigation: Exponential backoff suggested in response
 ```
 Attack: 1,000 IPs each sending 100 requests/minute
 Detection: Multiple rate limit violations across IPs
-Response: Individual IP blocking + alert escalation
+Response: Each IP is refused with 429 once it is over its own limit
 Mitigation: Path-specific limits reduce impact on critical functions
 ```
 
@@ -355,15 +339,9 @@ func validateJSONDepth(data interface{}, currentDepth, maxDepth, maxArraySize in
 
 ### Pattern Detection
 ```go
-// Path traversal patterns in validation.go
-if strings.Contains(path, "..") || strings.Contains(query, "..") {
-    return true  // Suspicious request
-}
-
-// Extended patterns for various encodings
+// Path traversal patterns in validation.go (containsSuspiciousContent)
 patterns := []string{
     "../", "..\\", "/etc/passwd", "/proc/",
-    "%2e%2e%2f", "%2e%2e%5c"  // URL-encoded variants
 }
 ```
 
@@ -372,8 +350,8 @@ patterns := []string{
 #### Directory Traversal in Path
 ```
 Attack: GET /api/v1/config/../../etc/passwd
-Detection: ".." pattern in URL path
-Response: Suspicious request flagged + security alert
+Detection: "../" pattern in a query value; the path itself is cleaned by the router before it is routed
+Response: Request refused with 400
 ```
 
 #### Encoded Path Traversal
@@ -431,7 +409,7 @@ Attack: Host: evil.com
        X-Forwarded-Host: attacker.com
 
 Detection: Forbidden header filtering
-Response: Request rejected + security alert
+Response: Request rejected
 ```
 
 ## Prototype Pollution Prevention
@@ -523,7 +501,7 @@ func isSuspiciousUserAgent(userAgent string) bool {
 User-Agent: Mozilla/5.00 (Nikto/2.1.6) (Evasions:None) (Test:007726)
 
 Detection: "nikto" pattern match in user agent
-Response: Suspicious user agent flagged + IP tracking
+Response: Request refused with 400
 ```
 
 #### SQLMap Injection Tool
@@ -531,7 +509,7 @@ Response: Suspicious user agent flagged + IP tracking
 User-Agent: sqlmap/1.4.7#stable (http://sqlmap.org)
 
 Detection: "sqlmap" pattern match  
-Response: Automated scanner detected + immediate IP block
+Response: Request refused with 400
 ```
 
 #### Burp Suite Professional
@@ -539,56 +517,8 @@ Response: Automated scanner detected + immediate IP block
 User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) burpsuite/2021.10.3
 
 Detection: "burpsuite" pattern match
-Response: Security testing tool detected + enhanced monitoring
+Response: Request refused with 400
 ```
-
-## Security Metrics and Monitoring
-
-### Real-Time Security Metrics
-
-The framework provides comprehensive security metrics through the `/api/v1/security/metrics` endpoint:
-
-```json
-{
-  "total_requests": 45678,
-  "blocked_requests": 234,
-  "suspicious_requests": 456,
-  "rate_limit_violations": 123,
-  "validation_failures": 89,
-  "attacks_by_type": {
-    "sql_injection": 12,
-    "xss_attempt": 8,
-    "path_traversal": 4,
-    "automated_scanner": 15,
-    "rate_limit_violation": 123
-  },
-  "top_attacker_ips": [
-    {
-      "ip": "192.168.1.100",
-      "total_requests": 500,
-      "suspicious_requests": 45,
-      "attack_types": {"sql_injection": 12, "xss_attempt": 8},
-      "blocked": true
-    }
-  ],
-  "blocked_ips": 15,
-  "active_threats": 3
-}
-```
-
-### Attack Pattern Analytics
-
-#### Statistical Analysis
-- **Attack Frequency**: Requests per hour by attack type
-- **Source Analysis**: Geographic and network-based attacker profiling  
-- **Trend Detection**: Attack pattern changes over time
-- **Effectiveness Metrics**: Protection success rates by security layer
-
-#### Threat Intelligence
-- **IP Reputation**: Automatic bad actor identification
-- **Attack Correlation**: Multi-vector attack detection
-- **Behavioral Profiling**: Legitimate vs. malicious traffic patterns
-- **False Positive Tracking**: Continuous accuracy improvement
 
 ## Performance Optimization
 

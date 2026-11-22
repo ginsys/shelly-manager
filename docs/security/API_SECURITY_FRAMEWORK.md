@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Shelly Manager API Security Framework provides comprehensive protection against common web application vulnerabilities and attacks. This document describes the implemented security measures, configuration options, and monitoring capabilities.
+The Shelly Manager API Security Framework provides comprehensive protection against common web application vulnerabilities and attacks. This document describes the implemented security measures, configuration options, and logging.
 
 ## Security Features Implemented
 
@@ -59,63 +59,7 @@ The Shelly Manager API Security Framework provides comprehensive protection agai
 - Forbidden parameter name detection
 - Suspicious content filtering
 
-### 4. Security Monitoring and Alerting
-
-**Off by default.** The security monitor and IP blocking are two switches in the application
-configuration, and a deployment turns them on:
-
-| Key | Environment variable | Default | Meaning |
-|---|---|---|---|
-| `security.monitoring.enabled` | `SHELLY_SECURITY_MONITORING_ENABLED` | `false` | Build the monitor: count suspicious requests, rate limit violations and attack types per client IP, raise alerts, serve `GET /api/v1/metrics/security`. |
-| `security.ip_blocking.enabled` | `SHELLY_SECURITY_IP_BLOCKING_ENABLED` | `false` | Block a client IP the monitor flags. Needs `security.monitoring.enabled`: start-up stops with an error naming both keys if blocking is on and the monitor is off. |
-| `security.ip_blocking.block_seconds` | `SHELLY_SECURITY_IP_BLOCKING_BLOCK_SECONDS` | `3600` | How long a block lasts, in seconds. Any length is honoured, a block of more than 24 hours included. |
-| `security.ip_blocking.suspicious_threshold` | `SHELLY_SECURITY_IP_BLOCKING_SUSPICIOUS_THRESHOLD` | `10` | Block at this many suspicious requests. |
-| `security.ip_blocking.rate_limit_threshold` | `SHELLY_SECURITY_IP_BLOCKING_RATE_LIMIT_THRESHOLD` | `5` | Block at this many rate limit violations. |
-| `security.ip_blocking.attack_type_threshold` | `SHELLY_SECURITY_IP_BLOCKING_ATTACK_TYPE_THRESHOLD` | `3` | Block at this many distinct attack types. |
-| `security.ip_blocking.suspicious_per_hour_threshold` | `SHELLY_SECURITY_IP_BLOCKING_SUSPICIOUS_PER_HOUR_THRESHOLD` | `5` | Block at more than this many suspicious requests inside one hour. At most `1000`: the monitor keeps that many request times for every client IP that sent a suspicious request, and a larger value stops start-up with an error naming the key and the limit. |
-
-A zero or negative block length or threshold, or an hourly threshold above 1000, stops start-up with an error naming the key. With the
-monitor on and blocking off, counts and alerts continue, no IP is refused or reported blocked, and
-no counter resets. The rate limiter, the security headers and the request validation do not depend
-on either switch.
-
-**Upgrade note.** Before this setting existed, the monitor and IP blocking were always on. A
-deployment that upgrades stops blocking IPs, and stops serving `GET /api/v1/metrics/security`
-(the route answers 404), until it turns the keys on. The numbers above are what the monitor always
-used, so turning both switches on restores the earlier behaviour, except for one change: a block
-now resets that IP's counters (below).
-
-**A block starts the IP's counting over.** When a block starts, that IP's suspicious request count,
-rate limit violation count, attack types and rolling-hour record are emptied. Requests that finish
-during the block do not count toward the next block, so after the block ends one more suspicious
-request does not block the IP again. The monitor-wide statistics (`total_requests`,
-`suspicious_requests`, `attacks_by_type`) are history and are not reset. While a block lasts, the
-IP stays in `top_attacker_ips` with `blocked: true` and the counters as reset (`suspicious_requests`
-0, `attack_types` empty; `total_requests`, `first_seen` and `last_seen` unchanged), and it counts in
-`blocked_ips` and `active_threats`. After the block ends, an entry with no counts is no longer
-listed. The monitor drops an idle entry 24 hours after its last request, but never while its block
-is still running.
-
-**Attack Detection**:
-- SQL injection attempt detection
-- XSS attempt detection
-- Path traversal attempt detection
-- Automated scanner detection
-- Suspicious user agent detection
-
-**IP Blocking**:
-- Automatic IP blocking based on attack patterns (off by default: `security.ip_blocking.enabled`)
-- Configurable blocking duration and thresholds
-- Temporary blocks with automatic expiration; a block resets the IP's counters
-
-**Security Metrics**:
-- Real-time security statistics
-- Attack type categorization
-- Top attacker IP tracking
-- Alert level distribution
-- Active threat monitoring
-
-### 5. Standardized API Responses
+### 4. Standardized API Responses
 
 **Response Format**:
 ```json
@@ -140,7 +84,7 @@ is still running.
 **Error Codes**:
 - Client errors (4xx): `BAD_REQUEST`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, etc.
 - Server errors (5xx): `INTERNAL_SERVER_ERROR`, `SERVICE_UNAVAILABLE`, etc.
-- Security errors: `RATE_LIMIT_EXCEEDED`, `IP_BLOCKED`, `VALIDATION_FAILED`
+- Security errors: `RATE_LIMIT_EXCEEDED`, `VALIDATION_FAILED`
 - Application errors: `DEVICE_NOT_FOUND`, `CONFIGURATION_ERROR`, etc.
 
 ## Configuration
@@ -166,26 +110,11 @@ type SecurityConfig struct {
     HSTSMaxAge        int           // HSTS max-age in seconds
     PermissionsPolicy string        // permissions policy header
     
-    // Logging and monitoring
+    // Logging
     LogSecurityEvents bool          // enable security event logging
     LogAllRequests    bool          // enable request/response logging
-    EnableMonitoring  bool          // enable security monitoring and alerting
-    
-    // Attack detection
-    EnableIPBlocking  bool          // enable automatic IP blocking
-    BlockDuration     time.Duration // how long to block suspicious IPs; a block resets the IP's counters
-
-    // Block rules: zero or less switches that one rule off
-    SuspiciousThreshold    int // blocked at this many suspicious requests
-    RateViolationThreshold int // blocked at this many rate limit violations
-    AttackTypeThreshold    int // blocked at this many distinct attack types
-    HourlyThreshold        int // blocked at more than this many suspicious requests inside one hour
 }
 ```
-
-`DefaultSecurityConfig()` turns monitoring and blocking on with the thresholds 10, 5, 3 and 5, for
-code that builds a router itself. The application's own default is the configuration keys above,
-which are off.
 
 ### Validation Configuration
 
@@ -225,16 +154,14 @@ type ValidationConfig struct {
 The security middleware is applied in a carefully designed order to ensure maximum protection:
 
 1. **Recovery Middleware**: Catches panics and prevents information disclosure
-2. **IP Blocking Middleware**: Blocks requests from known malicious IPs early
-3. **Security Monitoring Middleware**: Tracks all requests for security analysis
-4. **Security Logging Middleware**: Logs security events and suspicious activities
-5. **Security Headers Middleware**: Sets comprehensive security headers
-6. **Request Timeout Middleware**: Prevents resource exhaustion attacks
-7. **Rate Limiting Middleware**: Prevents DoS and brute force attacks
-8. **Request Size Middleware**: Limits payload size to prevent memory exhaustion
-9. **Request Validation Middleware**: Validates headers, content types, and parameters
-10. **Enhanced CORS Middleware**: Security-aware cross-origin request handling
-11. **Standard Logging Middleware**: Existing HTTP request logging
+2. **Security Logging Middleware**: Logs security events
+3. **Security Headers Middleware**: Sets comprehensive security headers
+4. **Request Timeout Middleware**: Prevents resource exhaustion attacks
+5. **Rate Limiting Middleware**: Prevents DoS and brute force attacks
+6. **Request Size Middleware**: Limits payload size to prevent memory exhaustion
+7. **Request Validation Middleware**: Validates headers, content types, and parameters
+8. **Enhanced CORS Middleware**: Security-aware cross-origin request handling
+9. **Standard Logging Middleware**: Existing HTTP request logging
 
 ### Connection limits of the server
 
@@ -243,55 +170,6 @@ The middleware above runs only after a request header has been read, so the serv
 There is no `ReadTimeout` or `WriteTimeout`: each is one limit for a whole request, so a value short enough to matter would cut a slow upload (the body limit is 10 MiB), a download or the 5 minute bulk-apply answer. This means a client that sends its body slowly after a complete header still holds its connection, and so does a client that stops reading a large answer: the request deadline of the router (30 seconds, 5 minutes on `bulk-apply`) cannot act on a handler that is blocked in a network write, because the timeout writer holds its lock for the duration of that write and the deadline handling needs that lock. The number of connections is not limited either.
 
 The `api.timeout` setting is not one of these limits: it is read by nothing today.
-
-## API Endpoints
-
-### Security Metrics Endpoint
-
-**GET `/metrics/security`**
-
-Returns comprehensive security metrics and statistics. The route exists only while the security
-monitor is on (`security.monitoring.enabled`, off by default); with the monitor off it answers 404,
-and the web UI's Metrics page says that security monitoring is off.
-
-**Response**:
-```json
-{
-  "success": true,
-  "data": {
-    "total_requests": 12345,
-    "blocked_requests": 45,
-    "suspicious_requests": 123,
-    "rate_limit_violations": 34,
-    "validation_failures": 67,
-    "attacks_by_type": {
-      "sql_injection": 12,
-      "xss_attempt": 8,
-      "path_traversal": 5
-    },
-    "top_attacker_ips": [
-      {
-        "ip": "192.168.1.100",
-        "total_requests": 500,
-        "suspicious_requests": 45,
-        "attack_types": {"sql_injection": 20, "xss_attempt": 25},
-        "first_seen": "2024-01-01T10:00:00Z",
-        "last_seen": "2024-01-01T11:30:00Z",
-        "blocked": true
-      }
-    ],
-    "alerts_by_level": {
-      "CRITICAL": 5,
-      "HIGH": 12,
-      "MEDIUM": 23,
-      "LOW": 45
-    },
-    "blocked_ips": 3,
-    "active_threats": 2,
-    "last_updated": "2024-01-01T12:00:00Z"
-  }
-}
-```
 
 ## Usage Examples
 
@@ -349,14 +227,6 @@ securityConfig := &middleware.SecurityConfig{
     EnableHSTS: true,
     HSTSMaxAge: 31536000,
     LogSecurityEvents: true,
-    EnableMonitoring: true,
-    EnableIPBlocking: true,
-    BlockDuration: 2 * time.Hour,
-    // A rule with a threshold of zero is off, so set the ones you want
-    SuspiciousThreshold: 10,
-    RateViolationThreshold: 5,
-    AttackTypeThreshold: 3,
-    HourlyThreshold: 5,
 }
 
 validationConfig := &middleware.ValidationConfig{
@@ -378,21 +248,18 @@ router := api.SetupRoutesWithSecurity(handler, logger, securityConfig, validatio
 2. **Configure CSP**: Customize Content Security Policy for your specific needs
 3. **Rate Limiting**: Adjust rate limits based on expected traffic patterns
 4. **Origin Validation**: Implement proper CORS origin validation
-5. **Monitoring**: Enable comprehensive security logging and monitoring
+5. **Logging**: Enable comprehensive security logging
 
 ### Monitoring and Alerting
 
-1. **Security Metrics**: Regularly monitor `/metrics/security` endpoint
-2. **Log Analysis**: Set up log aggregation for security events
-3. **Alerting**: Configure alerts for security events and anomalies
-4. **IP Blocking**: Monitor blocked IPs and adjust blocking policies
+1. **Log Analysis**: Set up log aggregation for security events
+2. **Alerting**: Configure alerts for security events and anomalies
 
 ### Performance Impact
 
 - **Overhead**: Security middleware adds <10ms overhead per request
 - **Memory**: Rate limiter uses ~1KB per unique client IP
-- **CPU**: Attack detection algorithms are optimized for performance
-- **Storage**: Security logs and metrics require additional storage
+- **Storage**: Security logs require additional storage
 
 ## Troubleshooting
 
@@ -400,8 +267,7 @@ router := api.SetupRoutesWithSecurity(handler, logger, securityConfig, validatio
 
 1. **Rate Limit Exceeded**: Check rate limit configuration and client behavior
 2. **Validation Failures**: Review request format and validation rules
-3. **Blocked IPs**: Check security metrics and IP blocking policies
-4. **High Memory Usage**: Monitor rate limiter and security monitor memory usage
+3. **High Memory Usage**: Monitor rate limiter memory usage
 
 ### Debug Mode
 
@@ -410,15 +276,13 @@ Enable debug logging by setting `LogAllRequests: true` in security configuration
 ### Health Checks
 
 Monitor the security framework health through:
-- Security metrics endpoint
 - Application logs
 - Rate limiter statistics
-- Attack detection alerts
 
 ## Best Practices
 
 1. **Regular Updates**: Keep security policies and configurations up to date
-2. **Monitoring**: Implement comprehensive security monitoring
+2. **Logging**: Review security logs regularly
 3. **Testing**: Regularly test security measures and incident response
 4. **Documentation**: Maintain security documentation and procedures
 5. **Training**: Ensure team understands security features and best practices
@@ -428,8 +292,6 @@ Monitor the security framework health through:
 - [x] Comprehensive security headers implemented
 - [x] Rate limiting with path-specific limits
 - [x] Request validation framework
-- [x] Attack detection and IP blocking
-- [x] Security monitoring and metrics
 - [x] Standardized error responses
 - [x] Security event logging
 - [x] Input sanitization

@@ -40,7 +40,6 @@ type Handler struct {
 	ExportHandlers      *ExportHandlers
 	ImportHandlers      *ImportHandlers
 	logger              *logging.Logger
-	securityMonitor     interface{} // Security monitor for metrics (using interface{} to avoid circular imports)
 	// adminKey provides simple guard for sensitive endpoints until full auth is implemented. The export,
 	// import and metrics handlers read the same key once ShareAdminKey has run, so a rotation switches
 	// all of them at once.

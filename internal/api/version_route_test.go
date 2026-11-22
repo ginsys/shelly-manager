@@ -25,9 +25,6 @@ func TestVersionIsServedUnderAPIAndRoot(t *testing.T) {
 
 	h := NewHandlerWithLogger(db, nil, testNotificationHandler(t, db), nil, logger)
 	router := SetupRoutesWithSecurity(h, logger, middleware.DefaultSecurityConfig(), middleware.DefaultValidationConfig())
-	sm, ok := h.securityMonitor.(*middleware.SecurityMonitor)
-	require.True(t, ok, "production router did not build a security monitor")
-	t.Cleanup(sm.Close)
 
 	for _, path := range []string{"/api/v1/version", "/version"} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)

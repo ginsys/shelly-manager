@@ -25,7 +25,6 @@ func corsRouter(t *testing.T, allowed []string) *mux.Router {
 	secCfg := middleware.DefaultSecurityConfig()
 	secCfg.CORSAllowedOrigins = allowed
 	r := SetupRoutesWithSecurity(h, h.logger, secCfg, middleware.DefaultValidationConfig())
-	closeMonitor(t, h)
 	return r
 }
 

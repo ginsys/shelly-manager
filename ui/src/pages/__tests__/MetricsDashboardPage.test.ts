@@ -5,7 +5,7 @@ import MetricsDashboardPage from '../MetricsDashboardPage.vue'
 import { useMetricsStore } from '@/stores/metrics'
 import * as metricsApi from '@/api/metrics'
 import { dismissNotice, notice } from '@/composables/useNotice'
-import type { SecurityMetrics, TestAlertResult } from '@/api/metrics'
+import type { TestAlertResult } from '@/api/metrics'
 import type {
   DashboardMetrics,
   NotificationMetrics,
@@ -21,7 +21,6 @@ vi.mock('@/api/metrics', () => ({
   getDashboardSummary: vi.fn(),
   getNotificationMetrics: vi.fn(),
   getResolutionMetrics: vi.fn(),
-  getSecurityMetrics: vi.fn(),
   sendTestAlert: vi.fn(),
   // Store-level API methods
   getMetricsStatus: vi.fn(),
@@ -38,7 +37,6 @@ describe('MetricsDashboardPage', () => {
   // Mock data, shaped like the Go answers: the field names and nesting of
   // internal/metrics/websocket.go (DashboardMetrics and its parts),
   // internal/metrics/handlers.go (SendTestAlert) and
-  // internal/api/middleware/security_monitor.go (SecurityMetrics).
   const mockNotificationMetrics: NotificationMetrics = {
     total_sent: 15,
     total_failed: 1,
@@ -74,20 +72,6 @@ describe('MetricsDashboardPage', () => {
     resolution_metrics: mockResolutionMetrics
   }
 
-  const mockSecurityMetrics: SecurityMetrics = {
-    total_requests: 500,
-    blocked_requests: 7,
-    suspicious_requests: 11,
-    rate_limit_violations: 3,
-    validation_failures: 4,
-    attacks_by_type: { sql_injection: 2 },
-    top_attacker_ips: null,
-    alerts_by_level: {},
-    last_updated: '2026-01-01T00:00:00Z',
-    blocked_ips: 1,
-    active_threats: 2
-  }
-
   const mockTestAlert: TestAlertResult = {
     status: 'sent',
     alert_type: 'test',
@@ -117,7 +101,6 @@ describe('MetricsDashboardPage', () => {
     vi.mocked(metricsApi.getDashboardSummary).mockResolvedValue(mockDashboardSummary)
     vi.mocked(metricsApi.getNotificationMetrics).mockResolvedValue(mockNotificationMetrics)
     vi.mocked(metricsApi.getResolutionMetrics).mockResolvedValue(mockResolutionMetrics)
-    vi.mocked(metricsApi.getSecurityMetrics).mockResolvedValue(mockSecurityMetrics)
     vi.mocked(metricsApi.enableMetrics).mockResolvedValue({ success: true })
     vi.mocked(metricsApi.disableMetrics).mockResolvedValue({ success: true })
     vi.mocked(metricsApi.collectMetrics).mockResolvedValue({ success: true })
@@ -204,7 +187,6 @@ describe('MetricsDashboardPage', () => {
       expect(metricsApi.getDashboardSummary).toHaveBeenCalled()
       expect(metricsApi.getNotificationMetrics).toHaveBeenCalled()
       expect(metricsApi.getResolutionMetrics).toHaveBeenCalled()
-      expect(metricsApi.getSecurityMetrics).toHaveBeenCalled()
     })
 
     it('displays dashboard summary after loading', async () => {
@@ -238,19 +220,6 @@ describe('MetricsDashboardPage', () => {
       expect(text).toContain('Avg Review Time: 2m 0s')
       expect(text).toContain('drift: 3')
       expect(text).toContain('drift: 0.8')
-    })
-
-    it('displays security metrics', async () => {
-      await flushPromises()
-
-      const text = panel('security').text()
-      expect(text).toContain('Total: 500')
-      expect(text).toContain('Blocked: 7')
-      expect(text).toContain('Suspicious: 11')
-      expect(text).toContain('Rate limit: 3')
-      expect(text).toContain('Validation failures: 4')
-      expect(text).toContain('Blocked IPs: 1')
-      expect(text).toContain('Active threats: 2')
     })
 
     it('shows no card for a field the server does not send', async () => {
@@ -293,59 +262,8 @@ describe('MetricsDashboardPage', () => {
       expect(panel('summary').exists()).toBe(true)
     })
 
-    // The route answers 404 only while security monitoring is off (security.monitoring.enabled,
-    // off by default): the server registers it with a monitor and never otherwise.
-    const notFound = () =>
-      Object.assign(new Error('Request failed with status code 404'), {
-        response: { status: 404, data: { success: false, error: { code: 'NOT_FOUND', message: 'not found' } } }
-      })
-
-    it('says security monitoring is off on a 404, with no error banner and no late notice', async () => {
-      dismissNotice()
-      vi.mocked(metricsApi.getSecurityMetrics).mockRejectedValue(notFound())
-
-      wrapper = mountPage()
-      await flushPromises()
-
-      expect(panel('security-off').text()).toContain('Security monitoring is off')
-      expect(panel('security').exists()).toBe(false)
-      expect(wrapper.text()).not.toContain('Security metrics:')
-      expect(wrapper.text()).not.toContain('not found')
-      expect(wrapper.text()).not.toContain('status code 404')
-      expect(notice.value).toBeNull()
-      expect(panel('summary').exists()).toBe(true)
-      expect(panel('notifications').exists()).toBe(true)
-      expect(panel('resolution').exists()).toBe(true)
-    })
-
-    it('shows the panel again when a later load finds the monitor on', async () => {
-      vi.mocked(metricsApi.getSecurityMetrics).mockRejectedValueOnce(notFound())
-      wrapper = mountPage()
-      await flushPromises()
-      expect(panel('security-off').exists()).toBe(true)
-
-      await wrapper.vm.fetchAdvancedMetrics()
-      await flushPromises()
-
-      expect(panel('security-off').exists()).toBe(false)
-      expect(panel('security').exists()).toBe(true)
-    })
-
-    it('still names a failure of the security call that is not a 404', async () => {
-      const serverError = Object.assign(new Error('Request failed with status code 500'), {
-        response: { status: 500, data: { success: false, error: { code: 'INTERNAL', message: 'monitor broke' } } }
-      })
-      vi.mocked(metricsApi.getSecurityMetrics).mockRejectedValue(serverError)
-
-      wrapper = mountPage()
-      await flushPromises()
-
-      expect(panel('security-off').exists()).toBe(false)
-      expect(wrapper.text()).toContain('Security metrics: monitor broke')
-    })
-
-    it('renders the other three panels when one call fails', async () => {
-      vi.mocked(metricsApi.getSecurityMetrics).mockRejectedValue(
+    it('renders the other two panels when one call fails', async () => {
+      vi.mocked(metricsApi.getResolutionMetrics).mockRejectedValue(
         new Error('Request failed with status code 502')
       )
 
@@ -354,28 +272,25 @@ describe('MetricsDashboardPage', () => {
 
       expect(panel('summary').exists()).toBe(true)
       expect(panel('notifications').exists()).toBe(true)
-      expect(panel('resolution').exists()).toBe(true)
-      expect(panel('security').exists()).toBe(false)
-      expect(wrapper.text()).toContain('Security metrics: Request failed with status code 502')
+      expect(panel('resolution').exists()).toBe(false)
+      expect(wrapper.text()).toContain('Resolution metrics: Request failed with status code 502')
     })
 
-    it('names every failed panel and renders none when all four calls fail', async () => {
+    it('names every failed panel and renders none when all three calls fail', async () => {
       vi.mocked(metricsApi.getDashboardSummary).mockRejectedValue(new Error('boom 1'))
       vi.mocked(metricsApi.getNotificationMetrics).mockRejectedValue(new Error('boom 2'))
       vi.mocked(metricsApi.getResolutionMetrics).mockRejectedValue(new Error('boom 3'))
-      vi.mocked(metricsApi.getSecurityMetrics).mockRejectedValue(new Error('boom 4'))
 
       wrapper = mountPage()
       await flushPromises()
 
-      for (const name of ['summary', 'notifications', 'resolution', 'security']) {
+      for (const name of ['summary', 'notifications', 'resolution']) {
         expect(panel(name).exists()).toBe(false)
       }
       const text = wrapper.text()
       expect(text).toContain('Dashboard summary: boom 1')
       expect(text).toContain('Notification metrics: boom 2')
       expect(text).toContain('Resolution metrics: boom 3')
-      expect(text).toContain('Security metrics: boom 4')
     })
 
     it("shows the server's own error message, not the bare axios text", async () => {
@@ -386,21 +301,20 @@ describe('MetricsDashboardPage', () => {
           data: { success: false, error: { code: 'UNAUTHORIZED', message: 'Admin authorization required' } }
         }
       })
-      vi.mocked(metricsApi.getSecurityMetrics).mockRejectedValue(unauthorized)
+      vi.mocked(metricsApi.getNotificationMetrics).mockRejectedValue(unauthorized)
 
       wrapper = mountPage()
       await flushPromises()
 
       const text = wrapper.text()
-      expect(text).toContain('Security metrics: Admin authorization required')
+      expect(text).toContain('Notification metrics: Admin authorization required')
       expect(text).not.toContain('status code 401')
     })
 
     it.each([
       ['summary', 'getDashboardSummary'],
       ['notifications', 'getNotificationMetrics'],
-      ['resolution', 'getResolutionMetrics'],
-      ['security', 'getSecurityMetrics']
+      ['resolution', 'getResolutionMetrics']
     ] as const)('empties the %s panel when its refresh fails instead of keeping stale numbers', async (name, call) => {
       await flushPromises()
       expect(panel(name).exists()).toBe(true)
@@ -410,22 +324,39 @@ describe('MetricsDashboardPage', () => {
       await flushPromises()
 
       expect(panel(name).exists()).toBe(false)
-      const others = ['summary', 'notifications', 'resolution', 'security'].filter(n => n !== name)
+      const others = ['summary', 'notifications', 'resolution'].filter(n => n !== name)
       for (const other of others) expect(panel(other).exists()).toBe(true)
     })
 
     it('fills the panel again once its call succeeds', async () => {
-      vi.mocked(metricsApi.getSecurityMetrics).mockRejectedValueOnce(new Error('gone'))
+      vi.mocked(metricsApi.getResolutionMetrics).mockRejectedValueOnce(new Error('gone'))
 
       wrapper = mountPage()
       await flushPromises()
-      expect(panel('security').exists()).toBe(false)
+      expect(panel('resolution').exists()).toBe(false)
 
       await wrapper.vm.fetchAdvancedMetrics()
       await flushPromises()
 
-      expect(panel('security').exists()).toBe(true)
+      expect(panel('resolution').exists()).toBe(true)
       expect(wrapper.text()).not.toContain('gone')
+    })
+  })
+
+  // ginsys/shelly-manager#876: the security monitor is removed, so the page shows no panel for it
+  // (the mocked client module above has no security call, so a page that asked for one would fail).
+  describe('No security metrics', () => {
+    it('shows no security panel', async () => {
+      await flushPromises()
+
+      expect(panel('security').exists()).toBe(false)
+      expect(panel('security-off').exists()).toBe(false)
+      expect(wrapper.text()).not.toContain('Security Metrics')
+      expect(wrapper.text()).not.toContain('Security metrics:')
+      // The other three panels are unchanged.
+      for (const name of ['summary', 'notifications', 'resolution']) {
+        expect(panel(name).exists()).toBe(true)
+      }
     })
   })
 

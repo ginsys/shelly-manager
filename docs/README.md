@@ -88,10 +88,9 @@ Internal documentation for contributors:
 
 ### API Internals
 - `api-response-standardization.md` - JSON response format standard
-- `api-security-architecture.md` - 11-layer security middleware
+- `api-security-architecture.md` - 9-layer security middleware
 - `api-security-configuration.md` - Environment-specific security config
 - `api-security-features.md` - Attack protection patterns
-- `api-security-monitoring.md` - Threat detection and incident response
 
 ### Database Providers
 - `mysql-provider-*.md` (4 files) - MySQL provider documentation

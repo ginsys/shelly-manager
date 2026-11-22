@@ -1026,10 +1026,6 @@ func newRouteContractRouter(t *testing.T) *mux.Router {
 	h.ExportHandlers = NewSyncHandlers(engine, logger)
 	h.ImportHandlers = NewImportHandlers(engine, logger)
 	router := SetupRoutesWithSecurity(h, logger, middleware.DefaultSecurityConfig(), middleware.DefaultValidationConfig())
-	// The production router starts the monitor's alert and cleanup goroutines.
-	sm, ok := h.securityMonitor.(*middleware.SecurityMonitor)
-	require.True(t, ok, "production router did not build a security monitor")
-	t.Cleanup(sm.Close)
 	return router
 }
 
