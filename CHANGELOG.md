@@ -816,7 +816,9 @@ All notable changes to this project are documented here. The project follows Con
   7 MiB pre-base64 upload limit. Schema forms preserve typed falsy values and
   validate recursive array/object fields. (#268)
 - Test mode (`SHELLY_SECURITY_VALIDATION_TEST_MODE`) registers the production
-  `/api/v1` route table. The security middleware stack stays off. (#252)
+  `/api/v1` route table. The security middleware stack stays off. `GET
+  /api/v1/metrics/security` remains production-only because it closes over the
+  security monitor, which test mode does not construct. (#252)
 - SMA is now a closed, strict `2026.1` format. Generated archives are
   deterministic gzip files with RFC 8785 SHA-256 integrity, a 100 MiB
   normalized-data limit, strict JSON/schema/number/depth validation, joined
