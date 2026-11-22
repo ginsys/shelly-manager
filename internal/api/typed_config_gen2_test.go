@@ -59,8 +59,9 @@ var plus1PMSections = map[string]string{
 	"system":   `{"device":{"name":"Porch","eco_mode":false,"discoverable":true},"sntp":{"server":"time.cloudflare.com"}}`,
 	"location": `{"tz":"Europe/Brussels","lat":50.85,"lng":4.35}`,
 	"cloud":    `{"enable":true,"server":"iot.shelly.cloud:6012/jrpc"}`,
-	"relay":    `{"relays":[{"id":0,"name":"Pump","default_state":"restore_last","auto_on":0,"auto_off":300}]}`,
-	"input":    `{"inputs":[{"id":0,"type":"switch","mode":"follow","inverted":false}]}`,
+	"relay": `{"relays":[{"id":0,"name":"Pump","default_state":"restore_last","auto_on":0,"auto_off":300,
+		"max_power":4480,"voltage_limit":280,"undervoltage_limit":0,"current_limit":16,"autorecover_voltage_errors":false}]}`,
+	"input": `{"inputs":[{"id":0,"type":"switch","mode":"follow","inverted":false,"enable":true,"factory_reset":true}]}`,
 }
 
 // The top-level keys of the Plus 1PM document that nothing is read from, sorted.
@@ -126,11 +127,12 @@ func TestConvertToTypedConfig_Gen2TwoChannelsAndNulls(t *testing.T) {
 		require.NoError(t, err)
 		sections := typedSections(t, typed)
 		assert.JSONEq(t, `{"relays":[
-			{"id":0,"name":"Pump","default_state":"restore_last","auto_on":0,"auto_off":300},
+			{"id":0,"name":"Pump","default_state":"restore_last","auto_on":0,"auto_off":300,
+				"max_power":4480,"voltage_limit":280,"undervoltage_limit":0,"current_limit":16,"autorecover_voltage_errors":false},
 			{"id":1,"name":"Lamp","default_state":"on","auto_on":45,"auto_off":0}]}`, string(sections["relay"]))
 		assert.JSONEq(t, `{"inputs":[
-			{"id":0,"type":"switch","mode":"follow","inverted":false},
-			{"id":1,"name":"Wall","type":"button","mode":"flip","inverted":true}]}`, string(sections["input"]))
+			{"id":0,"type":"switch","mode":"follow","inverted":false,"enable":true,"factory_reset":true},
+			{"id":1,"name":"Wall","type":"button","mode":"flip","inverted":true,"enable":true}]}`, string(sections["input"]))
 	})
 
 	t.Run("null settings are unset", func(t *testing.T) {

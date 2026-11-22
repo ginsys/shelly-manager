@@ -28,8 +28,17 @@ type SingleRelayConfig struct {
 	// pointer so that nil (leave the rules alone) and an empty list (clear them) stay different
 	// through a save and a reload.
 	ScheduleRules *[]string `json:"schedule_rules,omitempty"`
-	// MaxPower is the per-channel overpower threshold in watts (max_power).
+	// MaxPower is the per-channel overpower threshold in watts: max_power on Gen1, power_limit on Gen2.
 	MaxPower *int `json:"max_power,omitempty"`
+
+	// Gen2 switch protection settings (Switch.SetConfig). Volts and watts are whole numbers, amperes
+	// may have a fraction. PowerRestoreDelay is seconds, 0 for off, like AutoOn.
+	VoltageLimit             *int     `json:"voltage_limit,omitempty"`
+	UndervoltageLimit        *int     `json:"undervoltage_limit,omitempty"`
+	CurrentLimit             *float64 `json:"current_limit,omitempty"`
+	InLocked                 *bool    `json:"in_locked,omitempty"`
+	AutorecoverVoltageErrors *bool    `json:"autorecover_voltage_errors,omitempty"`
+	PowerRestoreDelay        *int     `json:"power_restore_delay,omitempty"`
 }
 
 // LightConfig is the channel list of a Gen1 model whose channels are lights (the Shelly Dimmer),
@@ -155,6 +164,11 @@ type SingleInputConfig struct {
 	Inverted         *bool   `json:"inverted,omitempty"`
 	SinglePushAction *string `json:"single_push_action,omitempty"`
 	LongPushAction   *string `json:"long_push_action,omitempty"`
+
+	// Gen2 Input.SetConfig settings: the global enable flag, and the factory reset that a device
+	// takes only in the first 60 seconds after boot.
+	Enable       *bool `json:"enable,omitempty"`
+	FactoryReset *bool `json:"factory_reset,omitempty"`
 }
 
 // LEDConfig represents LED indicator configuration
