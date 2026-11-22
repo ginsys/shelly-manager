@@ -112,20 +112,32 @@ describe('DesiredRollbackCard', () => {
     })
 
     // A read that fails is not a reason to take versions away: the list is immutable rows the server reads by id.
-    it('tells the page once that its first read has settled, whichever way', async () => {
+    it('tells the page when it starts and ends a read, whichever way it ends, and only the newest read says it is over', async () => {
       const ok = mountCard()
-      expect(ok.emitted('settled')).toBeUndefined()
+      expect(ok.emitted('reading')).toEqual([[true]])
       await flushPromises()
-      expect(ok.emitted('settled')).toHaveLength(1)
-      await ok.setProps({ ready: false })
-      await ok.setProps({ ready: true })
-      await flushPromises()
-      expect(ok.emitted('settled')).toHaveLength(1)
+      expect(ok.emitted('reading')).toEqual([[true], [false]])
 
       vi.mocked(getDesiredHistory).mockRejectedValueOnce(new Error('boom'))
       const failed = mountCard()
       await flushPromises()
-      expect(failed.emitted('settled')).toHaveLength(1)
+      expect(failed.emitted('reading')).toEqual([[true], [false]])
+
+      let releaseOld: (rows: unknown) => void = () => {}
+      let releaseNew: (rows: unknown) => void = () => {}
+      vi.mocked(getDesiredHistory)
+        .mockReturnValueOnce(new Promise((resolve) => (releaseOld = resolve)) as any)
+        .mockReturnValueOnce(new Promise((resolve) => (releaseNew = resolve)) as any)
+      const overlap = mountCard()
+      await overlap.setProps({ ready: false })
+      await overlap.setProps({ ready: true })
+      expect(overlap.emitted('reading')).toEqual([[true], [true]])
+      releaseOld([])
+      await flushPromises()
+      expect(overlap.emitted('reading')).toEqual([[true], [true]])
+      releaseNew([])
+      await flushPromises()
+      expect(overlap.emitted('reading')).toEqual([[true], [true], [false]])
     })
 
     it('keeps a list that is shown when a later read fails, shows the error, and a later good read clears it and updates the rows', async () => {
