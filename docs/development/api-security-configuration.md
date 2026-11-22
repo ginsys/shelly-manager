@@ -69,7 +69,6 @@ func DevelopmentSecurityConfig() *SecurityConfig {
     
     // Shorter timeouts for faster feedback
     config.RequestTimeout = 10 * time.Second
-    config.BlockDuration = 5 * time.Minute  // Shorter blocks
     
     // Relaxed CSP for development tools
     config.CSP = "default-src 'self' 'unsafe-eval' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' https:; connect-src 'self' ws: wss:; frame-ancestors 'self';"
@@ -100,9 +99,6 @@ func StagingSecurityConfig() *SecurityConfig {
     // Production-like security headers
     config.EnableHSTS = true          // Enable for HTTPS staging
     config.HSTSMaxAge = 86400        // 1 day for testing
-    
-    // Moderate blocking duration
-    config.BlockDuration = 30 * time.Minute
     
     return config
 }
@@ -141,9 +137,6 @@ func ProductionSecurityConfig() *SecurityConfig {
     // Strict request limits
     config.MaxRequestSize = 5 * 1024 * 1024  // 5MB for production
     config.RequestTimeout = 15 * time.Second  // Faster timeout
-    
-    // Longer blocking for persistent threats
-    config.BlockDuration = 24 * time.Hour
     
     return config
 }
@@ -309,7 +302,6 @@ var ProductionPathLimits = map[string]int{
     // Administrative - very restrictive
     "/api/v1/admin":                20,  // Admin operations
     "/api/v1/metrics":              100, // Metrics access
-    "/api/v1/security/metrics":     50,  // Security metrics
 }
 ```
 
