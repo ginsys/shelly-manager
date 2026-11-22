@@ -1,5 +1,10 @@
 package configuration
 
+import (
+	"maps"
+	"slices"
+)
+
 // Schema extension keywords added by GetDeviceConfigurationSchema.
 const (
 	// SchemaKeyApplicable marks a field that apply can write to the device today.
@@ -122,6 +127,12 @@ func getInputModes(schema map[string]interface{}, deviceType string) map[string]
 	return schema
 }
 
+// gen2LightOnlyKeys are dropped from a Gen1 model's light schema.
+var gen2LightOnlyKeys = []string{
+	"transition_duration", "min_brightness_on_toggle", "button_fade_rate", "night_mode", "night_mode_brightness",
+	"night_mode_start", "night_mode_end", "warmup_enabled", "warmup_brightness", "warmup_time",
+}
+
 // lightSchemaOf narrows the light schema of a supported model to its own keys and words. A template
 // with no model keeps every key.
 func lightSchemaOf(schema map[string]interface{}, deviceType string, supported bool) map[string]interface{} {
@@ -136,9 +147,15 @@ func lightSchemaOf(schema map[string]interface{}, deviceType string, supported b
 		}
 		return schema
 	}
+	for _, key := range gen2LightOnlyKeys {
+		delete(items, key)
+	}
 	if !hasColorWhiteChannels(deviceType) {
 		for _, key := range []string{"name", "effect", "transition", "btn_reverse"} {
 			delete(items, key)
+		}
+		if state, ok := items["default_state"].(map[string]interface{}); ok {
+			state["enum"] = slices.Sorted(maps.Keys(gen1InitialStates))
 		}
 		return schema
 	}

@@ -75,11 +75,12 @@ func gen2KeyApplies(key string, value interface{}) bool {
 	if gen2ApplyKeys[key] {
 		return true
 	}
-	if _, ok := gen2ChannelID(key, "switch"); ok {
-		return true
+	for _, kind := range []string{"switch", "input", "light"} {
+		if _, ok := gen2ChannelID(key, kind); ok {
+			return true
+		}
 	}
-	_, ok := gen2ChannelID(key, "input")
-	return ok
+	return false
 }
 
 // gen2ChannelIDs returns the ids of one kind of channel in a document, ascending. An id is listed

@@ -2007,7 +2007,7 @@ paths:
         configuration. Clears config_applied before the write
         and sets it again only if the read-back matches and the desired configuration did not
         change during the apply. A Gen2 or Gen3 device takes the system, MQTT, cloud, switch,
-        input and roller (cover) settings and the Wi-Fi (station, access point, roam threshold) and the login only: name, eco mode, discoverable, timezone, latitude, longitude and
+        input, light and roller (cover) settings and the Wi-Fi (station, access point, roam threshold) and the login only: name, eco mode, discoverable, timezone, latitude, longitude and
         SNTP server with Sys.SetConfig, MQTT enable, server, port, user, password, client ID,
         topic prefix and the notification flags with MQTT.SetConfig, cloud enable and server
         with Cloud.SetConfig, each input name, type (switch or button) and invert with
@@ -2019,7 +2019,9 @@ paths:
         refuses is a failed row; the bounds are relayed from the Shelly pages and not confirmed
         on hardware), the roller of a device in cover profile
         (max_open_time, max_close_time, motor_direction, swap_inputs, input_mode, and the
-        obstacle and safety settings) with Cover.SetConfig on cover:0, the Bluetooth RPC
+        obstacle and safety settings) with Cover.SetConfig on cover:0, each light (name, initial
+        state, auto on and auto off, transition duration, minimum brightness on toggle, button
+        fade rate, night mode and warm-up) with Light.SetConfig, the Bluetooth RPC
         (system.device.ble.rpc.enable) with BLE.SetConfig, the Ethernet of a Pro
         model (network.eth enable, ipv4mode, ip, netmask, gw and nameserver) with Eth.SetConfig, and last of all the Wi-Fi station (enable,
         ssid, password, IPv4 mode and static address) with WiFi.SetConfig. A device that reports no
