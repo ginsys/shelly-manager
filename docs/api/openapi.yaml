@@ -2006,13 +2006,15 @@ paths:
         so an address that now leads to another device never receives this device's
         configuration. Clears config_applied before the write
         and sets it again only if the read-back matches and the desired configuration did not
-        change during the apply. A Gen2 or Gen3 device takes the system, MQTT, cloud, switch
-        and input settings and the Wi-Fi (station, access point, roam threshold) and the login only: name, eco mode, discoverable, timezone, latitude, longitude and
+        change during the apply. A Gen2 or Gen3 device takes the system, MQTT, cloud, switch,
+        input and roller (cover) settings and the Wi-Fi (station, access point, roam threshold) and the login only: name, eco mode, discoverable, timezone, latitude, longitude and
         SNTP server with Sys.SetConfig, MQTT enable, server, port, user, password, client ID,
         topic prefix and the notification flags with MQTT.SetConfig, cloud enable and server
         with Cloud.SetConfig, each input name, type (switch or button) and invert with
         Input.SetConfig, and each relay name, initial state, auto on and auto off, with the
-        in_mode of its input, with Switch.SetConfig, and last of all the Wi-Fi station (enable,
+        in_mode of its input, with Switch.SetConfig, the roller of a device in cover profile
+        (max_open_time, max_close_time, motor_direction, swap_inputs, input_mode, and the
+        obstacle and safety settings) with Cover.SetConfig on cover:0, and last of all the Wi-Fi station (enable,
         ssid, password, IPv4 mode and static address) with WiFi.SetConfig. A Gen1 word of the
         same meaning is read as the Gen2 word (last, switch, toggle, edge). They are read back
         from Shelly.GetConfig, except the MQTT and Wi-Fi passwords, which are write-only (the
@@ -2021,7 +2023,7 @@ paths:
         wrong static address strands the device. Only the keys the desired
         configuration sets are sent, because the Shelly documentation does not say that
         SetConfig merges. The device decides about a reboot: the apply reboots only when an
-        answer says restart_required. It records that reboot as owed when it reads the answer,
+        answer says restart_required, or a cover write changes invert_directions. It records that reboot as owed when it reads the answer,
         and a write whose answer is lost is not recorded beforehand. If the restart cannot be
         recorded, the apply fails with a warning to reboot by hand. Supported Gen1 settings: name, timezone, location, eco mode,
         discoverable, the relay or roller mode of a Shelly 2.5 (system.device.mode, written first), max power, LED, MQTT (including the update period), SNTP server, cloud (the enabled flag), CoIoT (enabled, update
@@ -2141,7 +2143,7 @@ paths:
             an SNTP server that is not an IPv4 address or a host name, a negative MQTT update
             period, a section with no Gen1 mapping such as the debug settings, or a stored field the configuration
             model does not know. On a Gen2 or Gen3 device every section except the system, MQTT,
-            cloud, switch and input settings and the Wi-Fi (station, access point, roaming), the
+            cloud, switch, input and roller settings and the Wi-Fi (station, access point, roaming), a roller on a device that reports no cover:0 (a switch profile), the
             access point key (wifi.ap.key), switching the access point off while the station is not
             steady, switching an access point on that is off with no password (unless the device
             reports it closed), switching the station off (wifi.enable false), a new
@@ -2180,7 +2182,7 @@ paths:
         '501':
           description: >-
             The device generation is not supported (NOT_IMPLEMENTED). Gen1 is supported, and
-            Gen2 and Gen3 for the system, MQTT, cloud, switch and input sections, the Wi-Fi station, access point and roam threshold, and the login only.
+            Gen2 and Gen3 for the system, MQTT, cloud, switch, input and roller (cover) sections, the Wi-Fi station, access point and roam threshold, and the login only.
           content:
             application/json:
               schema:
@@ -2250,7 +2252,7 @@ paths:
         '501':
           description: >-
             The device generation is not supported (NOT_IMPLEMENTED). Gen1 is supported, and
-            Gen2 and Gen3 for the system, MQTT, cloud, switch and input sections, the Wi-Fi station, access point and roam threshold, and the login only.
+            Gen2 and Gen3 for the system, MQTT, cloud, switch, input and roller (cover) sections, the Wi-Fi station, access point and roam threshold, and the login only.
           content:
             application/json:
               schema:
