@@ -233,7 +233,7 @@ page imports still counts. The Playwright spec is what proves the links are rend
   the card reads its versions again each time the page finishes a read, and a failed read leaves the list it
   already shows. No device is contacted: the operator
   applies afterwards. The History card below it lists imports, not these versions. "View History" on the device
-  page opens this page at that card (`#history-card`), once, when the history and the cards above it have been read; the old `/devices/:id/config/history` page is gone
+  page opens this page at that card (`#history-card`), once, when the history has been read (a card above it may still grow and move it afterwards); the old `/devices/:id/config/history` page is gone
   and its address redirects here.
 
   ![The configuration page opened at its History card from View History](images/device-config-history-card.png)

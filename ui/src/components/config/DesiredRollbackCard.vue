@@ -119,7 +119,7 @@ const props = defineProps<{
   // detach list would compare with nothing, and a rollback must not be confirmed on that.
   ready: boolean
 }>()
-const emit = defineEmits<{ refresh: []; reading: [boolean] }>()
+const emit = defineEmits<{ refresh: [] }>()
 
 const versions = ref<DesiredVersion[]>([])
 const loaded = ref(false)
@@ -162,7 +162,6 @@ const inputId = (path: string) => `secret-${path.replace(/[^A-Za-z0-9_-]/g, '_')
 
 async function loadVersions() {
   const seq = ++readSeq
-  emit('reading', true)
   try {
     const rows = await getDesiredHistory(props.deviceId)
     if (gone || seq !== readSeq) return
@@ -173,10 +172,6 @@ async function loadVersions() {
     if (gone || seq !== readSeq) return
     // A list already shown stays: a read that fails is not a reason to take versions away.
     listError.value = e?.response?.data?.error?.message || e?.message || 'Failed to read the desired configuration versions'
-  } finally {
-    // Only the newest read says it is over: an older one that ends first leaves the newer one reading. The page
-    // waits for this before it moves to the cards below this one (a card that was unmounted emits nothing).
-    if (seq === readSeq) emit('reading', false)
   }
 }
 onMounted(loadVersions)
