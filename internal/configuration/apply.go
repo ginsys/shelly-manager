@@ -974,7 +974,7 @@ func (a *ConfigApplier) countSettings(config map[string]interface{}) int {
 			case "inputs":
 				keys = gen1InputKeys
 			case "lights":
-				keys = gen1LightKeys
+				keys = append(append([]string{}, gen1LightKeys...), gen1RGBW2OwnKeys...)
 			}
 			for _, item := range relayMaps(val) {
 				for _, itemKey := range keys {

@@ -136,3 +136,17 @@ func TestApplyDesiredConfig_DimmerStillRefusesRGBW2Keys(t *testing.T) {
 		})
 	}
 }
+
+// The settings count covers the RGBW2's own keys: a write of those four alone counts four.
+func TestApplyConfig_Gen1RGBW2CountsItsOwnKeys(t *testing.T) {
+	dev := newRGBW2Device("color")
+	cfg := rgbw2Lights(SingleLightConfig{
+		Name: StringPtr("strip"), Effect: IntPtr(1), Transition: IntPtr(100), ButtonReverse: BoolPtr(true),
+	})
+
+	result, err := NewConfigApplier(NewGen1Converter(nil), nil).ApplyConfig(context.Background(), dev, cfg, "SHRGBW2")
+
+	require.NoError(t, err)
+	assert.Equal(t, 4, result.SettingsCount)
+	assert.Equal(t, 4, result.AppliedCount)
+}
