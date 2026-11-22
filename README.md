@@ -114,6 +114,9 @@ make ui-dev
 
 ## Deployment
 
+The manager image (`deploy/docker/Dockerfile.manager`) includes the web UI: the image build compiles `ui/` and the
+server serves it at `/`, so no separate frontend build is needed to run the image.
+
 ### Kubernetes
 
 ```bash
