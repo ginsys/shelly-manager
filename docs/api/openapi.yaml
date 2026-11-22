@@ -2021,7 +2021,8 @@ paths:
         (max_open_time, max_close_time, motor_direction, swap_inputs, input_mode, and the
         obstacle and safety settings) with Cover.SetConfig on cover:0, each light (name, initial
         state, auto on and auto off, transition duration, minimum brightness on toggle, button
-        fade rate, night mode and warm-up) with Light.SetConfig, the Bluetooth RPC
+        fade rate, night mode, warm-up, the power, voltage, undervoltage and current limits and
+        the input mode) with Light.SetConfig, the Bluetooth RPC
         (system.device.ble.rpc.enable) with BLE.SetConfig, the Ethernet of a Pro
         model (network.eth enable, ipv4mode, ip, netmask, gw and nameserver) with Eth.SetConfig, and last of all the Wi-Fi station (enable,
         ssid, password, IPv4 mode and static address) with WiFi.SetConfig. A device that reports no

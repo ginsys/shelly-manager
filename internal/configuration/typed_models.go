@@ -1361,6 +1361,11 @@ func getLightSchema() map[string]interface{} {
 						"warmup_enabled":           map[string]interface{}{"type": "boolean", "title": "Warm-up", "description": "Warm-up on toggle from off to on below 10% (Gen2, where the device has it)"},
 						"warmup_brightness":        map[string]interface{}{"type": "integer", "title": "Warm-up Brightness", "description": "Percent (Gen2)", "minimum": 10, "maximum": 100},
 						"warmup_time":              map[string]interface{}{"type": "integer", "title": "Warm-up Time", "description": "Milliseconds (Gen2)", "minimum": 20, "maximum": 1000},
+						"max_power":                map[string]interface{}{"type": "integer", "title": "Overpower Limit", "description": "Watts; the page gives no range (Gen2, where the device has it)", "minimum": 0},
+						"voltage_limit":            map[string]interface{}{"type": "integer", "title": "Overvoltage Limit", "description": "Volts; the page gives no range (Gen2, where the device has it)", "minimum": 0},
+						"undervoltage_limit":       map[string]interface{}{"type": "integer", "title": "Undervoltage Limit", "description": "Volts; the page gives no range (Gen2, where the device has it)", "minimum": 0},
+						"current_limit":            map[string]interface{}{"type": "number", "title": "Overcurrent Limit", "description": "Amperes; the page gives no range (Gen2, where the device has it)", "minimum": 0},
+						"in_mode":                  map[string]interface{}{"type": "string", "title": "Input Mode", "description": "How the associated input drives the light; dim and dual_dim need a button input (Gen2)", "enum": gen2LightInModes},
 						"schedule": map[string]interface{}{
 							"type":        "boolean",
 							"title":       "Schedule",

@@ -131,6 +131,7 @@ func getInputModes(schema map[string]interface{}, deviceType string) map[string]
 var gen2LightOnlyKeys = []string{
 	"transition_duration", "min_brightness_on_toggle", "button_fade_rate", "night_mode", "night_mode_brightness",
 	"night_mode_start", "night_mode_end", "warmup_enabled", "warmup_brightness", "warmup_time",
+	"max_power", "voltage_limit", "undervoltage_limit", "current_limit", "in_mode",
 }
 
 // lightSchemaOf narrows the light schema of a supported model to its own keys and words. A template

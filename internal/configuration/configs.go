@@ -84,6 +84,13 @@ type SingleLightConfig struct {
 	WarmupEnabled         *bool    `json:"warmup_enabled,omitempty"`
 	WarmupBrightness      *int     `json:"warmup_brightness,omitempty"`
 	WarmupTime            *int     `json:"warmup_time,omitempty"`
+
+	// MaxPower (watts, key power_limit) and the limits keep the relay's names. InMode is a Gen2 input word.
+	MaxPower          *int     `json:"max_power,omitempty"`
+	VoltageLimit      *int     `json:"voltage_limit,omitempty"`
+	UndervoltageLimit *int     `json:"undervoltage_limit,omitempty"`
+	CurrentLimit      *float64 `json:"current_limit,omitempty"`
+	InMode            *string  `json:"in_mode,omitempty"`
 }
 
 // PowerMeteringConfig represents power metering configuration
