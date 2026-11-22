@@ -432,10 +432,92 @@ describe('DeviceConfigPage landing at the History card', () => {
     expect(scrolled).toHaveBeenCalledTimes(1)
   })
 
+  // The versions card reads again when the page has finished reading: the landing counts that read too.
+  it('waits for the versions read that the end of the page read starts', async () => {
+    let finish: () => void = () => {}
+    let release: (rows: unknown) => void = () => {}
+    vi.mocked(getDesiredHistory)
+      .mockResolvedValueOnce([])
+      .mockReturnValueOnce(new Promise((resolve) => (release = resolve)) as any)
+    const { store } = await mountPage('7', '#history-card', async (s) => {
+      s.loading = true
+      await new Promise<void>((resolve) => (finish = resolve))
+      s.loading = false
+    })
+    expect(scrolled).not.toHaveBeenCalled()
+
+    store.status = {} as never // the page has read its state: the card is ready and reads its versions again
+    finish()
+    await flushPromises()
+    expect(getDesiredHistory).toHaveBeenCalledTimes(2)
+    expect(scrolled).not.toHaveBeenCalled()
+
+    release([])
+    await flushPromises()
+    expect(scrolled).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not take a superseded versions read for the end of the reads', async () => {
+    let releaseOld: (rows: unknown) => void = () => {}
+    let releaseNew: (rows: unknown) => void = () => {}
+    vi.mocked(getDesiredHistory)
+      .mockReturnValueOnce(new Promise((resolve) => (releaseOld = resolve)) as any)
+      .mockReturnValueOnce(new Promise((resolve) => (releaseNew = resolve)) as any)
+    const { store } = await mountPage('7', '#history-card')
+    expect(scrolled).not.toHaveBeenCalled()
+
+    store.status = {} as never // ready: the card starts a second read while the first is pending
+    await flushPromises()
+    expect(getDesiredHistory).toHaveBeenCalledTimes(2)
+    releaseOld([])
+    await flushPromises()
+    expect(scrolled).not.toHaveBeenCalled()
+
+    releaseNew([])
+    await flushPromises()
+    expect(scrolled).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not take the settled reads of an earlier refresh for the reads of the next one', async () => {
+    let releaseHistory: (rows: unknown) => void = () => {}
+    let releaseStored: (row: unknown) => void = () => {}
+    vi.mocked(getConfigHistory)
+      .mockReturnValueOnce(new Promise((resolve) => (releaseHistory = resolve)) as any)
+      .mockResolvedValue([entry()] as any)
+    vi.mocked(getStoredDeviceConfig)
+      .mockResolvedValueOnce(null)
+      .mockReturnValueOnce(new Promise((resolve) => (releaseStored = resolve)) as any)
+    const { wrapper } = await mountPage('7', '#history-card')
+    expect(scrolled).not.toHaveBeenCalled()
+
+    await wrapper.findAll('button').find((b) => b.text() === 'Refresh')!.trigger('click')
+    await flushPromises()
+    expect(scrolled).not.toHaveBeenCalled()
+
+    releaseHistory([entry()])
+    await flushPromises()
+    expect(scrolled).not.toHaveBeenCalled()
+
+    releaseStored(null)
+    await flushPromises()
+    expect(scrolled).toHaveBeenCalledTimes(1)
+  })
+
   it('moves when the stored import and the versions fail to read', async () => {
     vi.mocked(getStoredDeviceConfig).mockRejectedValue(new Error('down'))
     vi.mocked(getDesiredHistory).mockRejectedValue(new Error('down'))
     await mountPage('7', '#history-card')
+    expect(scrolled).toHaveBeenCalledTimes(1)
+  })
+
+  it('moves for the next device when the card of the first was reading and went', async () => {
+    vi.mocked(getDesiredHistory).mockReturnValueOnce(new Promise(() => {}) as any) // device 7: never answers
+    const { router } = await mountPage('7', '#history-card')
+    expect(scrolled).not.toHaveBeenCalled()
+
+    await router.push('/devices/8/config#history-card')
+    await flushPromises()
+
     expect(scrolled).toHaveBeenCalledTimes(1)
   })
 
@@ -444,7 +526,8 @@ describe('DeviceConfigPage landing at the History card', () => {
     expect(scrolled).not.toHaveBeenCalled()
   })
 
-  it('does not move for an answer of an older read that a newer one replaced', async () => {
+  // An older read that a newer one replaced still counts as a read in flight, and its late answer fills nothing.
+  it('waits for an older read that a newer one replaced, and fills nothing from its answer', async () => {
     let releaseFirst: (rows: unknown) => void = () => {}
     vi.mocked(getConfigHistory)
       .mockReturnValueOnce(new Promise((resolve) => (releaseFirst = resolve)) as any)
@@ -454,10 +537,12 @@ describe('DeviceConfigPage landing at the History card', () => {
 
     await wrapper.findAll('button').find((b) => b.text() === 'Refresh')!.trigger('click')
     await flushPromises()
-    expect(scrolled).toHaveBeenCalledTimes(1)
+    expect(scrolled).not.toHaveBeenCalled()
 
     releaseFirst([entry({ id: 99 })])
     await flushPromises()
     expect(scrolled).toHaveBeenCalledTimes(1)
+    expect(wrapper.findAll('[data-testid="history-entry"]').map((e) => e.text())).toHaveLength(1)
+    expect(wrapper.find('[data-testid="history-toggle-99"]').exists()).toBe(false)
   })
 })
