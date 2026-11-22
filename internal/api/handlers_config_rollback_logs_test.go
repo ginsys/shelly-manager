@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -34,13 +35,20 @@ const (
 var rbSecrets = []string{rbBodySecret, rbStoredSecret, rbCurrentSecret}
 
 // editsBeforeRollbackRepo changes the device between the service's read and the repository's write,
-// which is how a conditional write is lost (the 409 that says the configuration changed while prepared).
+// which is how a conditional write is lost (the 409 that says the configuration changed while prepared),
+// or fails the write, which the handler answers as an internal error.
 type editsBeforeRollbackRepo struct {
 	*configuration.GormConfigRepository
 	edit func()
+	fail error
 }
 
 func (r *editsBeforeRollbackRepo) RollbackDeviceDesired(deviceID uint, read configuration.DesiredRead, write configuration.DesiredWrite, restoredFrom uint) error {
+	if r.fail != nil {
+		err := r.fail
+		r.fail = nil
+		return err
+	}
 	if r.edit != nil {
 		r.edit()
 	}
@@ -162,6 +170,7 @@ func TestRollbackRoute_NoSecretReachesALogOrAnAnswer(t *testing.T) {
 		return fmt.Sprintf(`{"history_id":%d,"secrets":%s}`, id, secrets)
 	}
 	runs := []run{
+		{name: "200 a version is set and the current secret is kept", body: body(second, ""), status: http.StatusOK, message: "Desired configuration set to version"},
 		{name: "400 a body the validation middleware refuses", body: `{"history_id":` + fmt.Sprint(first) + `,"secrets":{"mqtt.pass":"` + rbBodySecret, status: http.StatusBadRequest, message: "Validation failed"},
 		{name: "400 a body with no history id", body: `{"secrets":{"mqtt.pass":"` + rbBodySecret + `"}}`, status: http.StatusBadRequest, message: "Invalid JSON request body"},
 		{name: "400 a key off the list", body: body(first, `{"mqtt.pass":"`+rbBodySecret+`","auth.pass":"`+rbBodySecret+`"}`), status: http.StatusBadRequest, message: "not an answer to the list"},
@@ -174,12 +183,16 @@ func TestRollbackRoute_NoSecretReachesALogOrAnAnswer(t *testing.T) {
 				}
 			},
 			status: http.StatusConflict, message: "changed while the rollback was prepared"},
+		{name: "500 the write fails", body: body(first, `{"mqtt.pass":"`+rbBodySecret+`"}`),
+			prepare: func() { rig.repo.fail = errors.New("write failed") },
+			status:  http.StatusInternalServerError, message: "Internal"},
 		{name: "422 a version with no stored text", body: body(noText, ""), status: http.StatusUnprocessableEntity, message: "holds no stored configuration"},
 		{name: "422 a mask where no slot is", body: body(noSlotID, `{"custom.token":"`+rbBodySecret+`"}`), status: http.StatusUnprocessableEntity, message: "takes no secret"},
 		{name: "422 a version the recompute would change", body: body(losesID, ""), status: http.StatusUnprocessableEntity, message: "would change when the configuration is recomputed"},
 		{name: "404 a version of no device", body: body(999999, `{"mqtt.pass":"`+rbBodySecret+`"}`), status: http.StatusNotFound, message: "not found"},
 		{name: "200 a version a legacy row holds in the clear", body: body(legacyID, ""), status: http.StatusOK, message: "Desired configuration set to version"},
-		{name: "200 the secret is entered", body: body(second, `{"mqtt.pass":"`+rbBodySecret+`"}`), status: http.StatusOK, message: "Desired configuration"},
+		{name: "200 the secret is entered", body: body(second, `{"mqtt.pass":"`+rbBodySecret+`"}`), status: http.StatusOK, message: "Desired configuration set to version"},
+		{name: "200 the same version again writes nothing", body: body(second, ""), status: http.StatusOK, message: "Nothing was written"},
 	}
 
 	for _, tc := range runs {
