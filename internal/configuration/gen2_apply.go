@@ -359,7 +359,10 @@ func refuseFromLiveDevice(ctx context.Context, client ShellyClient, readLive liv
 	if err != nil {
 		return nil, err
 	}
-	ethChanged, err := refuseEthernet(ctx, client, doc, apiConfig, stationMoves)
+	// A station password is no network move, but a wrong one strands a device reached over Wi-Fi as a
+	// moved network does, so an Ethernet change is held back from both.
+	_, sendsPassword := gen2WiFiStation(apiConfig)["pass"]
+	ethChanged, err := refuseEthernet(ctx, client, doc, apiConfig, stationMoves || sendsPassword)
 	if err != nil {
 		return nil, err
 	}

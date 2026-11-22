@@ -282,6 +282,22 @@ func TestApplyDesiredConfig_Gen2RefusesAnEthernetChangeWithAStationChange(t *tes
 	assert.Empty(t, dev.calls)
 }
 
+// A station password is not a network move, but a wrong one strands a device that is reached over Wi-Fi
+// just the same, so it is held back from an Ethernet change like a Wi-Fi network change is.
+func TestApplyDesiredConfig_Gen2RefusesAnEthernetChangeWithAStationPassword(t *testing.T) {
+	dev := newEthBleDevice("192.168.1.99", nil)
+	desired := ethDesired(BoolPtr(false), nil, nil, nil, nil)
+	desired.WiFi = &WiFiConfiguration{Password: StringPtr("correct-horse-battery")}
+
+	_, err := applyTo(t, dev, desired)
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrUnsupportedSettings), err.Error())
+	assert.Contains(t, err.Error(), "network.eth")
+	assert.Contains(t, err.Error(), "one at a time")
+	assert.Empty(t, dev.calls)
+}
+
 func TestApplyDesiredConfig_Gen2RefusesStaticEthernetItCannotAddress(t *testing.T) {
 	static := StringPtr("static")
 	for name, tc := range map[string]struct {
