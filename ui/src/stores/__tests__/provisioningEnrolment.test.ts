@@ -66,6 +66,39 @@ describe('provisioning store: enrolment', () => {
     expect(store.agents[0].enrolmentState).toBe('approved')
   })
 
+  // A read that was already outstanding when the operator acted must not put the old state back.
+  const deferred = <T,>() => {
+    let resolve!: (v: T) => void
+    const promise = new Promise<T>((r) => { resolve = r })
+    return { promise, resolve }
+  }
+
+  it('an older list read that lands after the reload of an act does not replace it', async () => {
+    const store = useProvisioningStore()
+    const older = deferred<any[]>()
+    vi.mocked(getAgents).mockReturnValueOnce(older.promise)
+    const refresh = store.fetchAgents()
+    vi.mocked(getAgents).mockResolvedValueOnce([agent({ id: 'k', enrolmentState: 'approved', fingerprint: FP })])
+    await store.approveAgent('k')
+    older.resolve([agent({ id: 'k', enrolmentState: 'pending', status: 'pending', fingerprint: FP })])
+    await refresh
+    expect(store.agents[0].enrolmentState).toBe('approved')
+    expect(store.agentsLoading).toBe(false)
+  })
+
+  it('an older Refresh Status that lands after the reload of an act does not replace the row', async () => {
+    const store = useProvisioningStore()
+    store.agents = [agent({ id: 'k', enrolmentState: 'pending', status: 'pending', fingerprint: FP })]
+    const older = deferred<any>()
+    vi.mocked(getAgentStatus).mockReturnValueOnce(older.promise)
+    const status = store.refreshAgentStatus('k')
+    vi.mocked(getAgents).mockResolvedValueOnce([agent({ id: 'k', enrolmentState: 'approved', fingerprint: FP })])
+    await store.approveAgent('k')
+    older.resolve(agent({ id: 'k', enrolmentState: 'pending', status: 'pending', fingerprint: FP }))
+    await status
+    expect(store.agents[0].enrolmentState).toBe('approved')
+  })
+
   it('a refused act rethrows, loads nothing and leaves agentsError and the list alone', async () => {
     const store = useProvisioningStore()
     store.agents = [agent({ id: 'k' })]

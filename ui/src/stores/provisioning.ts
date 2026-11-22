@@ -17,6 +17,8 @@ import {
   type BulkProvisionRequest
 } from '@/api/provisioning'
 
+let latestAgentsRead = 0
+
 export const useProvisioningStore = defineStore('provisioning', {
   state: () => ({
     // Tasks
@@ -128,25 +130,31 @@ export const useProvisioningStore = defineStore('provisioning', {
     },
 
     // Agents
+    // Only the newest list read may replace the list: a read that started before an enrolment act must
+    // not put the old state back when it lands late.
     async fetchAgents() {
+      const read = ++latestAgentsRead
       this.agentsLoading = true
       this.agentsError = ''
       try {
-        this.agents = await getAgents()
+        const agents = await getAgents()
+        if (read === latestAgentsRead) this.agents = agents
       } catch (e: any) {
-        this.agentsError = e?.message || 'Failed to load agents'
+        if (read === latestAgentsRead) this.agentsError = e?.message || 'Failed to load agents'
       } finally {
-        this.agentsLoading = false
+        if (read === latestAgentsRead) this.agentsLoading = false
       }
     },
 
     // Like the task actions: a failed refresh rethrows and leaves `agentsError` and the list alone.
     async refreshAgentStatus(id: string) {
+      const read = latestAgentsRead
       this.agentsLoading = true
       try {
         const updatedAgent = await getAgentStatus(id)
         const index = this.agents.findIndex((a) => a.id === id)
-        if (index !== -1) {
+        // A list read that started meanwhile is newer than this status read.
+        if (index !== -1 && read === latestAgentsRead) {
           this.agents[index] = updatedAgent
         }
         return updatedAgent
