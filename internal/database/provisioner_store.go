@@ -33,6 +33,9 @@ var (
 	// ErrStatusTooLong is a status longer than the status column holds. It is returned after the caller is
 	// authorized, so a refused caller never learns it from this answer.
 	ErrStatusTooLong = errors.New("task status is too long")
+	// ErrAgentIDUnroutable is a keyless register that would create a row for an id that a per-agent route
+	// cannot reach cleanly, or that the security monitor would count as suspicious on every request.
+	ErrAgentIDUnroutable = errors.New("agent id must not hold an empty segment, a dot segment or two dots in a row")
 )
 
 // MaxProvisionerValueLen is the longest id, type or status, in characters, that the registry columns hold.
@@ -41,19 +44,31 @@ const MaxProvisionerValueLen = 191
 // legacyAgentIDPrefix starts the id the shipped agent derives from its hostname, which may hold any byte.
 const legacyAgentIDPrefix = "provisioner-"
 
-// validNewAgentID is the rule for an id that creates a row: bytes 0x21 to 0x7E only, unless it starts with
-// the exact bytes "provisioner-". On every server measured, a folding collation equates two such bytes only
-// when they are one letter in its two cases, so the folded lookup of a register cannot meet another id.
-func validNewAgentID(id string) bool {
-	if strings.HasPrefix(id, legacyAgentIDPrefix) {
-		return true
-	}
-	for i := 0; i < len(id); i++ {
-		if id[i] < 0x21 || id[i] > 0x7e {
-			return false
+// checkNewAgentID is the rule for an id that creates a row. It returns ErrAgentIDInvalid unless the id is
+// bytes 0x21 to 0x7E only, or starts with the exact bytes "provisioner-". On every server measured, a
+// folding collation equates two such bytes only when they are one letter in its two cases, so the folded
+// lookup of a register cannot meet another id. It returns ErrAgentIDUnroutable for every id, that prefix
+// included, that no route can reach cleanly: the id is a segment of every per-agent route, so an empty,
+// "." or ".." segment ("a//b", "/a", "a/./b", "..") is rewritten by the path clean (only a DELETE for an
+// id that ends in a slash still arrives), and ".." anywhere is counted as suspicious by the security
+// monitor on each request, which, where IP blocking is on, can block the agent's own address.
+func checkNewAgentID(id string) error {
+	if !strings.HasPrefix(id, legacyAgentIDPrefix) {
+		for i := 0; i < len(id); i++ {
+			if id[i] < 0x21 || id[i] > 0x7e {
+				return ErrAgentIDInvalid
+			}
 		}
 	}
-	return true
+	if strings.Contains(id, "..") {
+		return ErrAgentIDUnroutable
+	}
+	for _, segment := range strings.Split(id, "/") {
+		if segment == "" || segment == "." {
+			return ErrAgentIDUnroutable
+		}
+	}
+	return nil
 }
 
 // ProvisionerActor is who calls: the admin key (Privileged), or the holder of an agent token. TokenHash
@@ -218,8 +233,8 @@ func (s *ProvisionerStore) RegisterAgent(ctx context.Context, actor ProvisionerA
 		}
 		if wrote {
 			// A new row is checked here, inside the transaction, so a refusal rolls the insert back.
-			if !validNewAgentID(agent.AgentID) {
-				return ErrAgentIDInvalid
+			if err = checkNewAgentID(agent.AgentID); err != nil {
+				return err
 			}
 			out, created = cur, true
 			return nil
