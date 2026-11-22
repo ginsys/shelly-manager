@@ -374,6 +374,7 @@ func (h *Handler) GetConfigurationSchema(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	deviceType := query.Get("device_type")
+	generation := 0 // a device_type has none: only a device carries its generation
 
 	if query.Has("device_type") && deviceType == "" {
 		h.responseWriter().WriteError(w, r, http.StatusBadRequest, apiresp.ErrCodeBadRequest,
@@ -417,6 +418,7 @@ func (h *Handler) GetConfigurationSchema(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		deviceType = service.DeviceModel(device)
+		generation = deviceGeneration(device)
 		if deviceType == "" {
 			// An empty model would read as "no parameter" below and return the generic schema,
 			// whose fields are not all stored. A device without a model gets the unsupported-model
@@ -429,7 +431,7 @@ func (h *Handler) GetConfigurationSchema(w http.ResponseWriter, r *http.Request)
 		h.responseWriter().WriteSuccess(w, r, configuration.GetConfigurationSchema())
 		return
 	}
-	h.responseWriter().WriteSuccess(w, r, configuration.GetDeviceConfigurationSchema(deviceType))
+	h.responseWriter().WriteSuccess(w, r, configuration.GetDeviceConfigurationSchemaFor(deviceType, generation))
 }
 
 // BulkValidateConfigs handles POST /api/v1/config/bulk-validate

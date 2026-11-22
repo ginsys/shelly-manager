@@ -85,6 +85,57 @@ func TestConfigSchemaForDeviceIDUsesStoredModel(t *testing.T) {
 	assert.NotContains(t, schemaSections(data), "dimming")
 }
 
+// schemaLeaf returns the node at a path of schema property names, or nil.
+func schemaLeaf(data map[string]interface{}, path ...string) map[string]interface{} {
+	node := data
+	for _, name := range path {
+		props, _ := node["properties"].(map[string]interface{})
+		if items, ok := node["items"].(map[string]interface{}); ok && props == nil {
+			props, _ = items["properties"].(map[string]interface{})
+		}
+		next, ok := props[name].(map[string]interface{})
+		if !ok {
+			return nil
+		}
+		node = next
+	}
+	return node
+}
+
+func TestGetConfigurationSchemaGen2Device(t *testing.T) {
+	handler, cleanup := setupTestHandler(t)
+	defer cleanup()
+
+	device := &database.Device{
+		IP: "192.0.2.20", MAC: "AA:BB:CC:DD:EE:02", Type: "Plus 1", Name: "plus1",
+		Settings: `{"model":"SNSW-001X16EU","gen":2}`,
+	}
+	require.NoError(t, handler.DB.AddDevice(device))
+
+	code, data := getSchema(t, handler, fmt.Sprintf("?device_id=%d", device.ID))
+	require.Equal(t, http.StatusOK, code)
+	assert.Equal(t, "SNSW-001X16EU", data[configuration.SchemaKeyDeviceType])
+	require.Equal(t, true, data[configuration.SchemaKeyApplySupported], "apply writes a Gen2 device")
+
+	sections := schemaSections(data)
+	for _, gen1Only := range []string{"coiot", "led", "power_metering", "actions", "dimming"} {
+		assert.NotContains(t, sections, gen1Only, "a Gen2 device has no %s settings", gen1Only)
+	}
+	for _, kept := range []string{"relay", "input", "roller", "light", "network", "mqtt", "wifi"} {
+		assert.Contains(t, sections, kept)
+	}
+
+	applicable := func(path ...string) interface{} {
+		leaf := schemaLeaf(data, path...)
+		require.NotNil(t, leaf, "%v is not a schema leaf", path)
+		return leaf[configuration.SchemaKeyApplicable]
+	}
+	assert.Equal(t, true, applicable("relay", "relays", "voltage_limit"), "a Gen2 switch limit is written")
+	assert.Equal(t, true, applicable("light", "lights", "in_mode"), "a Gen2 light input mode is written")
+	assert.Equal(t, true, applicable("mqtt", "server"))
+	assert.Equal(t, false, applicable("relay", "relays", "appliance_type"), "a Gen1 relay key is not written to a Gen2 device")
+}
+
 func TestConfigSchemaForGlobalTemplate(t *testing.T) {
 	handler, cleanup := setupTestHandler(t)
 	defer cleanup()
