@@ -76,6 +76,9 @@ var gen1ApplyKeys = map[string]bool{
 	"transition":      true,
 	"zcross_debounce": true,
 	"pulse_mode":      true,
+
+	"night_mode": true, // a Dimmer's own endpoints, see applyDimmerEndpoints
+	"warm_up":    true,
 }
 
 // gen1CoIoTMinPeriod and gen1CoIoTMaxPeriod bound the CoIoT update period, in seconds, that a
@@ -157,6 +160,14 @@ var gen1ApplicablePaths = map[string]bool{
 	"dimming.transition":      true,
 	"dimming.zcross_debounce": true,
 	"dimming.leading_edge":    true,
+
+	"dimming.night_mode":            true,
+	"dimming.night_mode_brightness": true,
+	"dimming.night_mode_start":      true,
+	"dimming.night_mode_end":        true,
+	"dimming.warmup_enabled":        true,
+	"dimming.warmup_brightness":     true,
+	"dimming.warmup_time":           true,
 
 	// The roller is written with POST /settings/roller/0 and read back from the same path.
 	// Only a model with roller mode has the section.
@@ -383,6 +394,7 @@ func unsupportedApplySettings(converter ConfigConverter, desired *DeviceConfigur
 	}
 	if desired.Dimming != nil {
 		unsupported = append(unsupported, unsupportedDimmingValues(desired.Dimming)...)
+		unsupported = append(unsupported, unsupportedNightWarmup(desired.Dimming)...)
 	}
 	if desired.PowerMetering != nil && desired.PowerMetering.MaxPower != nil && *desired.PowerMetering.MaxPower < 0 {
 		unsupported = append(unsupported, "power_metering.max_power")

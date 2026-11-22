@@ -150,10 +150,14 @@ func TestDeviceSchemaPlugKeepsBothLEDLeaves(t *testing.T) {
 // it there). Every other dimming leaf is not applicable. The Dimmer has the status LED
 // and no power LED, so its led section holds network_indication and no power_indication, while the
 // plug keeps both.
-func TestDeviceSchemaDimmerMarksLightAndFiveDimmingFieldsApplicable(t *testing.T) {
+func TestDeviceSchemaDimmerMarksLightAndTheWrittenDimmingFieldsApplicable(t *testing.T) {
 	written := map[string]bool{
 		"dimming.min_brightness": true, "dimming.fade_rate": true, "dimming.transition": true,
 		"dimming.zcross_debounce": true, "dimming.leading_edge": true,
+		// Night mode and warm-up: their own endpoints.
+		"dimming.night_mode": true, "dimming.night_mode_brightness": true, "dimming.night_mode_start": true,
+		"dimming.night_mode_end": true, "dimming.warmup_enabled": true, "dimming.warmup_brightness": true,
+		"dimming.warmup_time": true,
 	}
 	for _, model := range []string{"SHDM-1", "SHDM-2"} {
 		leaves := map[string]map[string]interface{}{}
@@ -237,6 +241,9 @@ func sampleValue(leaf map[string]interface{}) interface{} {
 	default:
 		if leaf["format"] == "ipv4" {
 			return "10.0.0.1"
+		}
+		if leaf["pattern"] == gen1ClockPattern {
+			return "12:00"
 		}
 		return "sample"
 	}

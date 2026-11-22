@@ -581,9 +581,43 @@ func (c *Gen1Converter) convertDimming(gen1 map[string]interface{}, config *Devi
 		dimming.LeadingEdge = BoolPtr(mode == gen1DimmerLeadingEdge)
 		found = true
 	}
+	// The top-level objects night_mode and warm_up; the copy of night_mode inside a light is not read.
+	// A value is stored as the device reports it, in range or not.
+	night, _ := gen1["night_mode"].(map[string]interface{})
+	warm, _ := gen1["warm_up"].(map[string]interface{})
+	found = readDimmerObject(night, map[string]interface{}{
+		"enabled": &dimming.NightModeEnabled, "start_time": &dimming.NightModeStart,
+		"end_time": &dimming.NightModeEnd, "brightness": &dimming.NightModeBrightness,
+	}) || found
+	found = readDimmerObject(warm, map[string]interface{}{
+		"enabled": &dimming.WarmupEnabled, "brightness": &dimming.WarmupBrightness, "time": &dimming.WarmupTime,
+	}) || found
 	if found {
 		config.Dimming = dimming
 	}
+}
+
+// readDimmerObject copies each key of a /settings object that has the stored field's type into it,
+// and reports whether any did. A flag may be 0/1: the page types warm-up enabled as bool and shows 0.
+func readDimmerObject(object map[string]interface{}, fields map[string]interface{}) bool {
+	read := false
+	for key, dst := range fields {
+		switch field := dst.(type) {
+		case **bool:
+			if flag, ok := reverseFlag(object[key]); ok {
+				*field, read = BoolPtr(flag), true
+			}
+		case **int:
+			if n, ok := shelly.WholeNumber(object[key]); ok {
+				*field, read = IntPtr(n), true
+			}
+		case **string:
+			if s, ok := object[key].(string); ok {
+				*field, read = StringPtr(s), true
+			}
+		}
+	}
+	return read
 }
 
 func (c *Gen1Converter) convertPowerMetering(gen1 map[string]interface{}, config *DeviceConfiguration, deviceType string) error {
@@ -988,6 +1022,39 @@ func (c *Gen1Converter) exportDimming(config *DeviceConfiguration, gen1 map[stri
 			gen1["pulse_mode"] = gen1DimmerLeadingEdge
 		}
 	}
+	if night := dimmerObject(map[string]interface{}{
+		"enabled": d.NightModeEnabled, "start_time": d.NightModeStart, "end_time": d.NightModeEnd,
+		"brightness": d.NightModeBrightness,
+	}); len(night) > 0 {
+		gen1["night_mode"] = night
+	}
+	if warm := dimmerObject(map[string]interface{}{
+		"enabled": d.WarmupEnabled, "brightness": d.WarmupBrightness, "time": d.WarmupTime,
+	}); len(warm) > 0 {
+		gen1["warm_up"] = warm
+	}
+}
+
+// dimmerObject keeps the fields that hold a value, dereferenced.
+func dimmerObject(fields map[string]interface{}) map[string]interface{} {
+	object := map[string]interface{}{}
+	for key, field := range fields {
+		switch v := field.(type) {
+		case *bool:
+			if v != nil {
+				object[key] = *v
+			}
+		case *int:
+			if v != nil {
+				object[key] = *v
+			}
+		case *string:
+			if v != nil {
+				object[key] = *v
+			}
+		}
+	}
+	return object
 }
 
 func (c *Gen1Converter) exportPowerMetering(config *DeviceConfiguration, gen1 map[string]interface{}, deviceType string) {

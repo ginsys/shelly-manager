@@ -659,6 +659,12 @@ func (c *Client) SetNightMode(ctx context.Context, settings map[string]interface
 	return c.postForm(ctx, url, settings)
 }
 
+// SetWarmUp configures a Dimmer's warm-up with POST /settings/warm_up
+func (c *Client) SetWarmUp(ctx context.Context, settings map[string]interface{}) error {
+	url := fmt.Sprintf("http://%s/settings/warm_up", c.ip)
+	return c.postForm(ctx, url, settings)
+}
+
 // SetSchedule configures scheduled operations
 func (c *Client) SetSchedule(ctx context.Context, schedule map[string]interface{}) error {
 	url := fmt.Sprintf("http://%s/settings/schedules", c.ip)
