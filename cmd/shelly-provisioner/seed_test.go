@@ -267,18 +267,22 @@ func TestKeyedAgentCommands(t *testing.T) {
 	})
 
 	// The loader withholds what the decoders quote, in every shape of the value: that matrix runs in internal/config
-	// (load_failure_test.go). Here the binary shows both commands print what the loader returns: the file's path and
-	// the fixed sentence, and nothing of the seed (a tag that makes the value an integer, which the YAML decoder quotes).
-	t.Run("a config that fails to parse never prints a seed that is in it", func(t *testing.T) {
+	// (load_failure_test.go). Here the binary shows both commands print what the loader returns and nothing else: one
+	// line, the file's path and the fixed sentence, with nothing of the seed. One shape fails in each decoder: a tag
+	// that makes the value an integer (the YAML decoder, which quotes it) and a map (the settings decoder).
+	t.Run("a config that fails to load never prints a seed that is in it", func(t *testing.T) {
 		groups := []string{cmdSeed[:16], cmdSeed[16:32], cmdSeed[32:48], cmdSeed[48:]}
-		config := writeConfig(t, "logging:\n  level: info\nprovisioning:\n  agent_seed: !!int "+cmdSeed+"\n")
-		for _, args := range [][]string{{"fingerprint"}, {"--api-url", "http://127.0.0.1:1", "agent"}} {
-			out, code := p.run(t, nil, append([]string{"--config", config}, args...)...)
-			assert.NotZero(t, code, "%v:\n%s", args, out)
-			for _, piece := range groups {
-				assert.NotContains(t, out, piece, "%v", args)
+		for name, value := range map[string]string{"tagged": "!!int " + cmdSeed, "a map": "{a: " + cmdSeed + "}"} {
+			config := writeConfig(t, "logging:\n  level: info\nprovisioning:\n  agent_seed: "+value+"\n")
+			for _, args := range [][]string{{"fingerprint"}, {"--api-url", "http://127.0.0.1:1", "agent"}} {
+				out, code := p.run(t, nil, append([]string{"--config", config}, args...)...)
+				assert.NotZero(t, code, "%s, %v:\n%s", name, args, out)
+				for _, piece := range groups {
+					assert.NotContains(t, out, piece, "%s, %v", name, args)
+				}
+				assert.Contains(t, out, "Failed to load config: "+config+": "+notValidSentence+"\n", "%s, %v: the path and one fixed sentence", name, args)
+				assert.Equal(t, 1, strings.Count(out, "\n"), "%s, %v: nothing else is printed:\n%s", name, args, out)
 			}
-			assert.Contains(t, out, "Failed to load config: "+config+": "+notValidSentence+"\n", "%v: the path and one fixed sentence", args)
 		}
 	})
 

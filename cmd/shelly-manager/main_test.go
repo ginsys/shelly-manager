@@ -194,25 +194,40 @@ func TestConfigFileHandling(t *testing.T) {
 	// The YAML decoder quotes the value it could not decode, so an admin key written in a shape that does not load
 	// (a tag that makes it an integer) would reach the log whole (ginsys/shelly-manager#872). The shapes are in
 	// internal/config; here the binary shows it prints what the loader returns: the path and one fixed sentence.
+	// One shape fails in each decoder: a tag that makes the value an integer (the YAML decoder), a map (the settings
+	// decoder), and a SHELLY_ variable of the wrong type (the settings decoder again). Each prints one line, the path
+	// and the fixed sentence, with nothing else and nothing of the secret.
 	t.Run("a config that does not load never prints a secret that is in it", func(t *testing.T) {
 		const secret = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
-		path := filepath.Join(testutil.TempDir(t), "secret.yaml")
-		if err := os.WriteFile(path, []byte("security:\n  admin_api_key: !!int "+secret+"\n"), 0o600); err != nil {
-			t.Fatalf("Failed to write config: %v", err)
-		}
-
-		out, err := runCommand(t, binaryPath, "--config", path, "list")
-		if err == nil {
-			t.Error("Expected error for a config that does not load")
-		}
-		for _, piece := range []string{secret[:16], secret[16:32], secret[32:48], secret[48:]} {
-			if strings.Contains(out, piece) {
-				t.Errorf("the output holds a piece of the secret %q:\n%s", piece, out)
-			}
-		}
 		const sentence = "the configuration is not valid (details withheld, they may quote a secret): check the file's syntax with a YAML linter, compare each setting's type with the sample config (a linter finds a syntax error, never a wrong type), and check that each SHELLY_ environment variable holds a value of the setting's type"
-		if !strings.Contains(out, "Failed to load config: "+path+": "+sentence+"\n") {
-			t.Errorf("want the path and one fixed sentence, got:\n%s", out)
+		for name, tc := range map[string]struct {
+			body string
+			env  []string
+		}{
+			"tagged":    {"security:\n  admin_api_key: !!int " + secret + "\n", nil},
+			"a map":     {"security:\n  admin_api_key: {a: " + secret + "}\n", nil},
+			"bad value": {"server:\n  host: 127.0.0.1\n", []string{"SHELLY_SERVER_PORT=port" + secret}},
+		} {
+			path := filepath.Join(testutil.TempDir(t), "secret.yaml")
+			if err := os.WriteFile(path, []byte(tc.body), 0o600); err != nil {
+				t.Fatalf("Failed to write config: %v", err)
+			}
+
+			out, err := runCommandWithEnv(t, 30*time.Second, tc.env, binaryPath, "--config", path, "list")
+			if err == nil {
+				t.Errorf("%s: expected an error for a config that does not load", name)
+			}
+			for _, piece := range []string{secret[:16], secret[16:32], secret[32:48], secret[48:]} {
+				if strings.Contains(out, piece) {
+					t.Errorf("%s: the output holds a piece of the secret %q:\n%s", name, piece, out)
+				}
+			}
+			if !strings.Contains(out, "Failed to load config: "+path+": "+sentence+"\n") {
+				t.Errorf("%s: want the path and one fixed sentence, got:\n%s", name, out)
+			}
+			if strings.Count(out, "\n") != 1 {
+				t.Errorf("%s: nothing else may be printed, got:\n%s", name, out)
+			}
 		}
 	})
 
