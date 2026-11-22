@@ -107,11 +107,15 @@ type SystemConfiguration struct {
 
 // TypedDeviceConfig represents device-specific settings
 type TypedDeviceConfig struct {
-	Name         *string    `json:"name,omitempty"`
-	MAC          *string    `json:"mac,omitempty"`
-	Hostname     *string    `json:"hostname,omitempty"`
-	EcoMode      *bool      `json:"eco_mode,omitempty"`
-	Profile      *string    `json:"profile,omitempty"`
+	Name     *string `json:"name,omitempty"`
+	MAC      *string `json:"mac,omitempty"`
+	Hostname *string `json:"hostname,omitempty"`
+	EcoMode  *bool   `json:"eco_mode,omitempty"`
+	Profile  *string `json:"profile,omitempty"`
+	// Mode is the device-level operating mode of a Gen1 model that has one: relay or roller on a
+	// Shelly 2.5. It is the Gen1 counterpart of the Gen2 Sys profile, a device-wide setting that
+	// decides which channel sections the device accepts. Apply writes it before any channel section.
+	Mode         *string    `json:"mode,omitempty"`
 	Discoverable *bool      `json:"discoverable,omitempty"`
 	AddonType    *string    `json:"addon_type,omitempty"`
 	FWAutoUpdate *bool      `json:"fw_auto_update,omitempty"`
@@ -950,6 +954,12 @@ func getSystemSchema() map[string]interface{} {
 						"type":        "boolean",
 						"title":       "Eco Mode",
 						"description": "Enable power saving mode",
+					},
+					"mode": map[string]interface{}{
+						"type":        "string",
+						"title":       "Operating Mode",
+						"description": "Device-level mode of a model that has one (Shelly 2.5: relay or roller). The Gen1 counterpart of the Gen2 Sys profile",
+						"enum":        []string{"relay", "roller"},
 					},
 					"discoverable": map[string]interface{}{
 						"type":        "boolean",

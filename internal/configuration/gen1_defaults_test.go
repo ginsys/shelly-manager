@@ -11,7 +11,7 @@ import (
 // and gives no default for them, so these fields show none. A path leaves this list only by gaining
 // a documented entry in gen1FieldDefaults, with its source named there.
 var gen1NoDocumentedDefault = []string{
-	"system.device.name", "system.device.eco_mode", "system.device.discoverable",
+	"system.device.name", "system.device.eco_mode", "system.device.discoverable", "system.device.mode",
 	"location.tz", "location.lat", "location.lng",
 	"power_metering.max_power",
 	"led.power_indication", "led.network_indication",

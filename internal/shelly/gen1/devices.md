@@ -51,9 +51,9 @@
   - ✅ `/relay/0`, `/relay/1` - Control relays (relay mode)
   - ❌ `/roller/0` - Control roller (roller mode)
   - ✅ `/meter/0`, `/meter/1` - Power consumption
-  - ❌ `/settings/roller/0` - Roller configuration
+  - ✅ `/settings/roller/0` - Roller configuration (written and read back by apply)
   - ✅ `/settings/relay/0`, `/settings/relay/1` - Relay configuration
-  - ❌ `/settings/mode` - Switch between relay/roller mode
+  - ✅ `/settings` `mode=relay|roller` - Switch between relay/roller mode (`system.device.mode`; apply writes it first and reads it back, unconfirmed on hardware)
 
 ### 💡 Lighting Control Devices
 

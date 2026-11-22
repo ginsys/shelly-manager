@@ -2024,7 +2024,7 @@ paths:
         answer says restart_required. It records that reboot as owed when it reads the answer,
         and a write whose answer is lost is not recorded beforehand. If the restart cannot be
         recorded, the apply fails with a warning to reboot by hand. Supported Gen1 settings: name, timezone, location, eco mode,
-        discoverable, max power, LED, MQTT (including the update period), SNTP server, cloud (the enabled flag), CoIoT (enabled, update
+        discoverable, the relay or roller mode of a Shelly 2.5 (system.device.mode, written first), max power, LED, MQTT (including the update period), SNTP server, cloud (the enabled flag), CoIoT (enabled, update
         period of 15 to 65535 seconds and peer), login (enable, username and password of 1 to 50
         bytes each, written last; the new login is stored once the device accepts it) and
         relays (default_state, auto_on, auto_off and name per channel), for a model with roller mode
