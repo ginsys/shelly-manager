@@ -240,6 +240,7 @@
       :editing="editOverrides"
       :ready="!store.loading && !store.error && store.status !== null"
       @refresh="handleRefresh"
+      @settled="versionsSettled = true; landAtHistoryCard()"
     />
 
     <div id="history-card" ref="historyCardEl" class="card" data-testid="history-card">
@@ -365,18 +366,21 @@ const historyError = ref<string | null>(null)
 const openEntries = ref<Set<number>>(new Set())
 
 // "View History" and the old history address open this page at #history-card. The page moves to the card
-// once, when the first read of the history for the device on screen has settled and the cards above it have
-// been read too (they appear after the page's own read and push the card down). A later read (after a save,
-// a template change or a rollback) must not move the page again while the address keeps the hash.
+// once, when the first reads of the device on screen have settled: the history, the stored import, the versions
+// and the page's own read. The cards above the History card grow with those answers and push it down. A later
+// read (after a save, a template change or a rollback) must not move the page again while the address keeps
+// the hash.
 const historyCardEl = ref<HTMLElement | null>(null)
 let landAtHistory = false
 let historySettled = false
+let storedSettled = false
+let versionsSettled = false
 function armLanding() {
   landAtHistory = route.hash === '#history-card'
-  historySettled = false
+  historySettled = storedSettled = versionsSettled = false
 }
 function landAtHistoryCard() {
-  if (!landAtHistory || !historySettled || store.loading) return
+  if (!landAtHistory || !historySettled || !storedSettled || !versionsSettled || store.loading) return
   landAtHistory = false
   void nextTick(() => historyCardEl.value?.scrollIntoView?.({ block: 'start' }))
 }
@@ -475,11 +479,15 @@ async function loadStored() {
       stored.value = row
       storedError.value = null
       storedLoaded.value = true
+      storedSettled = true
+      landAtHistoryCard()
     },
     (e: any) => {
       if (!current()) return
       stored.value = null
       storedError.value = e?.response?.data?.error?.message || e?.message || 'Failed to read the imported configuration'
+      storedSettled = true
+      landAtHistoryCard()
     },
   )
   const readHistory = getConfigHistory(id).then(

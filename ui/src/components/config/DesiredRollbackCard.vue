@@ -119,7 +119,7 @@ const props = defineProps<{
   // detach list would compare with nothing, and a rollback must not be confirmed on that.
   ready: boolean
 }>()
-const emit = defineEmits<{ refresh: [] }>()
+const emit = defineEmits<{ refresh: []; settled: [] }>()
 
 const versions = ref<DesiredVersion[]>([])
 const loaded = ref(false)
@@ -174,7 +174,12 @@ async function loadVersions() {
     listError.value = e?.response?.data?.error?.message || e?.message || 'Failed to read the desired configuration versions'
   }
 }
-onMounted(loadVersions)
+// The first read has settled, whichever way: the page waits for it before it moves to the cards below this one.
+// A card that was unmounted meanwhile emits nothing: Vue drops an event of an unmounted component.
+onMounted(async () => {
+  await loadVersions()
+  emit('settled')
+})
 // The one cue to read the versions again: the page finishing a read. A rollback asks the page to read (the refresh
 // event) and so reads the versions through this; a save or a template change on the page records versions too, and
 // a failed first read can only be retried by the page's Refresh.

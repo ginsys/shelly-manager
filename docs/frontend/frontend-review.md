@@ -127,7 +127,7 @@ rg -n --no-heading -o "(to=\"[^\"]+\"|:to=\"[^\"]+\"|to: '[^']+'|router\.(push|r
 |-------|------|-------------|
 | `/` | Devices | top bar, Device details |
 | `/devices/:id` | Device details (status, energy, configuration, capabilities, edit, control) | Devices, Device configuration, Drift reports, Task details |
-| `/devices/:id/config` | Device configuration (templates, overrides, apply, verify, last import and create template from it, desired configuration versions and rollback, import history) | Device details, Configuration history |
+| `/devices/:id/config` | Device configuration (templates, overrides, apply, verify, last import and create template from it, desired configuration versions and rollback, import history) | Device details (View History opens the History card) |
 | `/templates` | Configuration templates | top bar, Template detail |
 | `/templates/common-settings` | Common settings (compare the imports of several devices, save what they share as a template) | Templates |
 | `/templates/:id` | Template detail | Templates |

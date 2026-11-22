@@ -10,7 +10,13 @@ vi.mock('@/api/deviceConfig', async (importOriginal) => {
   return { ...actual, getStoredDeviceConfig: vi.fn(), getConfigHistory: vi.fn() }
 })
 
+vi.mock('@/api/desiredRollback', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/desiredRollback')>()
+  return { ...actual, getDesiredHistory: vi.fn(), rollbackDesired: vi.fn() }
+})
+
 import { getStoredDeviceConfig, getConfigHistory } from '@/api/deviceConfig'
+import { getDesiredHistory } from '@/api/desiredRollback'
 
 // ginsys/shelly-manager#747 slice 1: the page shows the configuration an import stored, and the
 // history of that configuration, as fields.
@@ -66,6 +72,7 @@ describe('DeviceConfigPage last imported configuration', () => {
     vi.resetAllMocks()
     vi.mocked(getStoredDeviceConfig).mockResolvedValue(null)
     vi.mocked(getConfigHistory).mockResolvedValue([])
+    vi.mocked(getDesiredHistory).mockResolvedValue([])
   })
 
   it('shows the stored import as fields, with its import time and status', async () => {
@@ -159,6 +166,7 @@ describe('DeviceConfigPage history', () => {
     vi.resetAllMocks()
     vi.mocked(getStoredDeviceConfig).mockResolvedValue(null)
     vi.mocked(getConfigHistory).mockResolvedValue([])
+    vi.mocked(getDesiredHistory).mockResolvedValue([])
   })
 
   it('lists each entry with its time, action and who changed it', async () => {
@@ -305,6 +313,7 @@ describe('DeviceConfigPage landing at the History card', () => {
     vi.resetAllMocks()
     vi.mocked(getStoredDeviceConfig).mockResolvedValue(null)
     vi.mocked(getConfigHistory).mockResolvedValue([entry()] as any)
+    vi.mocked(getDesiredHistory).mockResolvedValue([])
     scrolled.mockReset()
     Element.prototype.scrollIntoView = scrolled
   })
@@ -396,6 +405,37 @@ describe('DeviceConfigPage landing at the History card', () => {
     fail()
     await flushPromises()
 
+    expect(scrolled).toHaveBeenCalledTimes(1)
+  })
+
+  it('waits for the stored import, which expands a card above the History card', async () => {
+    let release: (row: unknown) => void = () => {}
+    vi.mocked(getStoredDeviceConfig).mockReturnValueOnce(new Promise((resolve) => (release = resolve)) as any)
+    await mountPage('7', '#history-card')
+    expect(scrolled).not.toHaveBeenCalled()
+
+    release(stored)
+    await flushPromises()
+
+    expect(scrolled).toHaveBeenCalledTimes(1)
+  })
+
+  it('waits for the versions, which fill a card above the History card', async () => {
+    let release: (rows: unknown) => void = () => {}
+    vi.mocked(getDesiredHistory).mockReturnValueOnce(new Promise((resolve) => (release = resolve)) as any)
+    await mountPage('7', '#history-card')
+    expect(scrolled).not.toHaveBeenCalled()
+
+    release([])
+    await flushPromises()
+
+    expect(scrolled).toHaveBeenCalledTimes(1)
+  })
+
+  it('moves when the stored import and the versions fail to read', async () => {
+    vi.mocked(getStoredDeviceConfig).mockRejectedValue(new Error('down'))
+    vi.mocked(getDesiredHistory).mockRejectedValue(new Error('down'))
+    await mountPage('7', '#history-card')
     expect(scrolled).toHaveBeenCalledTimes(1)
   })
 
