@@ -367,7 +367,7 @@ const openEntries = ref<Set<number>>(new Set())
 
 // "View History" and the old history address open this page at #history-card. The page moves to the card
 // once, at the first moment no read of the device on screen is in flight: the page's own read, the stored import,
-// the history and the versions. The cards above the History card grow with those answers and push it down. The
+// the history, the versions and a read from the device. The cards above the History card grow with those answers and push it down. The
 // check runs a tick after each read ends, so a read that the end of another one starts (the versions card reads
 // again when the page has finished) is counted. A later read (after a save, a template change or a rollback)
 // must not move the page again while the address keeps the hash.
@@ -381,7 +381,7 @@ function armLanding() {
 function landAtHistoryCard() {
   if (!landAtHistory) return
   void nextTick(() => {
-    if (!landAtHistory || readsInFlight > 0 || versionsReading || store.loading) return
+    if (!landAtHistory || readsInFlight > 0 || versionsReading || liveLoading.value || store.loading) return
     landAtHistory = false
     historyCardEl.value?.scrollIntoView?.({ block: 'start' })
   })
@@ -391,6 +391,11 @@ function onVersionsReading(reading: boolean) {
   landAtHistoryCard()
 }
 watch(() => store.loading, landAtHistoryCard)
+watch(liveLoading, landAtHistoryCard)
+// A visit that drops the hash while a read is pending cancels the landing.
+watch(() => route.hash, (hash) => {
+  if (hash !== '#history-card') landAtHistory = false
+})
 
 // A failed action shows as an error panel under the toolbar. A failed template add shows inside the
 // add-template dialog instead, which is open and covers the page when it happens.
