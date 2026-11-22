@@ -37,8 +37,11 @@ func fakeGen2DeviceWithChannels() *fakeGen2Device {
 		d.doc["switch:"+key] = map[string]interface{}{
 			"id": float64(id), "name": nil, "in_mode": mode, "initial_state": "off",
 			"auto_on": false, "auto_on_delay": 60.0, "auto_off": false, "auto_off_delay": 60.0,
+			"power_limit": nil, "voltage_limit": 280.0, "undervoltage_limit": 0.0, "current_limit": 16.0,
+			"in_locked": false, "autorecover_voltage_errors": false,
+			"power_restore_delay_enable": false, "power_restore_delay": 60.0,
 		}
-		d.doc["input:"+key] = map[string]interface{}{"id": float64(id), "name": nil, "type": kind, "enable": true, "invert": false}
+		d.doc["input:"+key] = map[string]interface{}{"id": float64(id), "name": nil, "type": kind, "enable": true, "invert": false, "factory_reset": false}
 	}
 	return d
 }
@@ -305,8 +308,8 @@ func TestApplyDesiredConfig_Gen2NamesEachSettingOfAChannelThatSetsNothingElse(t 
 		paths   []string
 	}{
 		"relay": {
-			&DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{{ID: 0, Schedule: BoolPtr(true), MaxPower: IntPtr(100)}}}},
-			[]string{"relay.relays.0.schedule", "relay.relays.0.max_power"},
+			&DeviceConfiguration{Relay: &RelayConfig{Relays: []SingleRelayConfig{{ID: 0, Schedule: BoolPtr(true), ApplianceType: StringPtr("heater")}}}},
+			[]string{"relay.relays.0.schedule", "relay.relays.0.appliance_type"},
 		},
 		"input": {
 			&DeviceConfiguration{Input: &InputConfig{Inputs: []SingleInputConfig{{ID: 0, SinglePushAction: StringPtr("toggle"), LongPushAction: StringPtr("toggle")}}}},

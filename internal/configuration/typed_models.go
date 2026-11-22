@@ -1218,8 +1218,43 @@ func getRelaySchema() map[string]interface{} {
 						"max_power": map[string]interface{}{
 							"type":        "integer",
 							"title":       "Max Power",
-							"description": "Overpower threshold of this channel in watts",
+							"description": "Overpower threshold of this channel in watts (power_limit on a Gen2 switch)",
 							"minimum":     0,
+						},
+						"voltage_limit": map[string]interface{}{
+							"type":        "integer",
+							"title":       "Voltage Limit",
+							"description": "Overvoltage limit in volts (Gen2 switch)",
+							"minimum":     0,
+						},
+						"undervoltage_limit": map[string]interface{}{
+							"type":        "integer",
+							"title":       "Undervoltage Limit",
+							"description": "Undervoltage limit in volts, 0 disables it, never above the voltage limit (Gen2 switch)",
+							"minimum":     0,
+						},
+						"current_limit": map[string]interface{}{
+							"type":        "number",
+							"title":       "Current Limit",
+							"description": "Overcurrent limit in amperes (Gen2 switch)",
+							"minimum":     0,
+						},
+						"in_locked": map[string]interface{}{
+							"type":        "boolean",
+							"title":       "Lock Physical Input",
+							"description": "Ignore all changes to the physical input (Gen2 switch)",
+						},
+						"autorecover_voltage_errors": map[string]interface{}{
+							"type":        "boolean",
+							"title":       "Autorecover Voltage Errors",
+							"description": "Switch back on after a voltage error clears (Gen2 switch)",
+						},
+						"power_restore_delay": map[string]interface{}{
+							"type":        "integer",
+							"title":       "Power Restore Delay",
+							"description": "Seconds to wait after power returns before the initial state applies, 0 for off (Gen2 switch)",
+							"minimum":     0,
+							"maximum":     gen2MaxRestoreDelay,
 						},
 					},
 				},
@@ -1532,6 +1567,16 @@ func getInputSchema() map[string]interface{} {
 						},
 						"inverted": map[string]interface{}{
 							"type": "boolean",
+						},
+						"enable": map[string]interface{}{
+							"type":        "boolean",
+							"title":       "Enable",
+							"description": "Global enable flag of the input (Gen2)",
+						},
+						"factory_reset": map[string]interface{}{
+							"type":        "boolean",
+							"title":       "Factory Reset",
+							"description": "Factory reset through the input, possible only in the first 60 seconds after boot (Gen2 switch and button)",
 						},
 					},
 				},

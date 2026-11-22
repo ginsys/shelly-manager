@@ -259,7 +259,7 @@ func (a *ConfigApplier) applyGen2Config(ctx context.Context, client ShellyClient
 		result.SettingsCount += len(gen2Leaves(write.key, write.body))
 	}
 
-	if err = refuseRemappedInputs(ctx, client, config); err != nil {
+	if err = refuseFromLiveDevice(ctx, client, config); err != nil {
 		return nil, err
 	}
 	reversesCover, err := refuseUncoverableRoller(ctx, client, apiConfig)
@@ -300,37 +300,56 @@ func (a *ConfigApplier) applyGen2Config(ctx context.Context, client ShellyClient
 	return result, nil
 }
 
-// refuseRemappedInputs stops an apply, before the first write, that would put the mode of input N on
-// a switch that runs another input. The mode of an input is written as the in_mode of switch N, and
-// a model with a selectable input (input_id) runs the mode on the input that switch names, so the
-// write would change the behavior of the wrong input. Only a switch that names another input is
-// refused: one with no input_id, or its own, is written as before. The device is read only when the
-// configuration sets an input mode, and a device that cannot be read is refused too.
-func refuseRemappedInputs(ctx context.Context, client ShellyClient, config *DeviceConfiguration) error {
-	if config.Input == nil {
-		return nil
-	}
+// refuseFromLiveDevice stops an apply, before the first write, on what only the live document can say.
+// The device is read once, and only when the configuration sets an input mode or a switch or input
+// key that a device may lack; a device that cannot be read is refused too.
+func refuseFromLiveDevice(ctx context.Context, client ShellyClient, config *DeviceConfiguration) error {
 	withMode := false
-	for _, in := range config.Input.Inputs {
-		if in.Mode != nil {
-			if _, ok := gen2InModes[*in.Mode]; ok {
-				withMode = true
+	if config.Input != nil {
+		for _, in := range config.Input.Inputs {
+			if in.Mode != nil {
+				if _, ok := gen2InModes[*in.Mode]; ok {
+					withMode = true
+				}
 			}
 		}
 	}
-	if !withMode {
+	// Against an empty document every desired key is missing, so this learns whether any is desired.
+	withKeys := len(unreportedChannelKeys(nil, config)) > 0
+	if !withMode && !withKeys {
 		return nil
 	}
 
+	what := "an input mode"
+	if !withMode {
+		what = "a switch or input setting"
+	}
 	live, err := client.GetConfig(ctx)
 	if err != nil {
-		return &refusedBeforeWriteError{fmt.Errorf("could not read the device before writing an input mode: %w", err)}
+		return &refusedBeforeWriteError{fmt.Errorf("could not read the device before writing %s: %w", what, err)}
 	}
 	var doc map[string]interface{}
 	if err = json.Unmarshal(live.Raw, &doc); err != nil {
-		return &refusedBeforeWriteError{fmt.Errorf("could not read the device before writing an input mode: %w", err)}
+		return &refusedBeforeWriteError{fmt.Errorf("could not read the device before writing %s: %w", what, err)}
 	}
+	if err = refuseRemappedInputs(doc, config); err != nil {
+		return err
+	}
+	if missing := unreportedChannelKeys(doc, config); len(missing) > 0 {
+		return &refusedBeforeWriteError{fmt.Errorf("%w: %s: the device's firmware does not report the key, so nothing was written", ErrUnsupportedSettings, strings.Join(missing, ", "))}
+	}
+	return nil
+}
 
+// refuseRemappedInputs refuses an apply that would put the mode of input N on a switch that runs
+// another input. The mode of an input is written as the in_mode of switch N, and a model with a
+// selectable input (input_id) runs the mode on the input that switch names, so the write would
+// change the behavior of the wrong input. Only a switch that names another input is refused: one with
+// no input_id, or its own, is written as before.
+func refuseRemappedInputs(doc map[string]interface{}, config *DeviceConfiguration) error {
+	if config.Input == nil {
+		return nil
+	}
 	var paths []string
 	for i, in := range config.Input.Inputs {
 		if in.Mode == nil {

@@ -33,6 +33,14 @@ type fakeGen2Device struct {
 	ignoreWrites bool  // the device accepts a write but keeps its old document
 	strict       bool  // a write to a component the document does not hold is refused
 	legacyCalls  int   // calls to the Gen1-shaped SetConfig, which a Gen2 apply must never make
+	getConfigs   int   // calls to GetConfig
+	getErr       error // GetConfig fails
+
+	getsBeforeFirstWrite int // the GetConfig calls made when the first write arrived
+
+	// limitMax is the highest value the device takes for a switch key, such as power_limit. The
+	// official documentation names no bound or error, so the text of the refusal is the fake's own.
+	limitMax map[string]float64
 }
 
 func newFakeGen2Device() *fakeGen2Device {
@@ -63,6 +71,10 @@ func (d *fakeGen2Device) SetConfig(context.Context, map[string]interface{}) erro
 }
 
 func (d *fakeGen2Device) GetConfig(context.Context) (*shelly.DeviceConfig, error) {
+	d.getConfigs++
+	if d.getErr != nil {
+		return nil, d.getErr
+	}
 	raw, err := json.Marshal(d.doc)
 	if err != nil {
 		return nil, err
@@ -81,12 +93,18 @@ func (d *fakeGen2Device) CallConfigSetter(_ context.Context, method string, para
 		id = n
 		key = fmt.Sprintf("%s:%d", key, n)
 	}
+	if len(d.calls) == 0 {
+		d.getsBeforeFirstWrite = d.getConfigs
+	}
 	d.calls = append(d.calls, gen2Call{method: method, id: id, config: config})
 	if _, held := d.doc[key]; d.strict && !held {
 		return false, fmt.Errorf("no such component: %s", key)
 	}
 	if method == "Switch.SetConfig" {
 		if err := d.checkInMode(id, config); err != nil {
+			return false, err
+		}
+		if err := d.checkLimits(config); err != nil {
 			return false, err
 		}
 	}
@@ -124,6 +142,25 @@ func (d *fakeGen2Device) checkInMode(id int, config map[string]interface{}) erro
 		return fmt.Errorf("in_mode %s needs a switch input, input %d is %q", mode, id, kind)
 	case (mode == "momentary" || mode == "cycle") && kind != "button":
 		return fmt.Errorf("in_mode %s needs a button input, input %d is %q", mode, id, kind)
+	}
+	return nil
+}
+
+// checkLimits refuses a value above the bound the test gave the device for that key.
+func (d *fakeGen2Device) checkLimits(config map[string]interface{}) error {
+	for key, max := range d.limitMax {
+		var value float64
+		switch v := config[key].(type) {
+		case int:
+			value = float64(v)
+		case float64:
+			value = v
+		default:
+			continue
+		}
+		if value > max {
+			return fmt.Errorf("invalid argument %s: %v is above %v", key, value, max)
+		}
 	}
 	return nil
 }

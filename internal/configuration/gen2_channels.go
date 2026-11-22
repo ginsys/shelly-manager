@@ -121,8 +121,21 @@ func gen2ChannelsFromDoc(doc map[string]interface{}) (*RelayConfig, *InputConfig
 		if state, ok := raw["initial_state"].(string); ok {
 			relay.DefaultState = StringPtr(state)
 		}
-		relay.AutoOn = gen2AutoTimerFromDoc(raw, "auto_on")
-		relay.AutoOff = gen2AutoTimerFromDoc(raw, "auto_off")
+		relay.AutoOn = gen2TimerFromDoc(raw, "auto_on", "auto_on_delay", math.MaxInt32)
+		relay.AutoOff = gen2TimerFromDoc(raw, "auto_off", "auto_off_delay", math.MaxInt32)
+		relay.PowerRestoreDelay = gen2TimerFromDoc(raw, "power_restore_delay_enable", "power_restore_delay", gen2MaxRestoreDelay)
+		relay.MaxPower = gen2WholeFromDoc(raw, "power_limit")
+		relay.VoltageLimit = gen2WholeFromDoc(raw, "voltage_limit")
+		relay.UndervoltageLimit = gen2WholeFromDoc(raw, "undervoltage_limit")
+		if amps, ok := raw["current_limit"].(float64); ok {
+			relay.CurrentLimit = &amps
+		}
+		if locked, ok := raw["in_locked"].(bool); ok {
+			relay.InLocked = BoolPtr(locked)
+		}
+		if recover, ok := raw["autorecover_voltage_errors"].(bool); ok {
+			relay.AutorecoverVoltageErrors = BoolPtr(recover)
+		}
 		if mode, ok := raw["in_mode"].(string); ok {
 			// A model with a selectable input (input_id) runs the mode on the input it names.
 			target := id
@@ -152,6 +165,12 @@ func gen2ChannelsFromDoc(doc map[string]interface{}) (*RelayConfig, *InputConfig
 		if invert, ok := raw["invert"].(bool); ok {
 			in.Inverted = BoolPtr(invert)
 		}
+		if enable, ok := raw["enable"].(bool); ok {
+			in.Enable = BoolPtr(enable)
+		}
+		if reset, ok := raw["factory_reset"].(bool); ok {
+			in.FactoryReset = BoolPtr(reset)
+		}
 	}
 
 	var relayConfig *RelayConfig
@@ -173,22 +192,36 @@ func gen2ChannelsFromDoc(doc map[string]interface{}) (*RelayConfig, *InputConfig
 	return relayConfig, inputConfig
 }
 
-// gen2AutoTimerFromDoc reads auto_on or auto_off with its delay as one number of seconds. An
-// enabled timer whose delay is not a whole number above 0 has no stored value: it is read as unset,
-// so a desired value reports a difference. It is never turned into 0, which means off.
-func gen2AutoTimerFromDoc(raw map[string]interface{}, key string) *int {
-	enabled, ok := raw[key].(bool)
+// gen2MaxRestoreDelay is the highest power_restore_delay in seconds that the Switch page gives (relayed,
+// not confirmed on hardware).
+const gen2MaxRestoreDelay = 600
+
+// gen2TimerFromDoc reads a timer (auto_on, auto_off, power_restore_delay) with its delay as one number
+// of seconds. An enabled timer whose delay is not a whole number from 1 to max has no stored value: it
+// is read as unset, so a desired value reports a difference. It is never turned into 0, which means off.
+func gen2TimerFromDoc(raw map[string]interface{}, enableKey, delayKey string, max float64) *int {
+	enabled, ok := raw[enableKey].(bool)
 	if !ok {
 		return nil
 	}
 	if !enabled {
 		return IntPtr(0)
 	}
-	delay, ok := raw[key+"_delay"].(float64)
-	if !ok || delay < 1 || delay != math.Trunc(delay) || delay > math.MaxInt32 {
+	delay, ok := raw[delayKey].(float64)
+	if !ok || delay < 1 || delay != math.Trunc(delay) || delay > max {
 		return nil
 	}
 	return IntPtr(int(delay))
+}
+
+// gen2WholeFromDoc reads a limit that the stored model keeps as a whole number. A null, a missing key
+// and a value with a fraction are unset, so a desired number reports a difference.
+func gen2WholeFromDoc(raw map[string]interface{}, key string) *int {
+	v, ok := raw[key].(float64)
+	if !ok || v < 0 || v != math.Trunc(v) || v > math.MaxInt32 {
+		return nil
+	}
+	return IntPtr(int(v))
 }
 
 // gen2ChannelsToDoc adds the input:N and switch:N sections that the configuration sets, with only
@@ -215,6 +248,12 @@ func gen2ChannelsToDoc(config *DeviceConfiguration, doc map[string]interface{}) 
 			if in.Inverted != nil {
 				body["invert"] = *in.Inverted
 			}
+			if in.Enable != nil {
+				body["enable"] = *in.Enable
+			}
+			if in.FactoryReset != nil {
+				body["factory_reset"] = *in.FactoryReset
+			}
 			if len(body) > 0 {
 				doc["input:"+strconv.Itoa(in.ID)] = body
 			}
@@ -237,8 +276,18 @@ func gen2ChannelsToDoc(config *DeviceConfiguration, doc map[string]interface{}) 
 					body["initial_state"] = state
 				}
 			}
-			gen2AutoTimerToDoc(body, "auto_on", relay.AutoOn)
-			gen2AutoTimerToDoc(body, "auto_off", relay.AutoOff)
+			gen2TimerToDoc(body, "auto_on", "auto_on_delay", relay.AutoOn)
+			gen2TimerToDoc(body, "auto_off", "auto_off_delay", relay.AutoOff)
+			gen2TimerToDoc(body, "power_restore_delay_enable", "power_restore_delay", relay.PowerRestoreDelay)
+			for key, value := range map[string]interface{}{
+				"power_limit": relay.MaxPower, "voltage_limit": relay.VoltageLimit,
+				"undervoltage_limit": relay.UndervoltageLimit, "current_limit": relay.CurrentLimit,
+				"in_locked": relay.InLocked, "autorecover_voltage_errors": relay.AutorecoverVoltageErrors,
+			} {
+				if v := reflect.ValueOf(value); !v.IsNil() {
+					body[key] = v.Elem().Interface()
+				}
+			}
 		}
 	}
 
@@ -249,15 +298,15 @@ func gen2ChannelsToDoc(config *DeviceConfiguration, doc map[string]interface{}) 
 	}
 }
 
-// gen2AutoTimerToDoc writes seconds above 0 as the timer on with that delay, and 0 as the timer off
+// gen2TimerToDoc writes seconds above 0 as the timer on with that delay, and 0 as the timer off
 // with no delay. A negative number is not written.
-func gen2AutoTimerToDoc(body map[string]interface{}, key string, seconds *int) {
+func gen2TimerToDoc(body map[string]interface{}, enableKey, delayKey string, seconds *int) {
 	if seconds == nil || *seconds < 0 {
 		return
 	}
-	body[key] = *seconds > 0
+	body[enableKey] = *seconds > 0
 	if *seconds > 0 {
-		body[key+"_delay"] = *seconds
+		body[delayKey] = *seconds
 	}
 }
 
@@ -265,7 +314,78 @@ func gen2AutoTimerToDoc(body map[string]interface{}, key string, seconds *int) {
 // field that a desired channel sets has no key to write.
 var gen2ChannelFields = map[string]bool{
 	"id": true, "name": true, "default_state": true, "auto_on": true, "auto_off": true,
-	"type": true, "mode": true, "inverted": true,
+	"type": true, "mode": true, "inverted": true, "enable": true, "factory_reset": true,
+	"max_power": true, "voltage_limit": true, "undervoltage_limit": true, "current_limit": true,
+	"in_locked": true, "autorecover_voltage_errors": true, "power_restore_delay": true,
+}
+
+// unmappedLimits names, and clears in r, each limit that no Gen2 value can carry: a negative one, a
+// restore delay outside 0 to 600, and an undervoltage limit above the voltage limit when both are
+// desired. A voltage limit below the undervoltage limit the device holds is the device's to refuse.
+func unmappedLimits(r *SingleRelayConfig, prefix string) []string {
+	var paths []string
+	drop := func(name string, refused bool, clear func()) {
+		if refused {
+			paths = append(paths, prefix+"."+name)
+			clear()
+		}
+	}
+	drop("max_power", r.MaxPower != nil && *r.MaxPower < 0, func() { r.MaxPower = nil })
+	drop("voltage_limit", r.VoltageLimit != nil && *r.VoltageLimit < 0, func() { r.VoltageLimit = nil })
+	drop("undervoltage_limit", r.UndervoltageLimit != nil && *r.UndervoltageLimit < 0, func() { r.UndervoltageLimit = nil })
+	drop("current_limit", r.CurrentLimit != nil && *r.CurrentLimit < 0, func() { r.CurrentLimit = nil })
+	drop("power_restore_delay", r.PowerRestoreDelay != nil && (*r.PowerRestoreDelay < 0 || *r.PowerRestoreDelay > gen2MaxRestoreDelay),
+		func() { r.PowerRestoreDelay = nil })
+	if r.UndervoltageLimit != nil && r.VoltageLimit != nil && *r.UndervoltageLimit > *r.VoltageLimit {
+		paths = append(paths, prefix+".undervoltage_limit", prefix+".voltage_limit")
+		r.UndervoltageLimit, r.VoltageLimit = nil, nil
+	}
+	return paths
+}
+
+// unreportedChannelKeys names the desired switch and input settings whose Gen2 key the live section
+// does not carry, each as the desired path with the device key beside it. A device that lacks a key
+// takes the write of it as a failed row at best, so the apply refuses before it writes anything. A key
+// that is present with null is reported (the device default), so it is not named. A restore delay
+// above 0 needs both its keys, and 0 needs the enable key.
+func unreportedChannelKeys(doc map[string]interface{}, config *DeviceConfiguration) []string {
+	var missing []string
+	type setting struct {
+		set        bool
+		field, key string
+	}
+	check := func(section, prefix string, settings []setting) {
+		live, _ := doc[section].(map[string]interface{})
+		for _, s := range settings {
+			if _, reported := live[s.key]; s.set && !reported {
+				missing = append(missing, prefix+s.field+" ("+s.key+")")
+			}
+		}
+	}
+	if config.Relay != nil {
+		for i, r := range config.Relay.Relays {
+			delay := r.PowerRestoreDelay
+			check("switch:"+strconv.Itoa(r.ID), "relay.relays."+strconv.Itoa(i)+".", []setting{
+				{r.MaxPower != nil, "max_power", "power_limit"},
+				{r.VoltageLimit != nil, "voltage_limit", "voltage_limit"},
+				{r.UndervoltageLimit != nil, "undervoltage_limit", "undervoltage_limit"},
+				{r.CurrentLimit != nil, "current_limit", "current_limit"},
+				{r.InLocked != nil, "in_locked", "in_locked"},
+				{r.AutorecoverVoltageErrors != nil, "autorecover_voltage_errors", "autorecover_voltage_errors"},
+				{delay != nil, "power_restore_delay", "power_restore_delay_enable"},
+				{delay != nil && *delay > 0, "power_restore_delay", "power_restore_delay"},
+			})
+		}
+	}
+	if config.Input != nil {
+		for i, in := range config.Input.Inputs {
+			check("input:"+strconv.Itoa(in.ID), "input.inputs."+strconv.Itoa(i)+".", []setting{
+				{in.Enable != nil, "enable", "enable"},
+				{in.FactoryReset != nil, "factory_reset", "factory_reset"},
+			})
+		}
+	}
+	return missing
 }
 
 // unkeyedFields names, and clears in v, every field of the struct that v points to which is set and
@@ -316,6 +436,7 @@ func unmappedChannelSettings(desired *DeviceConfiguration) ([]string, *DeviceCon
 			if r.AutoOff != nil && (*r.AutoOff < 0 || *r.AutoOff > math.MaxInt32) {
 				paths, r.AutoOff = append(paths, prefix+".auto_off"), nil
 			}
+			paths = append(paths, unmappedLimits(&r, prefix)...)
 			// A negative id can never be written, so it is named here, at its place in the desired list,
 			// and the converter never sees it.
 			if r.ID < 0 {
@@ -329,7 +450,8 @@ func unmappedChannelSettings(desired *DeviceConfiguration) ([]string, *DeviceCon
 				continue
 			}
 			seenRelays[r.ID] = true
-			if r.Name != nil || r.DefaultState != nil || r.AutoOn != nil || r.AutoOff != nil {
+			// What is left is a setting that has a key: the unkeyed ones were cleared above.
+			if r != (SingleRelayConfig{ID: r.ID}) {
 				relay.Relays = append(relay.Relays, r)
 				kept["relay.relays"] = append(kept["relay.relays"], i)
 			}
@@ -366,7 +488,7 @@ func unmappedChannelSettings(desired *DeviceConfiguration) ([]string, *DeviceCon
 				continue
 			}
 			seenInputs[in.ID] = true
-			if in.Name != nil || in.Type != nil || in.Mode != nil || in.Inverted != nil {
+			if in != (SingleInputConfig{ID: in.ID}) {
 				input.Inputs = append(input.Inputs, in)
 				kept["input.inputs"] = append(kept["input.inputs"], i)
 			}
