@@ -46,9 +46,9 @@ const entry = (over: Record<string, unknown> = {}) => ({
   ...over,
 })
 
-async function mountPage(id = '7', hash = '') {
+async function mountPage(id = '7', hash = '', refresh?: (store: ReturnType<typeof useDeviceConfigNewStore>) => Promise<void>) {
   const store = useDeviceConfigNewStore()
-  vi.spyOn(store, 'refresh').mockResolvedValue(undefined as never)
+  vi.spyOn(store, 'refresh').mockImplementation((refresh ? () => refresh(store) : async () => undefined) as never)
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [{ path: '/devices/:id/config', component: DeviceConfigPage }],
@@ -57,7 +57,7 @@ async function mountPage(id = '7', hash = '') {
   await router.isReady()
   const wrapper = mount(RouterView, { global: { plugins: [router], stubs }, attachTo: document.body })
   await flushPromises()
-  return { wrapper, router }
+  return { wrapper, router, store }
 }
 
 describe('DeviceConfigPage last imported configuration', () => {
@@ -346,6 +346,57 @@ describe('DeviceConfigPage landing at the History card', () => {
 
     expect(getConfigHistory).toHaveBeenLastCalledWith('8')
     expect(scrolled).toHaveBeenCalledTimes(2)
+  })
+
+  // The page's own read fills the cards above the History card, and they push it down: the landing waits
+  // for them, whichever of the reads answers first.
+  it('waits for the page read when the history answers first, then moves once', async () => {
+    let finish: () => void = () => {}
+    const { store } = await mountPage('7', '#history-card', async (s) => {
+      s.loading = true
+      await new Promise<void>((resolve) => (finish = resolve))
+      s.loading = false
+    })
+    expect(getConfigHistory).toHaveBeenCalledTimes(1)
+    expect(scrolled).not.toHaveBeenCalled()
+    expect(store.loading).toBe(true)
+
+    finish()
+    await flushPromises()
+
+    expect(scrolled).toHaveBeenCalledTimes(1)
+  })
+
+  it('waits for the history when the page read answers first, then moves once', async () => {
+    let release: (rows: unknown) => void = () => {}
+    vi.mocked(getConfigHistory).mockReturnValueOnce(new Promise((resolve) => (release = resolve)) as any)
+    await mountPage('7', '#history-card', async (s) => {
+      s.loading = true
+      await Promise.resolve()
+      s.loading = false
+    })
+    expect(scrolled).not.toHaveBeenCalled()
+
+    release([entry()])
+    await flushPromises()
+
+    expect(scrolled).toHaveBeenCalledTimes(1)
+  })
+
+  it('moves when the page read ends in failure, after the history has answered', async () => {
+    let fail: () => void = () => {}
+    await mountPage('7', '#history-card', async (s) => {
+      s.loading = true
+      await new Promise<void>((_, reject) => (fail = () => reject(new Error('down'))))
+        .finally(() => (s.loading = false))
+    })
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(scrolled).not.toHaveBeenCalled()
+
+    fail()
+    await flushPromises()
+
+    expect(scrolled).toHaveBeenCalledTimes(1)
   })
 
   it('does not move a page opened with no hash', async () => {

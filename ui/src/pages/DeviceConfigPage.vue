@@ -365,18 +365,22 @@ const historyError = ref<string | null>(null)
 const openEntries = ref<Set<number>>(new Set())
 
 // "View History" and the old history address open this page at #history-card. The page moves to the card
-// once, when the first read of the history for the device on screen has settled: a later read (after a save,
+// once, when the first read of the history for the device on screen has settled and the cards above it have
+// been read too (they appear after the page's own read and push the card down). A later read (after a save,
 // a template change or a rollback) must not move the page again while the address keeps the hash.
 const historyCardEl = ref<HTMLElement | null>(null)
 let landAtHistory = false
+let historySettled = false
 function armLanding() {
   landAtHistory = route.hash === '#history-card'
+  historySettled = false
 }
 function landAtHistoryCard() {
-  if (!landAtHistory) return
+  if (!landAtHistory || !historySettled || store.loading) return
   landAtHistory = false
   void nextTick(() => historyCardEl.value?.scrollIntoView?.({ block: 'start' }))
 }
+watch(() => store.loading, landAtHistoryCard)
 
 // A failed action shows as an error panel under the toolbar. A failed template add shows inside the
 // add-template dialog instead, which is open and covers the page when it happens.
@@ -484,12 +488,14 @@ async function loadStored() {
       history.value = rows
       historyError.value = null
       historyLoaded.value = true
+      historySettled = true
       landAtHistoryCard()
     },
     (e: any) => {
       if (!current()) return
       history.value = []
       historyError.value = e?.response?.data?.error?.message || e?.message || 'Failed to read the configuration history'
+      historySettled = true
       landAtHistoryCard()
     },
   )

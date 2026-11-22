@@ -387,7 +387,7 @@ Each is under about 350 non-test lines.
    a zero value, passes, and with any other value is refused.
 3. **The card on `DeviceConfigPage`.** Versions, the confirm, the secret prompts, the notice.
 4. **Retire `ui/src/pages/DeviceConfigHistoryPage.vue`** (done). "View History" on the device page opens
-   `/devices/{id}/config#history-card`, and the page moves to the History card once its history is read. The
+   `/devices/{id}/config#history-card`, and the page moves to the History card once, when its history and the cards above it have been read. The
    page and its test are gone. The route is kept as a redirect to that address instead of being removed:
    an unknown route shows the device list with no word of why, so a saved link to the old address
    would have landed there. The same slice adds a test that no secret reaches a log line or an answer
