@@ -45,8 +45,9 @@ type AttackInfo struct {
 	// holding mu), so nothing may take mu while holding the statistics lock.
 	mu sync.Mutex
 	// recent holds the times of the last HourlyThreshold+1 suspicious requests (a ring), for the
-	// rolling-hour rule of shouldBlockIP; it is allocated on the first write. recentNext is the slot
-	// the next write replaces; recentCount is how many slots are filled.
+	// rolling-hour rule of shouldBlockIP; it is allocated on the first write, which the start-up
+	// bound on the threshold keeps small. recentNext is the slot the next write replaces;
+	// recentCount is how many slots are filled.
 	recent      []time.Time
 	recentNext  int
 	recentCount int

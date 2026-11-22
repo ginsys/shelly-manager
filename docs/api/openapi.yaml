@@ -3982,14 +3982,14 @@ paths:
         - BearerAuth: []
         - ApiKeyAuth: []
       responses:
-        '404':
-          description: Security monitoring is off
         '200':
           description: Security metrics
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/APIResponse'
+        '404':
+          description: Security monitoring is off
 
   # Provisioning Endpoints
   /api/v1/discover:

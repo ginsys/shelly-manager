@@ -72,9 +72,9 @@ configuration, and a deployment turns them on:
 | `security.ip_blocking.suspicious_threshold` | `SHELLY_SECURITY_IP_BLOCKING_SUSPICIOUS_THRESHOLD` | `10` | Block at this many suspicious requests. |
 | `security.ip_blocking.rate_limit_threshold` | `SHELLY_SECURITY_IP_BLOCKING_RATE_LIMIT_THRESHOLD` | `5` | Block at this many rate limit violations. |
 | `security.ip_blocking.attack_type_threshold` | `SHELLY_SECURITY_IP_BLOCKING_ATTACK_TYPE_THRESHOLD` | `3` | Block at this many distinct attack types. |
-| `security.ip_blocking.suspicious_per_hour_threshold` | `SHELLY_SECURITY_IP_BLOCKING_SUSPICIOUS_PER_HOUR_THRESHOLD` | `5` | Block at more than this many suspicious requests inside one hour. |
+| `security.ip_blocking.suspicious_per_hour_threshold` | `SHELLY_SECURITY_IP_BLOCKING_SUSPICIOUS_PER_HOUR_THRESHOLD` | `5` | Block at more than this many suspicious requests inside one hour. At most `1000`: the monitor keeps that many request times for every client IP that sent a suspicious request, and a larger value stops start-up with an error naming the key and the limit. |
 
-A zero or negative block length or threshold stops start-up with an error naming the key. With the
+A zero or negative block length or threshold, or an hourly threshold above 1000, stops start-up with an error naming the key. With the
 monitor on and blocking off, counts and alerts continue, no IP is refused or reported blocked, and
 no counter resets. The rate limiter, the security headers and the request validation do not depend
 on either switch.
