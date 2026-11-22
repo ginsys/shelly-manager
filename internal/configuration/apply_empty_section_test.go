@@ -310,6 +310,15 @@ func TestComparator_StillReportsAnEmptySection(t *testing.T) {
 	require.NotEmpty(t, result.Differences)
 }
 
+// A time value is one opaque value, even the zero time: a set energy_reset is not an empty section.
+func TestParseComparableDesiredConfig_KeepsAnOpaqueValue(t *testing.T) {
+	cfg, err := parseComparableDesiredConfig(`{"power_metering":{"energy_reset":"0001-01-01T00:00:00Z"}}`)
+	require.NoError(t, err)
+
+	require.NotNil(t, cfg.PowerMetering)
+	require.NotNil(t, cfg.PowerMetering.EnergyReset)
+}
+
 // dropEmptySections works on the parsed copy: a value, a set zero and a list survive.
 func TestParseComparableDesiredConfig_KeepsWhatIsSet(t *testing.T) {
 	cfg, err := parseComparableDesiredConfig(`{"system":{"sntp":{},"device":{"name":"a"}},"mqtt":{"enable":false},"actions":[],"led":{}}`)
