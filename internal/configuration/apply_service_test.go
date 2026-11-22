@@ -90,6 +90,17 @@ func (d *fakeGen1Device) setConfigAs(user, pass string, cfg map[string]interface
 			d.settings["sntp"] = doc
 			continue
 		}
+		// The flat ap_roaming_enabled and ap_roaming_threshold parameters in, a nested "ap_roaming"
+		// object out.
+		if sub, ok := strings.CutPrefix(k, "ap_roaming_"); ok {
+			doc, _ := d.settings["ap_roaming"].(map[string]interface{})
+			if doc == nil {
+				doc = map[string]interface{}{}
+			}
+			doc[sub] = v
+			d.settings["ap_roaming"] = doc
+			continue
+		}
 		// Like a real Gen1 device: flat mqtt_* parameters in, a nested "mqtt" document out.
 		if sub, ok := strings.CutPrefix(k, "mqtt_"); ok {
 			doc, _ := d.settings["mqtt"].(map[string]interface{})

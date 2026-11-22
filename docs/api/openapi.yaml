@@ -2035,13 +2035,19 @@ paths:
         does not report requires_reboot because the reference documents no reboot for it) and
         Wi-Fi (station through POST /settings/sta, access point enable and password through
         POST /settings/ap, only the keys the desired configuration sets; a new ssid without a
-        usable password, an access point ssid or key, roam_threshold and a station and an access
+        usable password, an access point ssid or key, and a station and an access
         point both enabled return 422, and a failed GET /settings before the write refuses with
         the read's own error and writes nothing; a refused apply leaves config_applied as it
         was; the password
         is write-only and never echoed; Wi-Fi does not report requires_reboot; the route
         behaviour and key names are read from the Shelly reference and not confirmed on
-        hardware). Applies
+        hardware) and Wi-Fi roaming (roam_enable and roam_threshold, written as
+        ap_roaming_enabled and ap_roaming_threshold, a threshold of -100 to -50 dBm, which is the
+        manager's own bound and not confirmed on hardware) and the Wi-Fi recovery reboot
+        (recovery_reboot, written as wifirecovery_reboot_enabled, on the Shelly 1, 1PM, 2.5 and
+        Plug/PlugS only), all three on POST /settings and read back from GET /settings. A value
+        out of range, the recovery reboot on a Shelly i3, and a key that the device's GET /settings
+        does not report (firmware before v1.10.0) return 422 and write nothing. Applies
         to one device are serialized, from the snapshot to the flag update and the pending-reboot
         record, inside one server process and, on PostgreSQL and MySQL, across manager replicas
         (a lock held in the database, which needs database.max_open_conns of at least 2; with one

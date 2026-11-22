@@ -43,6 +43,7 @@ func GetDeviceConfigurationSchema(deviceType string) map[string]interface{} {
 		"network":  getDeviceNetworkSchema(),
 	}
 	withoutModeOfModelsWithoutIt(sections, deviceType, supported)
+	withoutRecoveryOfModelsWithoutIt(sections, deviceType, supported)
 	if !supported || converter.hasRelay(deviceType) {
 		sections["relay"] = getRelayStates(getRelaySchema(), supported)
 	}
@@ -182,6 +183,28 @@ func withoutModeOfModelsWithoutIt(sections map[string]interface{}, deviceType st
 	if device := schemaProperties(schemaProperties(system)["device"]); device != nil {
 		delete(device, "mode")
 	}
+}
+
+// gen1HasWiFiRecovery reports whether a Gen1 model has the Wi-Fi recovery reboot flag
+// (wifirecovery_reboot_enabled). The reference applies it to the Shelly 1/1PM, 2, 2.5 and
+// Plug/PlugS, and not to the i3. It is the one place that decides it: the converter, the pre-write
+// refusal and the schema all read it.
+func gen1HasWiFiRecovery(deviceType string) bool {
+	switch deviceType {
+	case "SHSW-1", "SHSW-PM", "SHSW-25", "SHPLG-S", "SHPLG-1":
+		return true
+	}
+	return false
+}
+
+// withoutRecoveryOfModelsWithoutIt drops the wifi.recovery_reboot leaf from the schema of a
+// supported model without the flag, so it is never marked applicable where apply refuses it. An
+// unsupported model keeps it (marked not applicable), and so does a template with no model.
+func withoutRecoveryOfModelsWithoutIt(sections map[string]interface{}, deviceType string, supported bool) {
+	if !supported || gen1HasWiFiRecovery(deviceType) {
+		return
+	}
+	delete(schemaProperties(sections["wifi"]), "recovery_reboot")
 }
 
 // schemaProperties returns the properties map of a schema node, or nil.

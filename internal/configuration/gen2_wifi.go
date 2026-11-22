@@ -152,6 +152,13 @@ func unmappedWiFiSettings(w *WiFiConfiguration) ([]string, *WiFiConfiguration) {
 	if rest.Enable != nil && !*rest.Enable {
 		paths, rest.Enable = append(paths, "wifi.enable"), nil
 	}
+	// The roaming flag and the recovery reboot are Gen1 settings: Gen2 writes the threshold only.
+	if rest.RoamEnable != nil {
+		paths, rest.RoamEnable = append(paths, "wifi.roam_enable"), nil
+	}
+	if rest.RecoveryReboot != nil {
+		paths, rest.RecoveryReboot = append(paths, "wifi.recovery_reboot"), nil
+	}
 	if ap := rest.AccessPoint; ap != nil {
 		// The access point has one secret, pass, and it is write-only too. The key field has no
 		// Gen2 meaning and is refused by name.

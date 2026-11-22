@@ -308,6 +308,16 @@ func (a *ConfigApplier) applyMainSettings(ctx context.Context, client ShellyClie
 		mainSettings["led_status_disable"] = val
 	}
 
+	// Roaming is the ap_roaming object on GET /settings and flat ap_roaming_* parameters on POST.
+	if roaming, ok := apiConfig["ap_roaming"].(map[string]interface{}); ok {
+		for key, val := range roaming {
+			mainSettings["ap_roaming_"+key] = val
+		}
+	}
+	if val, ok := apiConfig["wifirecovery_reboot_enabled"]; ok {
+		mainSettings["wifirecovery_reboot_enabled"] = val
+	}
+
 	if len(mainSettings) == 0 {
 		return nil
 	}

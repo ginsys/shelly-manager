@@ -3,6 +3,7 @@ package configuration
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 
@@ -36,7 +37,7 @@ func (c *Gen1Converter) FromAPIConfig(apiJSON json.RawMessage, deviceType string
 	config := &DeviceConfiguration{}
 
 	// Convert WiFi settings
-	if err := c.convertWiFi(gen1, config); err != nil {
+	if err := c.convertWiFi(gen1, config, deviceType); err != nil {
 		return nil, fmt.Errorf("failed to convert WiFi: %w", err)
 	}
 
@@ -163,7 +164,7 @@ func (c *Gen1Converter) Generation() int {
 
 // Helper functions for FromAPIConfig
 
-func (c *Gen1Converter) convertWiFi(gen1 map[string]interface{}, config *DeviceConfiguration) error {
+func (c *Gen1Converter) convertWiFi(gen1 map[string]interface{}, config *DeviceConfiguration, deviceType string) error {
 	wifiSTA, ok := gen1["wifi_sta"].(map[string]interface{})
 	if !ok {
 		return nil // WiFi settings not present
@@ -220,6 +221,20 @@ func (c *Gen1Converter) convertWiFi(gen1 map[string]interface{}, config *DeviceC
 			ap.Password = StringPtr(key)
 		}
 		wifi.AccessPoint = ap
+	}
+
+	// Roaming is the ap_roaming object of GET /settings. The recovery flag is flat, and only a
+	// model that has it keeps it: a desired flag on another model fails the round trip.
+	if roaming, ok := gen1["ap_roaming"].(map[string]interface{}); ok {
+		if enabled, ok := roaming["enabled"].(bool); ok {
+			wifi.RoamEnable = BoolPtr(enabled)
+		}
+		if threshold, ok := roaming["threshold"].(float64); ok && threshold == math.Trunc(threshold) {
+			wifi.RoamThreshold = IntPtr(int(threshold))
+		}
+	}
+	if recovery, ok := gen1["wifirecovery_reboot_enabled"].(bool); ok && gen1HasWiFiRecovery(deviceType) {
+		wifi.RecoveryReboot = BoolPtr(recovery)
 	}
 
 	config.WiFi = wifi
@@ -571,6 +586,21 @@ func (c *Gen1Converter) exportWiFi(config *DeviceConfiguration, gen1 map[string]
 	}
 
 	gen1["wifi_sta"] = wifiSTA
+
+	// Roaming and the recovery flag, in the shape GET /settings reports them.
+	if config.WiFi.RoamEnable != nil || config.WiFi.RoamThreshold != nil {
+		roaming := make(map[string]interface{})
+		if config.WiFi.RoamEnable != nil {
+			roaming["enabled"] = *config.WiFi.RoamEnable
+		}
+		if config.WiFi.RoamThreshold != nil {
+			roaming["threshold"] = *config.WiFi.RoamThreshold
+		}
+		gen1["ap_roaming"] = roaming
+	}
+	if config.WiFi.RecoveryReboot != nil {
+		gen1["wifirecovery_reboot_enabled"] = *config.WiFi.RecoveryReboot
+	}
 
 	// Access Point
 	if config.WiFi.AccessPoint != nil {
