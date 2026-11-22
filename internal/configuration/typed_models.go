@@ -242,13 +242,12 @@ type BLEConfig struct {
 }
 
 // BLERPCConfig is the rpc object of the BLE settings. DstAddr and ListenPort are the stored Gen1 words
-// that the Gen2 apply refuses; Enable and KeepRunning are the Gen2 BLE.SetConfig keys rpc.enable and
-// rpc.keep_running.
+// that the Gen2 apply refuses; Enable is the Gen2 BLE.SetConfig key rpc.enable. keep_running has no
+// field: the Shelly page does not settle whether it sits inside rpc or beside it.
 type BLERPCConfig struct {
-	Enable      *bool  `json:"enable,omitempty"`
-	KeepRunning *bool  `json:"keep_running,omitempty"`
-	DstAddr     string `json:"dst_addr,omitempty" validate:"omitempty,ip"`
-	ListenPort  int    `json:"listen_port,omitempty" validate:"omitempty,min=1,max=65535"`
+	Enable     *bool  `json:"enable,omitempty"`
+	DstAddr    string `json:"dst_addr,omitempty" validate:"omitempty,ip"`
+	ListenPort int    `json:"listen_port,omitempty" validate:"omitempty,min=1,max=65535"`
 }
 
 // Validation methods
