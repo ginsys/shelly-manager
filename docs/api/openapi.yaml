@@ -2023,8 +2023,8 @@ paths:
         autorecover_voltage_errors, power_restore_delay, reverse and input_id (0 or 1), with
         Switch.SetConfig (a key the device does not report is refused with 422 and nothing is
         written, so reverse and input_id are written only where the device reports them; a
-        changed reverse owes a restart; an input_id set in the same apply as an input mode is
-        refused; a limit the device
+        changed reverse owes a restart; an input_id that changes in the same apply as an input
+        mode is refused; a limit the device
         refuses is a failed row; the bounds are relayed from the Shelly pages and not confirmed
         on hardware), the roller of a device in cover profile
         (max_open_time, max_close_time, motor_direction, swap_inputs, input_mode, and the

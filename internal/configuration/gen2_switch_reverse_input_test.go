@@ -131,24 +131,62 @@ func TestApplyDesiredConfig_Gen2RefusesReverseAndInputIDBeforeAnyWrite(t *testin
 	}
 }
 
-// A new input_id and an input mode in one apply would put the mode on the wrong input: the mode is
-// written to the switch of the input, and the check of refuseRemappedInputs reads the live input_id.
-func TestApplyDesiredConfig_Gen2RefusesInputIDTogetherWithAnInputMode(t *testing.T) {
+// An input_id that changes in the same apply as an input mode would put the mode on the wrong input: the
+// mode is written to the switch of the input, and the check of refuseRemappedInputs reads the live
+// input_id. A switch whose live input_id is null or absent runs its own input, as refuseRemappedInputs
+// reads it, so a new input_id there changes it too. Where the new input_id moves the mode to another
+// input, the round trip before the device is read already refuses it, naming the mode; the live check
+// answers the rest, with both paths.
+func TestApplyDesiredConfig_Gen2RefusesAChangedInputIDTogetherWithAnInputMode(t *testing.T) {
+	cases := map[string]struct {
+		live    interface{}
+		desired int
+		want    []string
+	}{
+		"live is another input, desired is its own": {1.0, 0, []string{"relay.relays.0.input_id", "input.inputs.0.mode", "one at a time"}},
+		"live is null, desired is another input":    {nil, 1, []string{"input.inputs.0.mode"}},
+		"live is its own, desired is another input": {0.0, 1, []string{"input.inputs.0.mode"}},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			svc, _ := newGen2Service(t, &DeviceConfiguration{
+				Relay: &RelayConfig{Relays: []SingleRelayConfig{{ID: 0, InputID: IntPtr(tc.desired)}}},
+				Input: &InputConfig{Inputs: []SingleInputConfig{{ID: 0, Mode: StringPtr("flip")}}},
+			})
+			dev := fakeGen2DeviceReportingReverseAndInputID()
+			dev.doc["switch:0"].(map[string]interface{})["input_id"] = tc.live
+
+			result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SNSW-001X16EU")
+
+			require.Error(t, err)
+			assert.Nil(t, result)
+			assert.True(t, errors.Is(err, ErrUnsupportedSettings))
+			for _, want := range tc.want {
+				assert.Contains(t, err.Error(), want)
+			}
+			assert.Empty(t, dev.calls, "nothing is written")
+		})
+	}
+}
+
+// An imported template carries the input_id the device already runs beside the input mode. Applying it
+// with one other edit is written, both keys: the input_id does not change, so the mode lands on the
+// input it names.
+func TestApplyDesiredConfig_Gen2WritesAnUnchangedInputIDBesideAnInputMode(t *testing.T) {
 	svc, _ := newGen2Service(t, &DeviceConfiguration{
-		Relay: &RelayConfig{Relays: []SingleRelayConfig{{ID: 0, InputID: IntPtr(1)}}},
-		Input: &InputConfig{Inputs: []SingleInputConfig{{ID: 0, Mode: StringPtr("flip")}}},
+		Relay: &RelayConfig{Relays: []SingleRelayConfig{{ID: 1, InputID: IntPtr(1), Reverse: BoolPtr(true)}}},
+		Input: &InputConfig{Inputs: []SingleInputConfig{{ID: 1, Mode: StringPtr("flip")}}},
 	})
 	dev := fakeGen2DeviceReportingReverseAndInputID()
 
 	result, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SNSW-001X16EU")
 
-	require.Error(t, err)
-	assert.Nil(t, result)
-	assert.True(t, errors.Is(err, ErrUnsupportedSettings))
-	assert.Contains(t, err.Error(), "relay.relays.0.input_id")
-	assert.Contains(t, err.Error(), "input.inputs.0.mode")
-	assert.Contains(t, err.Error(), "one at a time")
-	assert.Empty(t, dev.calls, "nothing is written")
+	require.NoError(t, err)
+	assert.True(t, result.ConfigApplied)
+	section := dev.doc["switch:1"].(map[string]interface{})
+	assert.Equal(t, "flip", section["in_mode"])
+	assert.Equal(t, 1.0, section["input_id"])
+	assert.Equal(t, true, section["reverse"])
 }
 
 // reverse beside an input mode is unchanged: the mode goes through the live input_id check as before.
