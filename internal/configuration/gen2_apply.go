@@ -424,12 +424,13 @@ func gen2Body(apiConfig map[string]interface{}, key string) map[string]interface
 // another input. The mode of an input is written as the in_mode of switch N, and a model with a
 // selectable input (input_id) runs the mode on the input that switch names, so the write would
 // change the behavior of the wrong input. Only a switch that names another input is refused: one with
-// no input_id, or its own, is written as before.
+// no input_id, or its own, is written as before. A device that reports no switch N at all (a light
+// device) is refused too, because the write would come back as a failed row.
 func refuseRemappedInputs(doc map[string]interface{}, config *DeviceConfiguration) error {
 	if config.Input == nil {
 		return nil
 	}
-	var paths []string
+	var paths, noSwitch []string
 	for i, in := range config.Input.Inputs {
 		if in.Mode == nil {
 			continue
@@ -437,10 +438,16 @@ func refuseRemappedInputs(doc map[string]interface{}, config *DeviceConfiguratio
 		if _, ok := gen2InModes[*in.Mode]; !ok {
 			continue
 		}
-		sw, _ := doc["switch:"+strconv.Itoa(in.ID)].(map[string]interface{})
-		if selected, ok := sw["input_id"].(float64); ok && selected != float64(in.ID) {
-			paths = append(paths, "input.inputs."+strconv.Itoa(i)+".mode")
+		path := "input.inputs." + strconv.Itoa(i) + ".mode"
+		sw, held := doc["switch:"+strconv.Itoa(in.ID)].(map[string]interface{})
+		if !held {
+			noSwitch = append(noSwitch, path)
+		} else if selected, ok := sw["input_id"].(float64); ok && selected != float64(in.ID) {
+			paths = append(paths, path)
 		}
+	}
+	if len(noSwitch) > 0 {
+		return &refusedBeforeWriteError{fmt.Errorf("%w: %s: the device reports no switch of that number, and the mode is written to the switch", ErrUnsupportedSettings, strings.Join(noSwitch, ", "))}
 	}
 	if len(paths) == 0 {
 		return nil
