@@ -71,6 +71,14 @@ func SetupRoutesWithSecurity(handler *Handler, logger *logging.Logger, securityC
 
 	r := mux.NewRouter()
 
+	// A path with no route skips every middleware, so give its 404 the CORS headers: a page on an
+	// allowed origin reads that answer, and the Metrics page reads a missing security route as
+	// "monitoring is off".
+	r.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		setCORSHeaders(w, req, securityConfig)
+		http.NotFound(w, req)
+	})
+
 	// Initialize security monitor
 	var securityMonitor *middleware.SecurityMonitor
 	if securityConfig.EnableMonitoring {
