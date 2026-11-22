@@ -164,6 +164,15 @@ its own identity with a token it receives when it registers.
 With no key set the routes are open. The web UI asks for the key in a dialog the first time the server answers 401,
 and keeps it for the browser tab (see `ui/README.md`); a build with `VITE_ADMIN_KEY` already holds one.
 
+Provisioner agents can also enrol by key: an agent that sends an Ed25519 `public_key` waits as `pending` until the
+admin key holder approves its fingerprint (`POST /api/v1/provisioner/agents/{id}/approve`, or pre-approve one with
+`POST /api/v1/provisioner/enrolments`), then signs a challenge to receive its token. `security.agent_enrolment`
+(`SHELLY_SECURITY_AGENT_ENROLMENT`) is `open` by default: agents that register without a key work as before. Set it to
+`strict` to let in only approved agents: a register without a key is then refused with `403`, and the token of an agent
+that is not approved stops working, so every existing keyless agent must be pre-approved and re-enrolled by key first.
+`strict` needs an admin key and the manager refuses to start without one (see `docs/api/api-overview.md`, "Strict
+enrolment").
+
 Each secret also takes a `_FILE` form, for example `SHELLY_SECURITY_ADMIN_API_KEY_FILE=/run/secrets/admin_key`
 (see `docs/security/SECURITY_SECRETS.md`). A `_FILE` that names a file the process cannot read stops the start-up
 with an error that names the variable and the path, so a typo in the path cannot leave the routes open.
