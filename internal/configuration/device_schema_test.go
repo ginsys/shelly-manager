@@ -144,7 +144,8 @@ func TestDeviceSchemaPlugKeepsBothLEDLeaves(t *testing.T) {
 }
 
 // The Dimmer's light fields are applicable, and so are the five device-level dimming fields apply
-// writes on POST /settings. Every other dimming leaf is not applicable. The Dimmer has the status LED
+// writes on POST /settings, except that the Dimmer 1 has no leading_edge leaf (apply always refuses
+// it there). Every other dimming leaf is not applicable. The Dimmer has the status LED
 // and no power LED, so its led section holds network_indication and no power_indication, while the
 // plug keeps both.
 func TestDeviceSchemaDimmerMarksLightAndFiveDimmingFieldsApplicable(t *testing.T) {
@@ -157,6 +158,13 @@ func TestDeviceSchemaDimmerMarksLightAndFiveDimmingFieldsApplicable(t *testing.T
 		schemaLeaves("", GetDeviceConfigurationSchema(model), leaves)
 		for path := range written {
 			leaf, ok := leaves[path]
+			if path == "dimming.leading_edge" && model == "SHDM-1" {
+				// The Dimmer 1 never reports pulse_mode_detected, so apply always refuses the field there.
+				if ok {
+					t.Errorf("%s: %s must not be in the schema, apply always refuses it", model, path)
+				}
+				continue
+			}
 			if !ok {
 				t.Errorf("%s: no schema leaf %s", model, path)
 			} else if leaf[SchemaKeyApplicable] != true {

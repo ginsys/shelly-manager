@@ -68,7 +68,7 @@ func GetDeviceConfigurationSchema(deviceType string) map[string]interface{} {
 	if !supported || converter.hasDimmerSettings(deviceType) {
 		// Five fields of the Dimmer's device-level group are applied (gen1ApplicablePaths); the rest of
 		// it is stored and not written, so those fields are not applicable.
-		sections["dimming"] = getDimmingSchema()
+		sections["dimming"] = withoutEdgeOfDimmerWithoutDetection(getDimmingSchema(), deviceType)
 	}
 
 	schema := map[string]interface{}{
@@ -220,6 +220,16 @@ func withoutPowerLEDOfModelsWithoutIt(led map[string]interface{}, hasPowerLED, s
 		delete(schemaProperties(led), "power_indication")
 	}
 	return led
+}
+
+// withoutEdgeOfDimmerWithoutDetection drops the dimming.leading_edge leaf from the schema of the
+// Dimmer 1, which never reports pulse_mode_detected, so apply always refuses the field there and it
+// is never marked applicable. The Dimmer 2, an unsupported model and a template with no model keep it.
+func withoutEdgeOfDimmerWithoutDetection(dimming map[string]interface{}, deviceType string) map[string]interface{} {
+	if deviceType == "SHDM-1" {
+		delete(schemaProperties(dimming), "leading_edge")
+	}
+	return dimming
 }
 
 // schemaProperties returns the properties map of a schema node, or nil.
