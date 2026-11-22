@@ -7,7 +7,7 @@ import { useDeviceConfigNewStore } from '@/stores/deviceConfigNew'
 
 vi.mock('@/api/deviceConfig', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/deviceConfig')>()
-  return { ...actual, getStoredDeviceConfig: vi.fn(), getConfigHistory: vi.fn() }
+  return { ...actual, getStoredDeviceConfig: vi.fn(), getConfigHistory: vi.fn(), getCurrentDeviceConfig: vi.fn() }
 })
 
 vi.mock('@/api/desiredRollback', async (importOriginal) => {
@@ -15,7 +15,7 @@ vi.mock('@/api/desiredRollback', async (importOriginal) => {
   return { ...actual, getDesiredHistory: vi.fn(), rollbackDesired: vi.fn() }
 })
 
-import { getStoredDeviceConfig, getConfigHistory } from '@/api/deviceConfig'
+import { getStoredDeviceConfig, getConfigHistory, getCurrentDeviceConfig } from '@/api/deviceConfig'
 import { getDesiredHistory } from '@/api/desiredRollback'
 
 // ginsys/shelly-manager#747 slice 1: the page shows the configuration an import stored, and the
@@ -518,6 +518,36 @@ describe('DeviceConfigPage landing at the History card', () => {
     await router.push('/devices/8/config#history-card')
     await flushPromises()
 
+    expect(scrolled).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not move once the hash was dropped while a read was pending', async () => {
+    let release: (rows: unknown) => void = () => {}
+    vi.mocked(getConfigHistory).mockReturnValueOnce(new Promise((resolve) => (release = resolve)) as any)
+    const { router } = await mountPage('7', '#history-card')
+    await router.push('/devices/7/config')
+    await flushPromises()
+
+    release([])
+    await flushPromises()
+
+    expect(scrolled).not.toHaveBeenCalled()
+  })
+
+  it('waits for a read from the device that is still pending', async () => {
+    let release: (row: unknown) => void = () => {}
+    let releaseHistory: (rows: unknown) => void = () => {}
+    vi.mocked(getConfigHistory).mockReturnValueOnce(new Promise((resolve) => (releaseHistory = resolve)) as any)
+    vi.mocked(getCurrentDeviceConfig).mockReturnValueOnce(new Promise((resolve) => (release = resolve)) as any)
+    const { wrapper } = await mountPage('7', '#history-card')
+    await wrapper.find('[data-testid="live-load"]').trigger('click')
+
+    releaseHistory([])
+    await flushPromises()
+    expect(scrolled).not.toHaveBeenCalled()
+
+    release({ config: { name: 'x' } })
+    await flushPromises()
     expect(scrolled).toHaveBeenCalledTimes(1)
   })
 
