@@ -34,7 +34,8 @@ var gen2Sections = []struct {
 
 // gen2ApplyKeys are the fixed top-level keys of a Gen2 config document that apply writes. The
 // channel sections switch:N and input:N are written too (gen2KeyApplies), and wifi is written last.
-var gen2ApplyKeys = map[string]bool{"sys": true, "mqtt": true, "cloud": true, "wifi": true}
+// cover:0 is the one cover the stored roller maps to (gen2_cover.go).
+var gen2ApplyKeys = map[string]bool{"sys": true, "mqtt": true, "cloud": true, "wifi": true, gen2CoverKey: true}
 
 // gen2Write is one SetConfig call of an apply: the section key, the method and its parameters.
 type gen2Write struct {
@@ -45,10 +46,11 @@ type gen2Write struct {
 }
 
 // gen2WritesOf lists the calls an apply makes, in order: the fixed sections, then each input, then
-// each switch, by id, then the Wi-Fi access point, roaming and station. An input comes before the
-// switch it drives, because the type of the input must be set before the in_mode of the switch
-// (follow and flip need an input that has a state). The station comes last: the device reconnects
-// about a second after it, and an access point switched on is on before the station moves.
+// each switch, by id, then the cover, then the Wi-Fi access point, roaming and station. An input
+// comes before the switch it drives, because the type of the input must be set before the in_mode
+// of the switch (follow and flip need an input that has a state). A device in cover profile has no
+// switch, so the cover has no order to keep against one. The station comes last: the device
+// reconnects about a second after it, and an access point switched on is on before the station moves.
 func gen2WritesOf(apiConfig map[string]interface{}) []gen2Write {
 	var writes []gen2Write
 	for _, section := range gen2Sections {
@@ -63,6 +65,9 @@ func gen2WritesOf(apiConfig map[string]interface{}) []gen2Write {
 				writes = append(writes, gen2Write{key: key, method: channel.method, params: map[string]interface{}{"id": id, "config": body}, body: body})
 			}
 		}
+	}
+	if body, ok := apiConfig[gen2CoverKey].(map[string]interface{}); ok && len(body) > 0 {
+		writes = append(writes, gen2Write{key: gen2CoverKey, method: "Cover.SetConfig", params: map[string]interface{}{"id": 0, "config": body}, body: body})
 	}
 	for _, part := range []string{"ap", "roam", "sta"} {
 		if keys := gen2WiFiPart(apiConfig, part); len(keys) > 0 {
@@ -97,8 +102,8 @@ func (s *ConfigurationService) applyPathFor(client ShellyClient, loginSupported 
 }
 
 // unsupportedGen2Settings returns the sorted paths of desired that the Gen2 apply cannot write
-// and read back. Only the sys, mqtt, cloud, switch and input sections, the Wi-Fi and the login have a
-// mapping so far, so every other populated setting is reported through the round trip: the
+// and read back. Only the sys, mqtt, cloud, switch and input sections, the cover, the Wi-Fi and the
+// login have a mapping so far, so every other populated setting is reported through the round trip: the
 // converter drops it, and it is missing on the way back. loginSupported says whether the caller can
 // store a new login (LoginHooks): without it every login setting is refused. An MQTT password with no user is refused
 // too: the device takes the password only together with the user.
@@ -108,11 +113,14 @@ func unsupportedGen2Settings(converter ConfigConverter, desired *DeviceConfigura
 	unsupported, mapped := unmappedMQTTSettings(desired.MQTT)
 	channelPaths, checkedChannels, keptChannels := unmappedChannelSettings(desired)
 	unsupported = append(unsupported, channelPaths...)
+	rollerPaths, rollerRest := unmappedRollerSettings(desired.Roller)
+	unsupported = append(unsupported, rollerPaths...)
 	wifiPaths, wifiRest := unmappedWiFiSettings(desired.WiFi)
 	unsupported = append(unsupported, wifiPaths...)
 	unsupported = append(unsupported, unmappedLoginSettings(desired.Auth, loginSupported)...)
 	checked := *checkedChannels
 	checked.MQTT = mapped
+	checked.Roller = rollerRest
 	checked.WiFi = wifiRest
 	checked.Auth = nil // the login is written with Shelly.SetAuth and read from the device info, not from the document
 
@@ -222,7 +230,8 @@ func unmappedMQTTSettings(m *MQTTConfiguration) ([]string, *MQTTConfiguration) {
 
 // applyGen2Config applies a configuration to a Gen2 or later device. It has its own flow because
 // the device decides whether a write needs a reboot: the Gen1 reboot rules do not apply, and a
-// reboot happens only when an answer says restart_required.
+// reboot happens only when an answer says restart_required, or a cover write changes
+// invert_directions (applyGen2Sections).
 func (a *ConfigApplier) applyGen2Config(ctx context.Context, client ShellyClient, config *DeviceConfiguration, deviceType string, result *ApplyResult, startTime time.Time) (*ApplyResult, error) {
 	setter, ok := client.(Gen2ConfigClient)
 	if !ok {
@@ -253,6 +262,10 @@ func (a *ConfigApplier) applyGen2Config(ctx context.Context, client ShellyClient
 	if err = refuseRemappedInputs(ctx, client, config); err != nil {
 		return nil, err
 	}
+	reversesCover, err := refuseUncoverableRoller(ctx, client, apiConfig)
+	if err != nil {
+		return nil, err
+	}
 
 	// A reboot an earlier apply left owed stays owed until a reboot succeeds.
 	if a.owed != nil && a.owed.pending {
@@ -263,7 +276,7 @@ func (a *ConfigApplier) applyGen2Config(ctx context.Context, client ShellyClient
 	if err = a.guardWrite(ctx); err != nil {
 		return nil, err
 	}
-	if err := a.applyGen2Sections(ctx, setter, apiConfig, result); err != nil {
+	if err := a.applyGen2Sections(ctx, setter, apiConfig, result, reversesCover); err != nil {
 		return nil, fmt.Errorf("device rejected the login while applying: %w", err)
 	}
 	if err := a.applyGen2Login(ctx, client, config.Auth, result); err != nil {
@@ -344,7 +357,10 @@ func refuseRemappedInputs(ctx context.Context, client ShellyClient, config *Devi
 // An answer that asks for a restart is recorded as owed right away, when the owed flag is
 // persisted. Unlike the Gen1 flow, a write whose answer was lost is not recorded beforehand,
 // because the device, not the manager, decides whether it needs a restart.
-func (a *ConfigApplier) applyGen2Sections(ctx context.Context, setter Gen2ConfigClient, apiConfig map[string]interface{}, result *ApplyResult) error {
+//
+// A cover write that changes invert_directions owes a restart whether or not the answer says so:
+// the Cover reference states that changing it requires a reboot (reversesCover, from the live read).
+func (a *ConfigApplier) applyGen2Sections(ctx context.Context, setter Gen2ConfigClient, apiConfig map[string]interface{}, result *ApplyResult, reversesCover bool) error {
 	// The MQTT and Wi-Fi passwords stay out of every error, log line and failure, whichever section fails.
 	var secret string
 	if mqtt, ok := apiConfig["mqtt"].(map[string]interface{}); ok {
@@ -403,18 +419,20 @@ func (a *ConfigApplier) applyGen2Sections(ctx context.Context, setter Gen2Config
 		result.AppliedCount += len(leaves)
 
 		if restart {
-			a.markGen2RestartOwed(section.method, result)
+			a.markGen2RestartOwed(section.method, section.method+" asked for a restart", result)
+		} else if reversesCover && section.key == gen2CoverKey {
+			a.markGen2RestartOwed(section.method, "a changed motor direction needs a restart", result)
 		}
 	}
 	return nil
 }
 
-// markGen2RestartOwed records that the device asked for a restart.
-func (a *ConfigApplier) markGen2RestartOwed(method string, result *ApplyResult) {
+// markGen2RestartOwed records that a restart is owed, with the reason the warning gives.
+func (a *ConfigApplier) markGen2RestartOwed(method, reason string, result *ApplyResult) {
 	if !result.RequiresReboot {
 		result.RequiresReboot = true
 		result.Warnings = append(result.Warnings,
-			"Device reboot required for some settings to take effect ("+method+" asked for a restart)")
+			"Device reboot required for some settings to take effect ("+reason+")")
 	}
 	if a.owed == nil || a.owed.pending {
 		return
