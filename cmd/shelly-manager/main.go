@@ -334,6 +334,9 @@ func startServer() {
 	if cfg != nil && cfg.Security.AgentAPIKey != "" {
 		apiHandler.SetAgentAPIKey(cfg.Security.AgentAPIKey)
 	}
+	if cfg != nil {
+		apiHandler.SetAgentEnrolment(cfg.Security.AgentEnrolment)
+	}
 	// The status route reports this, so the UI can say a stored schedule is not running here.
 	apiHandler.SetDriftSchedulerEnabled(cfg != nil && cfg.Drift.SchedulerEnabled)
 
@@ -585,6 +588,9 @@ func initApp() {
 	// key left empty the guarded routes would be open.
 	if err = secrets.ApplyToConfig(cfg); err != nil {
 		log.Fatalf("Failed to read secrets: %v", err)
+	}
+	if err = cfg.ValidateAgentEnrolment(); err != nil {
+		log.Fatalf("Invalid configuration: %v", err)
 	}
 
 	// Blocking on with the monitor off, or a zero block length or threshold, would leave an operator
