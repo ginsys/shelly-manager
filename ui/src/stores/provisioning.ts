@@ -7,6 +7,10 @@ import {
   bulkProvision,
   getAgents,
   getAgentStatus,
+  approveAgent,
+  rejectAgent,
+  preapproveFingerprint,
+  isWorkingAgent,
   type ProvisioningTask,
   type ProvisioningAgent,
   type GetTasksParams,
@@ -36,9 +40,13 @@ export const useProvisioningStore = defineStore('provisioning', {
     completedTasks: (state) => state.tasks.filter((t) => t.status === 'completed'),
     failedTasks: (state) => state.tasks.filter((t) => t.status === 'failed'),
 
-    onlineAgents: (state) => state.agents.filter((a) => a.status === 'online'),
-    busyAgents: (state) => state.agents.filter((a) => a.status === 'busy'),
-    offlineAgents: (state) => state.agents.filter((a) => a.status === 'offline'),
+    // The counts leave out a row that is not a working agent (see `isWorkingAgent`).
+    workingAgents: (state) => state.agents.filter(isWorkingAgent),
+    onlineAgents: (state) => state.agents.filter((a) => isWorkingAgent(a) && a.status === 'online'),
+    busyAgents: (state) => state.agents.filter((a) => isWorkingAgent(a) && a.status === 'busy'),
+    offlineAgents: (state) => state.agents.filter((a) => isWorkingAgent(a) && a.status === 'offline'),
+    pendingAgents: (state) => state.agents.filter((a) => a.enrolmentState === 'pending'),
+    notEnrolledAgents: (state) => state.agents.filter((a) => !isWorkingAgent(a)),
 
     taskById: (state) => (id: string) => state.tasks.find((t) => t.id === id),
     agentById: (state) => (id: string) => state.agents.find((a) => a.id === id)
@@ -145,6 +153,23 @@ export const useProvisioningStore = defineStore('provisioning', {
       } finally {
         this.agentsLoading = false
       }
+    },
+
+    // The enrolment acts rethrow a failure like the task actions. After one succeeds the list is loaded
+    // again, because the manager's answer has other field names and the row may have moved meanwhile.
+    async approveAgent(id: string) {
+      await approveAgent(id)
+      await this.fetchAgents()
+    },
+
+    async rejectAgent(id: string) {
+      await rejectAgent(id)
+      await this.fetchAgents()
+    },
+
+    async preapproveFingerprint(fingerprint: string) {
+      await preapproveFingerprint(fingerprint)
+      await this.fetchAgents()
     },
 
     setTasksStatusFilter(status: string) {

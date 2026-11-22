@@ -19,6 +19,9 @@ import {
   bulkProvision,
   getAgents,
   getAgentStatus,
+  approveAgent,
+  rejectAgent,
+  preapproveFingerprint,
   type ProvisioningTask,
   type ProvisioningAgent
 } from '../provisioning'
@@ -218,7 +221,8 @@ describe('provisioning api', () => {
           status: 'online',
           version: '1.0.0',
           capabilities: ['configure', 'update'],
-          lastSeen: '2023-01-01T00:00:00Z'
+          lastSeen: '2023-01-01T00:00:00Z',
+          enrolmentState: 'legacy'
         }
       ]
 
@@ -242,7 +246,9 @@ describe('provisioning api', () => {
         status: 'busy',
         version: '1.0.0',
         capabilities: ['configure', 'update', 'restart'],
-        lastSeen: '2023-01-01T00:05:00Z'
+        lastSeen: '2023-01-01T00:05:00Z',
+        enrolmentState: 'approved',
+        fingerprint: '0123-4567-89ab-cdef-0123-4567-89ab-cdef'
       }
 
       ;(api.get as any).mockResolvedValue({
@@ -269,6 +275,34 @@ describe('provisioning api', () => {
 
       const agents = await getAgents()
       expect(agents).toEqual([])
+    })
+  })
+
+  // The enrolment acts: admin routes of the manager, each answering with a row view that the page does not read.
+  describe('enrolment acts', () => {
+    const ok = { data: { success: true, data: { id: 'a-1', enrolment_state: 'approved' }, timestamp: '' } }
+
+    it('approve and reject post to the agent id, and the id is escaped', async () => {
+      ;(api.post as any).mockResolvedValue(ok)
+      await approveAgent('key-0123')
+      expect(api.post).toHaveBeenLastCalledWith('/provisioner/agents/key-0123/approve', {})
+      await rejectAgent('provisioner-my agent/1')
+      expect(api.post).toHaveBeenLastCalledWith('/provisioner/agents/provisioner-my%20agent%2F1/reject', {})
+    })
+
+    it('pre-approve posts the fingerprint as given', async () => {
+      ;(api.post as any).mockResolvedValue(ok)
+      await preapproveFingerprint('0123-4567-89AB-CDEF-0123-4567-89ab-cdef')
+      expect(api.post).toHaveBeenCalledWith('/provisioner/enrolments', {
+        fingerprint: '0123-4567-89AB-CDEF-0123-4567-89ab-cdef'
+      })
+    })
+
+    it('a refused act throws the server message', async () => {
+      ;(api.post as any).mockResolvedValue({
+        data: { success: false, error: { message: "The agent's enrolment state does not allow this" } }
+      })
+      await expect(approveAgent('a-1')).rejects.toThrow("The agent's enrolment state does not allow this")
     })
   })
 

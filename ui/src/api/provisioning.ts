@@ -14,13 +14,36 @@ export interface ProvisioningTask {
   updatedAt: string
 }
 
+// How an agent got in. A keyless agent is `legacy`; an agent that enrols by key waits as `pending` until the
+// operator approves its fingerprint, or is `preapproved` before it first registers.
+export type EnrolmentState = 'legacy' | 'pending' | 'preapproved' | 'approved' | 'rejected'
+
 export interface ProvisioningAgent {
   id: string
   name: string
-  status: 'online' | 'offline' | 'busy'
+  // The manager stores the enrolment state in `status` until an enrolled agent registers (a pending row
+  // has `pending`, a just approved one `approved`); only `online`, `busy` and `offline` say how it is doing.
+  status: 'online' | 'offline' | 'busy' | EnrolmentState
   version: string
   capabilities: string[]
   lastSeen: string
+  enrolmentState: EnrolmentState
+  // Eight groups of four, for an agent enrolled by key; absent for a keyless one.
+  fingerprint?: string
+}
+
+// A working agent is a keyless one or one the operator approved. A row that waits for approval, was
+// pre-approved and has not registered, or was rejected is not an agent that is online or offline, so the
+// counts leave it out.
+export function isWorkingAgent(agent: ProvisioningAgent): boolean {
+  return !['pending', 'preapproved', 'rejected'].includes(agent.enrolmentState)
+}
+
+// How a working agent is doing, for the page's Activity column: `online`, `busy` or `offline`, and null for
+// everything else. The manager also stores an enrolment state name in `status` (a row just approved has
+// `approved` until it registers), and a row that is not a working agent has no activity, however stale.
+export function agentActivity(agent: ProvisioningAgent): string | null {
+  return isWorkingAgent(agent) && ['online', 'busy', 'offline'].includes(agent.status) ? agent.status : null
 }
 
 export interface GetTasksParams {
@@ -99,4 +122,32 @@ export async function getAgentStatus(id: string): Promise<ProvisioningAgent> {
     throw new Error(msg)
   }
   return res.data.data
+}
+
+// The three enrolment acts (admin key, sent by the shared client). Each answers with the manager's own view
+// of the row, which has other field names than the list, so they return nothing and the caller loads the
+// list again. Each call names its URL where it is made, which the route contract test reads.
+function assertActed(res: { data: APIResponse<unknown> }, failure: string): void {
+  if (!res.data.success) {
+    throw new Error(res.data.error?.message || failure)
+  }
+}
+
+// An agent id can hold a space or a slash when it starts with `provisioner-`, so it is escaped in the path.
+export async function approveAgent(id: string): Promise<void> {
+  const agentId = encodeURIComponent(id)
+  const res = await api.post<APIResponse<unknown>>(`/provisioner/agents/${agentId}/approve`, {})
+  assertActed(res, 'Failed to approve the agent')
+}
+
+export async function rejectAgent(id: string): Promise<void> {
+  const agentId = encodeURIComponent(id)
+  const res = await api.post<APIResponse<unknown>>(`/provisioner/agents/${agentId}/reject`, {})
+  assertActed(res, 'Failed to reject the agent')
+}
+
+// Creates a `preapproved` row for the fingerprint, or approves the `pending` row that has it.
+export async function preapproveFingerprint(fingerprint: string): Promise<void> {
+  const res = await api.post<APIResponse<unknown>>('/provisioner/enrolments', { fingerprint })
+  assertActed(res, 'Failed to pre-approve the fingerprint')
 }

@@ -35,13 +35,18 @@ type uiProvisioningTask struct {
 	UpdatedAt     time.Time              `json:"updatedAt"`
 }
 
+// uiProvisioningAgent is an agent as the page shows it. EnrolmentState is the row's state (a keyless row is
+// legacy) and Fingerprint is the key's fingerprint in the readable form, empty for a keyless row. Never the
+// key, the challenge or the token hash.
 type uiProvisioningAgent struct {
-	ID           string    `json:"id"`
-	Name         string    `json:"name"`
-	Status       string    `json:"status"`
-	Version      string    `json:"version"`
-	Capabilities []string  `json:"capabilities"`
-	LastSeen     time.Time `json:"lastSeen"`
+	ID             string    `json:"id"`
+	Name           string    `json:"name"`
+	Status         string    `json:"status"`
+	Version        string    `json:"version"`
+	Capabilities   []string  `json:"capabilities"`
+	LastSeen       time.Time `json:"lastSeen"`
+	EnrolmentState string    `json:"enrolmentState"`
+	Fingerprint    string    `json:"fingerprint,omitempty"`
 }
 
 type uiCreateTaskRequest struct {
@@ -114,13 +119,19 @@ func toUIAgent(agent *database.ProvisionerAgent) uiProvisioningAgent {
 	if capabilities == nil {
 		capabilities = []string{}
 	}
+	fingerprint := ""
+	if agent.Fingerprint != nil {
+		fingerprint = database.FormatFingerprint(*agent.Fingerprint)
+	}
 	return uiProvisioningAgent{
-		ID:           agent.AgentID,
-		Name:         agent.Hostname,
-		Status:       agentStatus(agent),
-		Version:      agent.Version,
-		Capabilities: capabilities,
-		LastSeen:     agent.LastSeen,
+		ID:             agent.AgentID,
+		Name:           agent.Hostname,
+		Status:         agentStatus(agent),
+		Version:        agent.Version,
+		Capabilities:   capabilities,
+		LastSeen:       agent.LastSeen,
+		EnrolmentState: agent.State(),
+		Fingerprint:    fingerprint,
 	}
 }
 
