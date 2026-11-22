@@ -29,6 +29,16 @@ const (
 // apply does not support, every section of DeviceConfiguration is present and no field is
 // applicable.
 func GetDeviceConfigurationSchema(deviceType string) map[string]interface{} {
+	return GetDeviceConfigurationSchemaFor(deviceType, 0)
+}
+
+// GetDeviceConfigurationSchemaFor is GetDeviceConfigurationSchema for a device whose generation is
+// known. A Gen2 or later device gets the schema of what the Gen2 apply writes (gen2DeviceSchema), and
+// any other generation, or none, the Gen1 answer.
+func GetDeviceConfigurationSchemaFor(deviceType string, generation int) map[string]interface{} {
+	if generation >= 2 {
+		return gen2DeviceSchema(deviceType)
+	}
 	converter := NewGen1Converter(nil)
 	supported := false
 	for _, t := range converter.SupportedDeviceTypes() {
@@ -87,18 +97,20 @@ func GetDeviceConfigurationSchema(deviceType string) map[string]interface{} {
 		SchemaKeyDeviceType:     deviceType,
 		SchemaKeyApplySupported: supported,
 	}
-	markApplicable(schema, "", supported)
+	markApplicable(schema, "", gen1Writes(supported), gen1FieldDefaults)
 	return schema
 }
 
 // GetTemplateConfigurationSchema returns the schema of a global or group template: every
 // section DeviceConfiguration stores, because such a template can reach any model. A field is
-// marked applicable when apply can write it on at least one supported model. A device_type
-// template uses GetDeviceConfigurationSchema of its model instead.
+// marked applicable when apply can write it on at least one supported model, of either generation.
+// A device_type template uses GetDeviceConfigurationSchema of its model instead.
 func GetTemplateConfigurationSchema() map[string]interface{} {
 	schema := GetDeviceConfigurationSchema("")
 	schema[SchemaKeyApplySupported] = true
-	markApplicable(schema, "", true)
+	markApplicable(schema, "", func(path string) bool {
+		return gen1ApplicablePaths[path] || gen2ApplicablePaths[path]
+	}, gen1FieldDefaults)
 	return schema
 }
 
@@ -439,7 +451,7 @@ func getDeviceCoIoTSchema() map[string]interface{} {
 
 // markApplicable sets SchemaKeyApplicable on every leaf field below node. path is the dotted
 // path of node; array items add "[]".
-func markApplicable(node map[string]interface{}, path string, supported bool) {
+func markApplicable(node map[string]interface{}, path string, writes func(path string) bool, defaults map[string]interface{}) {
 	if props, ok := node["properties"].(map[string]interface{}); ok {
 		for name, child := range props {
 			childPath := name
@@ -447,23 +459,28 @@ func markApplicable(node map[string]interface{}, path string, supported bool) {
 				childPath = path + "." + name
 			}
 			if childMap, ok := child.(map[string]interface{}); ok {
-				markApplicable(childMap, childPath, supported)
+				markApplicable(childMap, childPath, writes, defaults)
 			}
 		}
 		return
 	}
 	if items, ok := node["items"].(map[string]interface{}); ok {
 		if _, isObject := items["properties"]; isObject {
-			markApplicable(items, path+"[]", supported)
+			markApplicable(items, path+"[]", writes, defaults)
 			return
 		}
 	}
-	applicable := supported && gen1ApplicablePaths[path]
+	applicable := writes(path)
 	node[SchemaKeyApplicable] = applicable
 	// A default is a promise that the field does something, so a field apply never writes shows
 	// none, and an applied field shows only the one the Gen1 reference states (gen1_defaults.go).
 	delete(node, "default")
-	if value, ok := gen1FieldDefaults[path]; ok && applicable {
+	if value, ok := defaults[path]; ok && applicable {
 		node["default"] = value
 	}
+}
+
+// gen1Writes says whether the Gen1 apply writes a path; an unsupported model writes none.
+func gen1Writes(supported bool) func(string) bool {
+	return func(path string) bool { return supported && gen1ApplicablePaths[path] }
 }
