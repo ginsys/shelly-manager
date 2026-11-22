@@ -107,8 +107,21 @@ func TestSecurityMonitoringValidation(t *testing.T) {
 
 	monitorOnlyIsFine := valid()
 	monitorOnlyIsFine.Security.IPBlocking.Enabled = false
-	if err := monitorOnlyIsFine.ValidateSecurityMonitoring(); err != nil {
+	if err = monitorOnlyIsFine.ValidateSecurityMonitoring(); err != nil {
 		t.Errorf("monitoring on, blocking off: %v", err)
+	}
+
+	// The hourly threshold has an upper bound too: both sides of it.
+	atBound := valid()
+	atBound.Security.IPBlocking.SuspiciousPerHourThreshold = MaxSuspiciousPerHourThreshold
+	if err = atBound.ValidateSecurityMonitoring(); err != nil {
+		t.Errorf("hourly threshold at the bound (%d): %v", MaxSuspiciousPerHourThreshold, err)
+	}
+	overBound := valid()
+	overBound.Security.IPBlocking.SuspiciousPerHourThreshold = MaxSuspiciousPerHourThreshold + 1
+	err = overBound.ValidateSecurityMonitoring()
+	if err == nil || !strings.Contains(err.Error(), "security.ip_blocking.suspicious_per_hour_threshold") || !strings.Contains(err.Error(), "1000") {
+		t.Errorf("hourly threshold over the bound: err = %v, want the key and the limit named", err)
 	}
 
 	fields := map[string]func(*Config, int){
