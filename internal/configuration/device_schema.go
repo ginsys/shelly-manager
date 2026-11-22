@@ -187,8 +187,9 @@ func withoutModeOfModelsWithoutIt(sections map[string]interface{}, deviceType st
 
 // gen1HasWiFiRecovery reports whether a Gen1 model has the Wi-Fi recovery reboot flag
 // (wifirecovery_reboot_enabled). The reference applies it to the Shelly 1/1PM, 2, 2.5 and
-// Plug/PlugS, and not to the i3. It is the one place that decides it: the converter, the pre-write
-// refusal and the schema all read it.
+// Plug/PlugS, and not to the i3. It is the one place that decides it: the converter reads the flag
+// only for such a model (so apply refuses it on another one through the round trip), and the schema
+// drops the leaf for the others.
 func gen1HasWiFiRecovery(deviceType string) bool {
 	switch deviceType {
 	case "SHSW-1", "SHSW-PM", "SHSW-25", "SHPLG-S", "SHPLG-1":
