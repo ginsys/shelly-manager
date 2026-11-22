@@ -1711,16 +1711,12 @@ func getDimmingSchema() map[string]interface{} {
 			"warmup_brightness": map[string]interface{}{
 				"type":        "integer",
 				"title":       "Warm-up Brightness",
-				"description": "Warm-up brightness in percent (10-100)",
-				"minimum":     gen1DimmerMinWarmupBrightness,
-				"maximum":     gen1DimmerMaxWarmupBrightness,
+				"description": "Warm-up brightness in percent (10-100 when warm-up is on; apply checks it)",
 			},
 			"warmup_time": map[string]interface{}{
 				"type":        "integer",
 				"title":       "Warm-up Time",
-				"description": "Warm-up time in milliseconds (20-200)",
-				"minimum":     gen1DimmerMinWarmupTime,
-				"maximum":     gen1DimmerMaxWarmupTime,
+				"description": "Warm-up time in milliseconds (20-200 when warm-up is on; apply checks it)",
 			},
 			"night_mode": map[string]interface{}{
 				"type":        "boolean",
