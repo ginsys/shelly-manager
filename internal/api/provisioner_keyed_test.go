@@ -111,6 +111,22 @@ func TestKeyedRegister_NULInAReportedValueIs400(t *testing.T) {
 	assert.EqualValues(t, 0, kdRows(t, db), "a refused value writes no row")
 }
 
+// The handler checks both lengths before it calls the store, so the store's own length error is never what a
+// request meets: a wrong-size key or signature is the handler's 400, and no row is written.
+func TestKeyedRegister_WrongSizeKeyOrSignatureIs400AtTheHandler(t *testing.T) {
+	srv, db := idServer(t)
+	priv := kdKey(0xa8)
+	id := kdID(priv)
+	key := hex.EncodeToString(priv.Public().(ed25519.PublicKey))
+	code, _, resp := kdRegister(t, srv, priv, id, key[:len(key)-2], "")
+	assert.Equal(t, http.StatusBadRequest, code, resp)
+	assert.Contains(t, resp, "public_key must be 64 lowercase hexadecimal characters")
+	code, _, resp = kdRegister(t, srv, priv, id, "", strings.Repeat("ab", 63))
+	assert.Equal(t, http.StatusBadRequest, code, resp)
+	assert.Contains(t, resp, "signature must be 128 lowercase hexadecimal characters")
+	assert.EqualValues(t, 0, kdRows(t, db), "a refused size writes no row")
+}
+
 func TestKeyedRegister_TheWholeEnrolment(t *testing.T) {
 	srv, db := idServer(t)
 	admin := idAdminHdr()

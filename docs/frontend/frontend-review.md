@@ -337,7 +337,7 @@ page imports still counts. The Playwright spec is what proves the links are rend
   (`ui/src/pages/ProvisioningAgentsPage.vue`) shows each agent's enrolment state (`legacy`, `pending`,
   `preapproved`, `approved`, `rejected`) and, for an agent enrolled by key, its fingerprint. A "Waiting for
   approval" section lists the `pending` agents with their fingerprints, to compare with the one in the
-  agent's own log; the name and version there are what the agent sent. Approve (`pending`, `rejected`) and
+  agent's own log; the name there is what the agent sent. Approve (`pending`, `rejected`) and
   Reject (`pending`, `preapproved`, `approved`) call `POST /api/v1/provisioner/agents/{id}/approve` and
   `/reject`, and a form pre-approves a fingerprint with `POST /api/v1/provisioner/enrolments`; the list is
   loaded again after each act. Reject asks first and says it fails the agent's assigned and in-progress
