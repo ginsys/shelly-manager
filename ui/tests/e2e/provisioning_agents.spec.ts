@@ -8,7 +8,7 @@ const now = new Date().toISOString()
 const envelope = (data: unknown) => ({ success: true, data, timestamp: now })
 
 const approved = {
-  id: 'key-3f9a1c2b', name: 'garage-gateway', status: 'online', version: '0.9.2',
+  id: 'keyed-3f9a1c2b', name: 'garage-gateway', status: 'online', version: '0.9.2',
   capabilities: ['wifi', 'restart'], lastSeen: now, enrolmentState: 'approved',
   fingerprint: '3f9a-1c2b-7d8e-4f60-a1b2-c3d4-e5f6-0718',
 }
@@ -17,7 +17,7 @@ const legacy = {
   capabilities: ['wifi'], lastSeen: now, enrolmentState: 'legacy',
 }
 const pending = {
-  id: 'key-9c01d7e2', name: 'workshop-pi', status: 'pending', version: '0.9.2',
+  id: 'keyed-9c01d7e2', name: 'workshop-pi', status: 'pending', version: '0.9.2',
   capabilities: ['wifi'], lastSeen: now, enrolmentState: 'pending',
   fingerprint: '9c01-d7e2-b4a6-5f38-c0d1-e2f3-a4b5-c6d7',
 }

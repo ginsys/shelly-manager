@@ -4,8 +4,10 @@ Status: proposal for ginsys/shelly-manager#638. Slice 1 is built: the tables and
 (merged as ginsys/shelly-manager#724), the handlers that use them, the admin delete route and the
 hourly purge of old rows. Slice 2, the manager half of Option F, is built: the columns and the keyless refusals
 (ginsys/shelly-manager#845, ginsys/shelly-manager#851), the purge by state (ginsys/shelly-manager#854), the admin routes
-(ginsys/shelly-manager#857), the keyed register (ginsys/shelly-manager#862) and the `strict` mode. Slice 4, the UI, is built: the agents page
-shows each agent's enrolment state and fingerprint and approves, rejects and pre-approves. Slice 3 (the agent) is not built. Serge chose the enrolment design on
+(ginsys/shelly-manager#857), the keyed register (ginsys/shelly-manager#862) and the `strict` mode. Slice 3, the agent
+half of Option F (the seed, the key, the fingerprint and the two-step register, in `internal/agentkey` and the
+provisioner agent), is built. Slice 4, the UI, is built: the agents page
+shows each agent's enrolment state and fingerprint and approves, rejects and pre-approves. Serge chose the enrolment design on
 2026-11-21 (14:13 CET, typed "F"): **Option F, fingerprint approval of a seeded agent key**. Options
 A to E stay below as the options that were weighed. Sections below that describe the registry
 "today" describe the code before slice 1.
@@ -32,7 +34,7 @@ This note proposes four slices. Each ships alone, in this order:
 | Slice | What it does | Fixes | Changes who may enrol an agent? |
 |---|---|---|---|
 | 1 | The whole registry moves to the database: agents, hashed tokens, tasks. | 1, 4, and the empty-registry window | No new right. It closes a window (see "The empty-registry window") and opens a smaller one: a request that began before a token was replaced may finish after it, for one request (see "The store", detail 2, and decision 11). Slice 1 took the row lock of decision 11 (`internal/database/provisioner_store.go:43-48`), so that window is closed; the text stays as the alternative that was rejected. |
-| 2 | The manager: enrolment states, the challenge, the approve, reject and pre-approve routes, the `open` and `strict` modes, the purge rules. | 2 and 3, for every agent that has a key; for every agent once `strict` is on | **Yes, in `strict`:** only an operator-approved key gets a token and the agent key alone creates no id. In `open` (the default) the keyless path stays as today (two refusals are new: a keyless id that starts with `key-` in any case, and a new keyless id that is not printable ASCII without a space unless it starts with `provisioner-`; an existing row keeps its id), and a keyed id needs an approval. |
+| 2 | The manager: enrolment states, the challenge, the approve, reject and pre-approve routes, the `open` and `strict` modes, the purge rules. | 2 and 3, for every agent that has a key; for every agent once `strict` is on | **Yes, in `strict`:** only an operator-approved key gets a token and the agent key alone creates no id. In `open` (the default) the keyless path stays as today (two refusals are new: a keyless id that starts with `keyed-` in any case, and a new keyless id that is not printable ASCII without a space unless it starts with `provisioner-`; an existing row keeps its id), and a keyed id needs an approval. |
 | 3 | The agent: a seed, the fingerprint, the signed register and an id taken from the key. | The agent half of 2 and 3 | No new right. An agent with no seed behaves as today. |
 | 4 | The UI: a pending list with approve, reject and pre-approve. | Nothing new | No. |
 
@@ -442,7 +444,7 @@ Read "Option F" for the design. This slice builds the manager half, in `internal
 
 - the enrolment columns and states, and a fixup that backfills every existing row as `legacy`;
 - the register that answers `pending`, `challenge` or a token, and the signature check;
-- the keyless register's own three rules: the `key-` prefix refused in any case, a 409 for a
+- the keyless register's own three rules: the `keyed-` prefix refused in any case, a 409 for a
   row that is not `legacy`, for every actor, before the silence test (see "The register protocol",
   item 6), and the ASCII rule for a new id, run in the store's created branch (see "The agent
   id");
@@ -457,14 +459,14 @@ Read "Option F" for the design. This slice builds the manager half, in `internal
   refused for a silent row and for the admin key, on every provider. A second store-level test: a
   new id with a space or a non-ASCII byte is a 400 and leaves no row, an id that starts with
   `provisioner-` is accepted whatever follows, and an existing row with a non-ASCII id registers
-  as before. A handler-level test: a keyless id of `KEY-<fingerprint>` or `Key-…` is a 400 before
+  as before. A handler-level test: a keyless id of `KEYED-<fingerprint>` or `Keyed-…` is a 400 before
   the store is reached. CI runs no case-folding database (MySQL 8 there compares with the binary
   collation), so the folded lookup itself is not exercised; the prefix test and the state check
   close the takeover and the ASCII rule closes the squat without it, and the note says so here.
 
 Size: about 200 lines of code plus tests (the lead's estimate, not measured). It ships alone. No
 agent sends a key until slice 3, so every agent is keyless and `open` behaves as today, except
-that a keyless id that starts with `key-` in any case is refused, and a new keyless id must be
+that a keyless id that starts with `keyed-` in any case is refused, and a new keyless id must be
 printable ASCII without a space unless it starts with `provisioner-` (see "The agent id").
 
 ### Slice 3: the agent
@@ -661,23 +663,25 @@ out by the operator.
   its log and on stdout, and `shelly-provisioner fingerprint` prints it from the seed alone.
 - The manager derives the fingerprint from the public key. It never trusts one that is sent.
 
-**The agent id.** `key-` plus the 32 hex characters of the fingerprint (36 characters, under the
+**The agent id.** `keyed-` plus the 32 hex characters of the fingerprint (38 characters, under the
 191 limit at `internal/database/provisioner_store.go:31`). The pid-based id cannot stay for a keyed
 agent: `generateAgentID` (`cmd/shelly-provisioner/main.go:421`, used at `:755`) gives a host agent
 a new id at each start, and an agent that must come back as itself needs an id that follows from
 what it holds. The agent sends this id and the manager refuses a register whose id is not the one
 it derives from the key (400). An id that nobody chooses cannot be asked for by someone else. The
-keyless path refuses an id that starts with `key-` **in any case** (`KEY-`, `Key-`, and so on), a
+keyless path refuses an id that starts with `keyed-` **in any case** (`KEYED-`, `Keyed-`, and so on), a
 new restriction on keyless ids added to the validation at
 `internal/api/provisioner_handlers.go:110-117`; the test folds case in Go, on the request, so it
-does not depend on the database. A new seed is a new id. The hostname stays display text.
+does not depend on the database. A new seed is a new id. The hostname stays display text. The prefix is
+`keyed-` and not `key-`, because `key-` and 32 hex characters is the shape of a Mailgun key, and secret
+scanners (GitHub push protection among them) would flag every keyed agent id.
 
 **How an id is compared, per database, and why the design does not depend on it.** SQLite and
 PostgreSQL compare `agent_id` byte for byte. MySQL 8.0.17 and later does too, after the start-up
 step that converts the provisioner tables to `utf8mb4_0900_bin`. MariaDB, MySQL 5.7 and MySQL 8.0.0
 to 8.0.16 have no such collation: the tables keep a case-folding one and the start-up only logs a
-warning (`internal/database/migrations.go:66-82`). There `KEY-<fingerprint>` finds the row of
-`key-<fingerprint>`, and today's register code would then take that row over: the insert is a
+warning (`internal/database/migrations.go:66-82`). There `KEYED-<fingerprint>` finds the row of
+`keyed-<fingerprint>`, and today's register code would then take that row over: the insert is a
 no-op, the row is read by `agent_id`, the silence test (`provisioner_store.go:166`) passes for a
 silent agent and the token is replaced. The fingerprint is no secret, so a holder of the shared key
 could do this to a silent approved agent. Two rules close that takeover whatever the collation
@@ -689,18 +693,18 @@ says, and a third closes a squat that follows from it:
 - **a new keyless id must be printable ASCII with no space: bytes 0x21 to 0x7E** (lead ruling
   RULING-20261121-1539-638f). Today nothing limits it: `RegisterAgent` checks only that the id is
   not empty and not too long (`provisioner_handlers.go:111-116`). The prefix test cannot copy a
-  collation: one that also folds accents or ignores control characters could match `kéy-<fp>` to
-  `key-<fp>`. With only those bytes a folding collation can do nothing but fold case, which the
+  collation: one that also folds accents or ignores control characters could match `kéyed-<fp>` to
+  `keyed-<fp>`. With only those bytes a folding collation can do nothing but fold case, which the
   prefix test already covers. **This rule does not close the takeover; the first two do.** On a
-  folding server `kéy-<fp>` hits the unique index, the insert is a no-op and the locked read finds
-  `key-<fp>`: that is not the created branch, so the ASCII rule never runs, and the state check
-  refuses it. What the rule closes is a **squat**: with no `key-<fp>` row yet, `kéy-<fp>` would
+  folding server `kéyed-<fp>` hits the unique index, the insert is a no-op and the locked read finds
+  `keyed-<fp>`: that is not the created branch, so the ASCII rule never runs, and the state check
+  refuses it. What the rule closes is a **squat**: with no `keyed-<fp>` row yet, `kéyed-<fp>` would
   become a `legacy` row, and the keyed agent's own register would then get a 409 until an admin
   deletes it. The rule runs **in the store**, in the branch that finds the row was
   created by this request (`provisioner_store.go:146-162`: the insert-first step, the locked read,
   and the test that the row holds this request's token hash), and an id outside the set is a 400
   that rolls the insert back. It cannot run in the handler, which cannot tell a new id from an
-  existing row; only the `key-` prefix test stays there. A register that finds a row skips the
+  existing row; only the `keyed-` prefix test stays there. A register that finds a row skips the
   rule, so **an existing row keeps its id**, even a non-ASCII one, and keeps registering as today.
   **One exemption: an id that starts with the exact bytes `provisioner-`** is not tested. That is
   the shape the shipped agent sends (`provisioner-<hostname>-<pid>`, new at each restart, from
@@ -776,7 +780,7 @@ of the wrong length and every caller controls the field.
    None of the three carries a token, a public key or a hash. A token is issued only in the 201
    answer of a good signed register. The errors keep their usual codes:
    400 for a malformed `public_key` or `signature`, for an id that is not the one derived from the
-   key, for a keyless register of an id that starts with `key-` in any case, and for a new keyless
+   key, for a keyless register of an id that starts with `keyed-` in any case, and for a new keyless
    id that is not printable ASCII without a space unless it starts with `provisioner-`; 401 for a failed
    signed register; 403 for a keyless register in `strict`; 409 for a `legacy` row hit by a keyed
    register, for a keyless register that finds a row that is not `legacy` (item 6, the admin key
@@ -837,7 +841,7 @@ that never had a key (it was `preapproved`) goes back to `preapproved`. **Reject
 `pending` row with that fingerprint to `approved`. The **first valid signature** takes
 `preapproved` to `approved`: without it a pre-approved agent could never leave its state. Anything
 else is a 409, every act on a `legacy` row included. The `legacy` state is why an upgrade enrols
-nobody: a keyless caller of today can register `key-<fingerprint of its own seed>`, and that row
+nobody: a keyless caller of today can register `keyed-<fingerprint of its own seed>`, and that row
 is `legacy` and never accepts a key, so the first signed register cannot fill it.
 
 `token_hash` is `not null` and unique (`internal/database/provisioner_models.go:21`). Each
@@ -882,7 +886,7 @@ usual rule above) is `open` or `strict`. Any other value stops the start.
 
 | | `open` (default) | `strict` |
 |---|---|---|
-| Keyless register | As today: the agent key creates an id, the 5-minute rule stays. Three exceptions: an id that starts with `key-` in any case is refused (400); a row that is not `legacy` is never replaced (409, the admin key included); a new id of other bytes than printable ASCII without a space is refused (400) unless it starts with `provisioner-` | Refused (403) |
+| Keyless register | As today: the agent key creates an id, the 5-minute rule stays. Three exceptions: an id that starts with `keyed-` in any case is refused (400); a row that is not `legacy` is never replaced (409, the admin key included); a new id of other bytes than printable ASCII without a space is refused (400) unless it starts with `provisioner-` | Refused (403) |
 | Keyed register | The flow above | The flow above |
 | Token of a `legacy` row | Authorizes as today | Never authorizes: in `strict` only an `approved` row does, and a NULL state counts as `legacy` |
 | Start-up | No new requirement | Refuses to start without an admin key |
@@ -973,7 +977,7 @@ State this plainly, because it moves a security boundary:
 - **F, in `strict`:** an agent id gets a token only after the **admin key holder** approves the
   key that the agent proves it holds. The agent key alone creates no id, frees none and yields no
   token. **In `open` (the default) nothing changes for a keyless agent**, except that a keyless
-  id that starts with `key-` in any case is refused, and so is a new keyless id that is not
+  id that starts with `keyed-` in any case is refused, and so is a new keyless id that is not
   printable ASCII without a space unless it starts with `provisioner-` (a caller that uses either
   today must change its id; an existing row keeps its id): the
   agent key still creates other ids and the 5-minute rule stays on them, so a shared-key holder
@@ -1092,13 +1096,13 @@ agent silent for 30 days with no `pending` task.
   backfill, is safe.
 - `security.agent_enrolment` defaults to `open`, so the manager behaves as today for every
   keyless agent, and an upgrade changes nothing until a slice 3 agent sends a key. There are two
-  exceptions, both refused from slice 2 on: a keyless id that starts with `key-` in any case, and a
+  exceptions, both refused from slice 2 on: a keyless id that starts with `keyed-` in any case, and a
   new keyless id that is not printable ASCII without a space unless it starts with `provisioner-`.
   An agent that uses such an id today must change it (nothing in the shipped agent does,
   `main.go:421`: its id starts with `provisioner-`). An existing row keeps its id and keeps
   registering as before.
 - A rolling update runs old and new pods together. An old pod ignores `public_key` (see "Slice
-  3") and answers a keyed register with a token and a `legacy` row under the `key-` id. A new pod
+  3") and answers a keyed register with a token and a `legacy` row under the `keyed-` id. A new pod
   then answers 409 for that id until an admin deletes the row. And an old pod does not enforce
   `strict`. So set `strict`, and start the first keyed agent, only after the roll has finished.
 - The manager does not need the database to be on a new provider or a new version: the columns
@@ -1108,7 +1112,7 @@ agent silent for 30 days with no `pending` task.
 
 - An agent with no seed is unchanged, and so is an old agent binary. Upgrading the binary
   changes nothing until a seed is set.
-- A keyed agent has a new id, `key-<fingerprint>`, so the row of its old pid-based id stays as a
+- A keyed agent has a new id, `keyed-<fingerprint>`, so the row of its old pid-based id stays as a
   `legacy` row and its `assigned` tasks stay stranded (decision 12) until the 30-day purge or an
   admin delete. Drain the agent's tasks before its seed is set.
 - Order for an operator: (1) upgrade the manager (slice 2), still `open`; (2) per agent, generate

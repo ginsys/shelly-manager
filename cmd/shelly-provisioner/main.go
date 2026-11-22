@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 	"os/signal"
@@ -11,7 +13,9 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
+	"github.com/ginsys/shelly-manager/internal/agentkey"
 	"github.com/ginsys/shelly-manager/internal/config"
 	"github.com/ginsys/shelly-manager/internal/logging"
 	"github.com/ginsys/shelly-manager/internal/provisioning"
@@ -29,7 +33,17 @@ var (
 	configFile          string
 	apiURL              string
 	apiKey              string
+	// agentID is set once in initApp: the id the key derives, or a pid-based one for an agent with no seed.
+	agentID string
+	// agentKey is the agent's signing key, nil when no seed is set.
+	agentKey *agentkey.Key
 )
+
+// pendingRetry is how often an agent whose key waits for the operator asks again, whatever provision_interval says.
+const pendingRetry = 30 * time.Second
+
+// noInit marks a command that runs without loading the config: it prints one value and nothing else.
+const noInit = "noinit"
 
 // Root command
 var rootCmd = &cobra.Command{
@@ -95,6 +109,96 @@ availability, API server connectivity (if configured), and system health.`,
 	},
 }
 
+// Seed command - make a new agent seed
+var seedCmd = &cobra.Command{
+	Use:         "seed",
+	Short:       "Print a new agent seed (a secret: put it in the secret store, never in a log)",
+	Annotations: map[string]string{noInit: "1"},
+	Run: func(cmd *cobra.Command, args []string) {
+		seed, err := agentkey.NewSeed()
+		if err != nil {
+			log.Fatalf("Failed to make a seed: %v", err)
+		}
+		fmt.Println(seed)
+	},
+}
+
+// Fingerprint command - print the fingerprint a seed makes
+var fingerprintCmd = &cobra.Command{
+	Use:         "fingerprint",
+	Short:       "Print the fingerprint of the agent seed, for the operator to compare",
+	Annotations: map[string]string{noInit: "1"},
+	Run: func(cmd *cobra.Command, args []string) {
+		// The seed is found where the agent finds it: the config file, then the variable or its _FILE form. No other
+		// secret is read, so another secret's unreadable file does not stop a command that needs the seed alone.
+		// With no config file anywhere (and none named with --config) the environment alone holds it.
+		fileSeed := ""
+		loaded, err := config.LoadWithName(configFile, "shelly-provisioner")
+		var notFound viper.ConfigFileNotFoundError
+		switch {
+		case err == nil:
+			fileSeed = loaded.Provisioning.AgentSeed
+		case configFile == "" && errors.As(err, &notFound):
+		default:
+			log.Fatal("Failed to load config: ", loadFailure(err))
+		}
+		seed, err := secrets.OverrideIfPresent(fileSeed, "SHELLY_PROVISIONING_AGENT_SEED")
+		if err != nil {
+			log.Fatalf("Failed to read secrets: %v", err)
+		}
+		key, err := keyFromSeed(seed)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if key == nil {
+			log.Fatal("No seed: set provisioning.agent_seed, SHELLY_PROVISIONING_AGENT_SEED or SHELLY_PROVISIONING_AGENT_SEED_FILE (shelly-provisioner seed makes one)")
+		}
+		fmt.Println(key.Readable())
+	},
+}
+
+// loadFailure is a config-load error as text that carries nothing the decoders quote. Both the YAML decoder and the
+// one that fills the settings put the value they refused into the error, and a seed in the config file is such a
+// value, in any shape; even a line number read out of that text can be the seed's own digits. A file that is missing
+// or unreadable is the operator's own path and is printed as it is; for a file that does not parse, nothing of the
+// decoder's text is read or printed.
+func loadFailure(err error) string {
+	var notFound viper.ConfigFileNotFoundError
+	if errors.As(err, &notFound) || errors.Is(err, fs.ErrNotExist) || errors.Is(err, fs.ErrPermission) {
+		return err.Error()
+	}
+	return "the config file is not valid (details withheld, they may quote a secret from it; check it with a YAML linter)"
+}
+
+// keyFromSeed makes the agent's key, or returns nil for no seed. A malformed seed is an error that names the
+// setting and never carries the value.
+func keyFromSeed(seed string) (*agentkey.Key, error) {
+	if seed == "" {
+		return nil, nil
+	}
+	key, err := agentkey.FromSeed(seed)
+	if err != nil {
+		return nil, fmt.Errorf("invalid provisioning.agent_seed (SHELLY_PROVISIONING_AGENT_SEED): %w", err)
+	}
+	return key, nil
+}
+
+// nextPollDelay is how long the agent waits after an attempt: 30 seconds for a key that waits for the operator,
+// the poll interval after anything else (a rejection, an error, a poll).
+func nextPollDelay(err error, pollInterval time.Duration) time.Duration {
+	var notEnrolled *provisioning.NotEnrolledError
+	if errors.As(err, &notEnrolled) && notEnrolled.Status == "pending" {
+		return pendingRetry
+	}
+	return pollInterval
+}
+
+// isNotEnrolled is an answer of the enrolment, which the client already logged: not a failure to warn about.
+func isNotEnrolled(err error) bool {
+	var notEnrolled *provisioning.NotEnrolledError
+	return errors.As(err, &notEnrolled)
+}
+
 // runAgent runs the provisioning agent service
 func runAgent() {
 	if apiURL == "" {
@@ -108,7 +212,7 @@ func runAgent() {
 
 	fmt.Printf("Starting provisioning agent...\n")
 	fmt.Printf("API Server: %s\n", apiURL)
-	fmt.Printf("Agent ID: %s\n", generateAgentID())
+	fmt.Printf("Agent ID: %s\n", agentID)
 
 	// Set up signal handling for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
@@ -132,9 +236,6 @@ func runAgent() {
 		pollInterval = time.Duration(cfg.Provisioning.ProvisionInterval) * time.Second
 	}
 
-	ticker := time.NewTicker(pollInterval)
-	defer ticker.Stop()
-
 	fmt.Printf("Agent polling every %v\n", pollInterval)
 	logger.WithFields(map[string]any{
 		"poll_interval": pollInterval,
@@ -142,13 +243,18 @@ func runAgent() {
 	}).Info("Agent started successfully")
 
 	// Initial registration attempt
-	if err := registerWithAPI(); err != nil {
+	err := registerWithAPI()
+	if err != nil && !isNotEnrolled(err) {
 		logger.WithFields(map[string]any{
 			"error":     err.Error(),
 			"component": "agent",
 		}).Warn("Failed to register with API server")
 		fmt.Printf("Warning: Failed to register with API server: %v\n", err)
 	}
+
+	// One timer, not a ticker: the wait after an attempt depends on its answer (nextPollDelay).
+	timer := time.NewTimer(nextPollDelay(err, pollInterval))
+	defer timer.Stop()
 
 	for {
 		select {
@@ -158,13 +264,15 @@ func runAgent() {
 			}).Info("Agent shutdown complete")
 			fmt.Println("Agent shutdown complete")
 			return
-		case <-ticker.C:
-			if err := pollForTasks(ctx); err != nil {
+		case <-timer.C:
+			err = pollForTasks(ctx)
+			if err != nil && !isNotEnrolled(err) {
 				logger.WithFields(map[string]any{
 					"error":     err.Error(),
 					"component": "agent",
 				}).Warn("Failed to poll for tasks")
 			}
+			timer.Reset(nextPollDelay(err, pollInterval))
 		}
 	}
 }
@@ -375,7 +483,7 @@ func checkStatus() {
 	// Show configuration summary
 	fmt.Printf("\nConfiguration:\n")
 	fmt.Printf("  Config File: %s\n", getConfigFilePath())
-	fmt.Printf("  Agent ID: %s\n", generateAgentID())
+	fmt.Printf("  Agent ID: %s\n", agentID)
 
 	if cfg != nil {
 		fmt.Printf("  Poll Interval: %ds\n", cfg.Provisioning.ProvisionInterval)
@@ -697,12 +805,24 @@ func initApp() {
 	// Load configuration
 	cfg, err = config.LoadWithName(configFile, "shelly-provisioner")
 	if err != nil {
-		log.Fatal("Failed to load config:", err)
+		log.Fatal("Failed to load config: ", loadFailure(err))
 	}
 
 	// Apply secret overrides (env and *_FILE). A *_FILE that cannot be read stops the start.
 	if err = secrets.ApplyToConfig(cfg); err != nil {
 		log.Fatalf("Failed to read secrets: %v", err)
+	}
+
+	// The seed makes the key and the id. With no seed the agent keeps the pid-based id and the shared key alone.
+	if err = cfg.ValidateProvisioningEnrolment(); err != nil {
+		log.Fatal(err)
+	}
+	if agentKey, err = keyFromSeed(cfg.Provisioning.AgentSeed); err != nil {
+		log.Fatal(err)
+	}
+	agentID = generateAgentID()
+	if agentKey != nil {
+		agentID = agentKey.ID()
 	}
 
 	// Initialize logger from config
@@ -752,10 +872,13 @@ func initApp() {
 
 	// Initialize API client if API URL is provided
 	if apiURL != "" {
-		apiClient = provisioning.NewAPIClient(apiURL, apiKey, generateAgentID(), logger)
+		apiClient = provisioning.NewAPIClient(apiURL, apiKey, agentID, logger)
+		if agentKey != nil {
+			apiClient.SetKey(agentKey, cfg.Provisioning.Enrolment == config.EnrolmentStrict)
+		}
 		logger.WithFields(map[string]any{
 			"api_url":   apiURL,
-			"agent_id":  generateAgentID(),
+			"agent_id":  agentID,
 			"component": "app",
 		}).Info("API client initialized")
 		if apiKey == "" {
@@ -767,12 +890,17 @@ func initApp() {
 	}
 
 	logger.WithFields(map[string]any{
-		"agent_id":  generateAgentID(),
+		"agent_id":  agentID,
 		"component": "app",
 	}).Info("Shelly Provisioner initialized")
 
 	fmt.Printf("Shelly Provisioner initialized\n")
-	fmt.Printf("Agent ID: %s\n", generateAgentID())
+	fmt.Printf("Agent ID: %s\n", agentID)
+	if agentKey != nil {
+		// The operator compares this with the one the manager lists before approving the agent.
+		logger.WithFields(map[string]any{"fingerprint": agentKey.Readable(), "component": "app"}).Info("Agent key fingerprint")
+		fmt.Printf("Agent fingerprint: %s\n", agentKey.Readable())
+	}
 	if apiClient != nil {
 		fmt.Printf("API client: Configured for %s\n", apiURL)
 	}
@@ -802,11 +930,17 @@ func init() {
 	rootCmd.AddCommand(scanAPCmd)
 	rootCmd.AddCommand(provisionCmd)
 	rootCmd.AddCommand(statusCmd)
+	rootCmd.AddCommand(seedCmd)
+	rootCmd.AddCommand(fingerprintCmd)
 }
 
 func main() {
-	// Initialize before running commands
-	cobra.OnInitialize(initApp)
+	// Initialize before running commands, except the two that print one value and read no config
+	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+		if cmd.Annotations[noInit] == "" {
+			initApp()
+		}
+	}
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)

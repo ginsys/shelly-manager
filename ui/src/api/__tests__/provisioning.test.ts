@@ -284,8 +284,8 @@ describe('provisioning api', () => {
 
     it('approve and reject post to the agent id, and the id is escaped', async () => {
       ;(api.post as any).mockResolvedValue(ok)
-      await approveAgent('key-0123')
-      expect(api.post).toHaveBeenLastCalledWith('/provisioner/agents/key-0123/approve', {})
+      await approveAgent('keyed-0123')
+      expect(api.post).toHaveBeenLastCalledWith('/provisioner/agents/keyed-0123/approve', {})
       await rejectAgent('provisioner-my agent/1')
       expect(api.post).toHaveBeenLastCalledWith('/provisioner/agents/provisioner-my%20agent%2F1/reject', {})
     })

@@ -2,13 +2,16 @@ package provisioning
 
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"time"
 
+	"github.com/ginsys/shelly-manager/internal/agentkey"
 	"github.com/ginsys/shelly-manager/internal/logging"
 )
 
@@ -23,16 +26,38 @@ type APIClient struct {
 	// agentToken is the identity the manager issued at registration. It is kept in memory only: a restarted agent
 	// registers again and gets a new one. An older manager issues none, and nothing is sent then.
 	agentToken string
+	// key is the agent's signing key, or nil for an agent that registers with the shared key alone. strict is
+	// provisioning.enrolment "strict": a manager that answers a keyed register with a token at once is refused.
+	key    *agentkey.Key
+	strict bool
+	// lastEnrolStatus is the last `pending` or `rejected` answer, so each change is logged once, not every retry.
+	lastEnrolStatus string
 }
 
-// AgentRegistrationRequest represents the agent registration payload
+// AgentRegistrationRequest represents the agent registration payload. PublicKey and Signature are the two steps
+// of an enrolment by key: the first request has the key only, the second adds the signed challenge.
 type AgentRegistrationRequest struct {
 	ID           string            `json:"id"`
 	Hostname     string            `json:"hostname"`
 	Version      string            `json:"version,omitempty"`
 	Capabilities []string          `json:"capabilities,omitempty"`
 	Metadata     map[string]string `json:"metadata,omitempty"`
+	PublicKey    string            `json:"public_key,omitempty"`
+	Signature    string            `json:"signature,omitempty"`
 }
+
+// NotEnrolledError is the manager's answer `pending` or `rejected` to a keyed register: an answer, not a
+// failure. The agent waits for the operator and asks again.
+type NotEnrolledError struct {
+	Status, Fingerprint, Message string
+}
+
+func (e *NotEnrolledError) Error() string {
+	return fmt.Sprintf("agent not enrolled yet (%s): fingerprint %s", e.Status, e.Fingerprint)
+}
+
+// challengePattern is what a challenge is: 32 bytes as lowercase hexadecimal. Anything else is not signed.
+var challengePattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 // HTTPError is a non-2xx answer from the API server. Callers read StatusCode to tell a lost registration (401, 404)
 // from any other failure.
@@ -52,6 +77,9 @@ type AgentRegistrationResponse struct {
 	RegisteredAt time.Time `json:"registered_at"`
 	Status       string    `json:"status"`
 	Message      string    `json:"message"`
+	// Fingerprint and Challenge come with a keyed register's `pending`, `rejected` and `challenge` answers.
+	Fingerprint string `json:"fingerprint,omitempty"`
+	Challenge   string `json:"challenge,omitempty"`
 }
 
 // ProvisioningTask represents a task from the API server
@@ -135,7 +163,14 @@ func NewAPIClient(baseURL, apiKey, agentID string, logger *logging.Logger) *APIC
 	}
 }
 
-// RegisterAgent registers this provisioning agent with the API server
+// SetKey makes the agent register by key. The id the agent was made with must be key.ID().
+func (c *APIClient) SetKey(key *agentkey.Key, strict bool) {
+	c.key, c.strict = key, strict
+}
+
+// RegisterAgent registers this provisioning agent with the API server. A keyed agent does it in two steps: an
+// unsigned request that names its key gets `pending`, `rejected` (a *NotEnrolledError) or `challenge`, and the
+// signed answer to a challenge gets the token. Every call starts again from the unsigned request.
 func (c *APIClient) RegisterAgent(hostname string, capabilities []string, metadata map[string]string) error {
 	req := AgentRegistrationRequest{
 		ID:           c.agentID,
@@ -144,26 +179,92 @@ func (c *APIClient) RegisterAgent(hostname string, capabilities []string, metada
 		Capabilities: capabilities,
 		Metadata:     metadata,
 	}
+	if c.key != nil {
+		req.PublicKey = c.key.PublicKeyHex()
+	}
 
+	response, err := c.postRegister(req)
+	if err != nil {
+		return err
+	}
+	if c.key != nil {
+		switch response.Status {
+		case "pending", "rejected":
+			return c.notEnrolled(response)
+		case "challenge":
+			return c.answerChallenge(req, response)
+		}
+		if c.strict {
+			return errors.New("the manager answered a keyed register with a token and no signed challenge, so it does not enrol by key, and provisioning.enrolment is strict")
+		}
+	}
+	c.accept(response)
+	return nil
+}
+
+func (c *APIClient) postRegister(req AgentRegistrationRequest) (AgentRegistrationResponse, error) {
 	var response AgentRegistrationResponse
 	if err := c.makeRequest("POST", "/api/v1/provisioner/agents/register", req, &response); err != nil {
 		c.logger.WithFields(map[string]any{
 			"agent_id": c.agentID,
-			"hostname": hostname,
+			"hostname": req.Hostname,
 			"error":    err.Error(),
 		}).Error("Failed to register agent with API server")
-		return fmt.Errorf("failed to register agent: %w", err)
+		return response, fmt.Errorf("failed to register agent: %w", err)
 	}
+	return response, nil
+}
 
+// answerChallenge signs the manager's challenge and sends the second step. A challenge that is not 64 lowercase
+// hexadecimal characters is not signed.
+func (c *APIClient) answerChallenge(req AgentRegistrationRequest, challenge AgentRegistrationResponse) error {
+	if !challengePattern.MatchString(challenge.Challenge) {
+		return errors.New("the manager sent a challenge that is not 64 lowercase hexadecimal characters: not signing it")
+	}
+	raw, _ := hex.DecodeString(challenge.Challenge) // the pattern above guarantees valid hexadecimal
+	req.Signature = c.key.Sign(c.agentID, raw)
+	response, err := c.postRegister(req)
+	if err != nil {
+		return err
+	}
+	if response.Status == "pending" || response.Status == "rejected" {
+		return c.notEnrolled(response) // the operator changed the row between the two steps
+	}
+	if response.AgentToken == "" {
+		return fmt.Errorf("the manager accepted the signature but sent no token (status %q)", response.Status)
+	}
+	c.accept(response)
+	return nil
+}
+
+// notEnrolled returns the typed answer and logs each change of it once: the retries repeat it, the log does not.
+func (c *APIClient) notEnrolled(response AgentRegistrationResponse) error {
+	fingerprint := response.Fingerprint
+	if fingerprint == "" {
+		fingerprint = c.key.Readable()
+	}
+	if response.Status != c.lastEnrolStatus {
+		c.lastEnrolStatus = response.Status
+		fields := map[string]any{"agent_id": c.agentID, "fingerprint": fingerprint, "message": response.Message}
+		if response.Status == "rejected" {
+			c.logger.WithFields(fields).Error("The operator rejected this agent: it asks again until the operator approves it. Check the fingerprint in the manager")
+		} else {
+			c.logger.WithFields(fields).Info("Waiting for the operator to approve this agent: compare this fingerprint in the manager, then approve it")
+		}
+	}
+	return &NotEnrolledError{Status: response.Status, Fingerprint: fingerprint, Message: response.Message}
+}
+
+// accept keeps the token of a successful register in memory.
+func (c *APIClient) accept(response AgentRegistrationResponse) {
 	c.registered = true
 	c.agentToken = response.AgentToken
+	c.lastEnrolStatus = ""
 	c.logger.WithFields(map[string]any{
 		"agent_id":      response.AgentID,
 		"status":        response.Status,
 		"registered_at": response.RegisteredAt,
 	}).Info("Agent successfully registered with API server")
-
-	return nil
 }
 
 // EnsureRegistered registers the agent unless it already is. The poll loop calls it before every poll, so a

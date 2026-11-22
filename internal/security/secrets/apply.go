@@ -19,6 +19,7 @@ import (
 // - SHELLY_SECURITY_ADMIN_API_KEY (protects sensitive endpoints and WS)
 // - SHELLY_SECURITY_AGENT_API_KEY (the manager's key for the provisioner agent routes)
 // - SHELLY_API_KEY (used by provisioner agent config)
+// - SHELLY_PROVISIONING_AGENT_SEED (the provisioner agent's signing seed; the manager reads it and uses it nowhere)
 //
 // Note: Viper already supports direct env overrides (SHELLY_*). This function
 // adds the common *_FILE convention and centralizes sensitive-field handling.
@@ -37,6 +38,7 @@ func ApplyToConfig(cfg *config.Config) error {
 		{&cfg.Security.AdminAPIKey, "SHELLY_SECURITY_ADMIN_API_KEY"},
 		{&cfg.Security.AgentAPIKey, "SHELLY_SECURITY_AGENT_API_KEY"},
 		{&cfg.API.Key, "SHELLY_API_KEY"},
+		{&cfg.Provisioning.AgentSeed, "SHELLY_PROVISIONING_AGENT_SEED"},
 	} {
 		v, err := OverrideIfPresent(*s.target, s.key)
 		if err != nil {

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ginsys/shelly-manager/internal/agentkey"
 	"github.com/ginsys/shelly-manager/internal/database"
 )
 
@@ -26,10 +27,10 @@ func TestProvisioningUI_AgentsListCarriesEnrolmentState(t *testing.T) {
 	approved, pending := database.EnrolmentApproved, database.EnrolmentPending
 	waitingFingerprint := strings.Repeat("ef", 16)
 	rows := []database.ProvisionerAgent{
-		{AgentID: "key-" + fingerprint, TokenHash: tokenHash, Hostname: "keyed", Status: "online", LastSeen: now, RegisteredAt: now,
+		{AgentID: agentkey.IDPrefix + fingerprint, TokenHash: tokenHash, Hostname: "keyed", Status: "online", LastSeen: now, RegisteredAt: now,
 			EnrolmentState: &approved, Fingerprint: &fingerprint, PublicKey: &publicKey, Challenge: &challenge},
 		{AgentID: "old-one", TokenHash: database.HashAgentToken("legacy-token"), Hostname: "legacy", Status: "online", LastSeen: now, RegisteredAt: now},
-		{AgentID: "key-" + waitingFingerprint, TokenHash: database.HashAgentToken("pending-token"), Hostname: "waiting", Status: "pending",
+		{AgentID: agentkey.IDPrefix + waitingFingerprint, TokenHash: database.HashAgentToken("pending-token"), Hostname: "waiting", Status: "pending",
 			LastSeen: now, RegisteredAt: now, EnrolmentState: &pending, Fingerprint: &waitingFingerprint},
 	}
 	for i := range rows {
@@ -50,12 +51,12 @@ func TestProvisioningUI_AgentsListCarriesEnrolmentState(t *testing.T) {
 	}
 	require.Len(t, byID, 3)
 
-	keyed := byID["key-"+fingerprint]
+	keyed := byID[agentkey.IDPrefix+fingerprint]
 	assert.Equal(t, "approved", keyed["enrolmentState"])
-	assert.Equal(t, database.FormatFingerprint(fingerprint), keyed["fingerprint"])
+	assert.Equal(t, agentkey.Readable(fingerprint), keyed["fingerprint"])
 	assert.Equal(t, "legacy", byID["old-one"]["enrolmentState"], "a keyless row reads as legacy")
 	assert.NotContains(t, byID["old-one"], "fingerprint", "a keyless row has no fingerprint")
-	assert.Equal(t, "pending", byID["key-"+waitingFingerprint]["enrolmentState"])
+	assert.Equal(t, "pending", byID[agentkey.IDPrefix+waitingFingerprint]["enrolmentState"])
 
 	// The page never gets the key, the challenge or the token hash, under any name.
 	for _, secret := range []string{publicKey, challenge, tokenHash} {
@@ -71,12 +72,12 @@ func TestProvisioningUI_AgentsListCarriesEnrolmentState(t *testing.T) {
 	}
 
 	// A row that Refresh Status replaces keeps its state and fingerprint.
-	code, body = idCall(t, srv, "GET", "/api/v1/provisioning/agents/key-"+fingerprint+"/status", "", idAdminHdr())
+	code, body = idCall(t, srv, "GET", "/api/v1/provisioning/agents/"+agentkey.IDPrefix+fingerprint+"/status", "", idAdminHdr())
 	require.Equal(t, http.StatusOK, code, body)
 	var one struct {
 		Data map[string]any `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal([]byte(body), &one))
 	assert.Equal(t, "approved", one.Data["enrolmentState"])
-	assert.Equal(t, database.FormatFingerprint(fingerprint), one.Data["fingerprint"])
+	assert.Equal(t, agentkey.Readable(fingerprint), one.Data["fingerprint"])
 }

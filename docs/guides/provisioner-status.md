@@ -35,6 +35,48 @@ Discovery (`scan-ap`, and the scan inside the provision flow) uses the same stat
 unavailable, unmanaged, unreadable or missing, the scan fails with the reason above and does not report
 "found 0 networks". A rescan that fails on a usable device is logged as a warning, and the list is still read.
 
+## Enrolling by key
+
+An agent with a seed is identified by its key, not by the shared agent key alone. Without a seed it registers
+as before, with an id made from the host name and process id.
+
+1. Make a seed: `shelly-provisioner seed`. It prints 64 hexadecimal characters and nothing else. The seed is a
+   secret: put it in your secret store.
+2. Give it to the agent in `SHELLY_PROVISIONING_AGENT_SEED`, or in a file named by
+   `SHELLY_PROVISIONING_AGENT_SEED_FILE`. There is no flag, because a flag shows in the process list.
+3. Read the fingerprint: `shelly-provisioner fingerprint` prints it from the seed alone (it finds the seed where the agent does, and
+   needs no manager), as eight groups of four
+   (for example `5647-5aa7-5463-474c-0285-df5d-bf2b-cab7`). The agent prints and logs the same line when it
+   starts. Its id is `keyed-` and the 32 characters of the fingerprint without hyphens.
+4. Approve it in the manager: the agent list shows the fingerprint as `pending`. Compare it with the one from
+   step 3, then approve it (`POST /api/v1/provisioner/agents/{id}/approve`), or pre-approve the fingerprint
+   before the agent starts (`POST /api/v1/provisioner/enrolments`).
+
+A `pending` agent asks again every 30 seconds, whatever `provisioning.provision_interval` says. A `rejected`
+agent logs an error with its fingerprint and asks again at the poll interval, so an operator who changes their
+mind needs no restart. After a restart the same seed signs its way in again with no operator step. A new seed is
+a new agent: approve its fingerprint again.
+
+Agent settings:
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `provisioning.agent_seed` (`SHELLY_PROVISIONING_AGENT_SEED`, `_FILE`) | none | The seed. Set it from the environment, not from the config file. |
+| `provisioning.enrolment` (`SHELLY_PROVISIONING_ENROLMENT`) | `open` | `open`: an agent with no seed registers as before, and a manager that gives a token without a challenge is accepted. `strict`: the agent refuses to start without a seed, and refuses a manager that gives a token without a signed challenge. |
+
+Use `strict` on the agent when the manager is `strict` too (`security.agent_enrolment`). An older manager with no
+enrolment code answers a keyed register with a token at once; in `open` the agent carries on under its new id,
+and in `strict` it refuses.
+
+When the agent or `fingerprint` cannot load a config file that exists, it prints one fixed sentence ("the config
+file is not valid ...") and nothing from the file or the decoder, not even a line number. The decoders quote the
+value they refused, and a seed written in the config file would be on the screen and in the logs. Check the
+syntax with a YAML linter, and compare each setting's type with `configs/shelly-provisioner.yaml` (a linter finds
+a syntax error, never a value of the wrong type). A file that is missing or unreadable is named as it always was.
+
+A manager that holds too many agents waiting for approval answers `429`: approve or reject some, and the agent
+tries again on its next poll.
+
 ## Log level
 
 The shipped `configs/shelly-provisioner.yaml` logs at `info`. Set `logging.level: debug` to see the raw

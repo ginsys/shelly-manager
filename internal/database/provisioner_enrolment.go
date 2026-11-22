@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+
+	"github.com/ginsys/shelly-manager/internal/agentkey"
 )
 
 // ErrEnrolmentState is an admin act that the row's enrolment state does not allow: approving a row that is
@@ -19,11 +21,8 @@ var ErrEnrolmentState = errors.New("the agent's enrolment state does not allow t
 // digit, or hyphens anywhere else.
 var ErrFingerprintInvalid = errors.New("a fingerprint is 32 hexadecimal characters")
 
-// keyedAgentIDPrefix starts the id of an agent enrolled by key: the prefix and the fingerprint.
-const keyedAgentIDPrefix = "key-"
-
 // NormalizeFingerprint returns the stored form of a fingerprint, 32 lowercase hexadecimal characters, from
-// that form or from the readable one (FormatFingerprint), and whether the input was one of the two.
+// that form or from the readable one (agentkey.Readable), and whether the input was one of the two.
 func NormalizeFingerprint(in string) (string, bool) {
 	if len(in) == 39 {
 		parts := strings.Split(in, "-")
@@ -51,19 +50,6 @@ func NormalizeFingerprint(in string) (string, bool) {
 		}
 	}
 	return string(out), true
-}
-
-// FormatFingerprint is the readable form of a stored fingerprint: eight groups of four characters joined by
-// a hyphen, which the agent logs and the operator compares. A value of another length is returned as it is.
-func FormatFingerprint(fp string) string {
-	if len(fp) != 32 {
-		return fp
-	}
-	groups := make([]string, 0, 8)
-	for i := 0; i < 32; i += 4 {
-		groups = append(groups, fp[i:i+4])
-	}
-	return strings.Join(groups, "-")
 }
 
 // lockAgentRow locks the row of the agent, or returns ErrAgentNotFound.
@@ -165,7 +151,7 @@ func (s *ProvisionerStore) PreapproveFingerprint(ctx context.Context, fingerprin
 	}
 	state := EnrolmentPreapproved
 	row := ProvisionerAgent{
-		AgentID: keyedAgentIDPrefix + fp, TokenHash: hash, Status: state, LastSeen: now, RegisteredAt: now,
+		AgentID: agentkey.AgentID(fp), TokenHash: hash, Status: state, LastSeen: now, RegisteredAt: now,
 		EnrolmentState: &state, Fingerprint: &fp,
 	}
 	var out ProvisionerAgent

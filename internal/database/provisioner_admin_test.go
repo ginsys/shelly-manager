@@ -8,18 +8,19 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ginsys/shelly-manager/internal/agentkey"
 )
 
 // testFingerprint is a stored-form fingerprint (32 lowercase hex characters) made of one repeated byte. It is
-// built at run time: the id of a keyed row is the "key-" prefix and 32 characters, and a literal of that
-// shape in the source is what a secret scanner reads as an API key.
+// built at run time.
 func testFingerprint(b byte) string { return strings.Repeat(fmt.Sprintf("%02x", b), 16) }
 
 // insertKeyedRow writes the row of an agent enrolled by key as a signed register will: the id derived from
 // the fingerprint, the state, a token and, unless the row never had a key, a public key.
 func insertKeyedRow(t *testing.T, manager *Manager, fp, state, token string, hasKey bool, at time.Time) string {
 	t.Helper()
-	id := keyedAgentIDPrefix + fp
+	id := agentkey.IDPrefix + fp
 	row := agentRow(id, token, at)
 	row.EnrolmentState, row.Fingerprint = strPtr(state), strPtr(fp)
 	if hasKey {
@@ -96,7 +97,7 @@ func checkProvisionerAdmin(t *testing.T, manager *Manager) {
 			assert.ErrorIs(t, err, ErrEnrolmentState, "approve, %s", name)
 			_, err = s.RejectAgent(ctx, id, now)
 			assert.ErrorIs(t, err, ErrEnrolmentState, "reject, %s", name)
-			_, _, err = s.PreapproveFingerprint(ctx, strings.TrimPrefix(id, keyedAgentIDPrefix), now)
+			_, _, err = s.PreapproveFingerprint(ctx, strings.TrimPrefix(id, agentkey.IDPrefix), now)
 			assert.ErrorIs(t, err, ErrEnrolmentState, "pre-approve, %s", name)
 			after := row(id)
 			assert.Equal(t, was.EnrolmentState, after.EnrolmentState, name)
@@ -165,7 +166,7 @@ func checkProvisionerAdmin(t *testing.T, manager *Manager) {
 		got, created, err := s.PreapproveFingerprint(ctx, fp, now)
 		require.NoError(t, err)
 		assert.True(t, created)
-		assert.Equal(t, keyedAgentIDPrefix+fp, got.AgentID)
+		assert.Equal(t, agentkey.IDPrefix+fp, got.AgentID)
 		assert.Equal(t, EnrolmentPreapproved, got.State())
 		assert.Equal(t, EnrolmentPreapproved, got.Status)
 		require.NotNil(t, got.Fingerprint)
@@ -174,16 +175,16 @@ func checkProvisionerAdmin(t *testing.T, manager *Manager) {
 		assert.Nil(t, got.ApprovedAt)
 		assert.NotEmpty(t, got.TokenHash, "the token column is not null")
 
-		for name, form := range map[string]string{"stored": fp, "upper case": strings.ToUpper(fp), "readable": FormatFingerprint(fp)} {
+		for name, form := range map[string]string{"stored": fp, "upper case": strings.ToUpper(fp), "readable": agentkey.Readable(fp)} {
 			_, created, err = s.PreapproveFingerprint(ctx, form, now)
 			assert.ErrorIs(t, err, ErrEnrolmentState, name)
 			assert.False(t, created, name)
 		}
 
-		other, _, err := s.PreapproveFingerprint(ctx, FormatFingerprint(strings.ToUpper(testFingerprint(0x31))), now)
+		other, _, err := s.PreapproveFingerprint(ctx, agentkey.Readable(strings.ToUpper(testFingerprint(0x31))), now)
 		require.NoError(t, err, "a second preapproved row inserts: each holds its own never-issued token")
 		assert.NotEqual(t, got.TokenHash, other.TokenHash)
-		assert.Equal(t, keyedAgentIDPrefix+testFingerprint(0x31), other.AgentID, "the readable upper-case form stores as lower-case hex")
+		assert.Equal(t, agentkey.IDPrefix+testFingerprint(0x31), other.AgentID, "the readable upper-case form stores as lower-case hex")
 	})
 
 	t.Run("pre-approve approves the pending row that has the fingerprint", func(t *testing.T) {
@@ -203,14 +204,14 @@ func checkProvisionerAdmin(t *testing.T, manager *Manager) {
 		rejected := insertKeyedRow(t, manager, testFingerprint(0x34), EnrolmentRejected, "tok-adm-pre-rejected", true, now.Add(-time.Hour))
 		for name, id := range map[string]string{"approved": approved, "rejected": rejected} {
 			was := row(id)
-			_, _, err := s.PreapproveFingerprint(ctx, strings.TrimPrefix(id, keyedAgentIDPrefix), now)
+			_, _, err := s.PreapproveFingerprint(ctx, strings.TrimPrefix(id, agentkey.IDPrefix), now)
 			assert.ErrorIs(t, err, ErrEnrolmentState, name)
 			assert.Equal(t, was.State(), row(id).State(), name)
 		}
 		// A legacy row can sit on the id (an agent registered it before the prefix was refused): it has no
 		// fingerprint, so it is not the pending row of this key.
 		fp := testFingerprint(0x35)
-		register(t, s, adminActor, keyedAgentIDPrefix+fp, "tok-adm-pre-legacy", now.Add(-time.Hour))
+		register(t, s, adminActor, agentkey.IDPrefix+fp, "tok-adm-pre-legacy", now.Add(-time.Hour))
 		_, _, err := s.PreapproveFingerprint(ctx, fp, now)
 		assert.ErrorIs(t, err, ErrEnrolmentState, "legacy")
 
@@ -316,13 +317,13 @@ func TestProvisionerAdmin_SQLite(t *testing.T) {
 
 func TestNormalizeFingerprint(t *testing.T) {
 	fp := testFingerprint(0xab)
-	for name, in := range map[string]string{"stored": fp, "readable": FormatFingerprint(fp), "upper case": strings.ToUpper(fp)} {
+	for name, in := range map[string]string{"stored": fp, "readable": agentkey.Readable(fp), "upper case": strings.ToUpper(fp)} {
 		got, ok := NormalizeFingerprint(in)
 		assert.True(t, ok, name)
 		assert.Equal(t, fp, got, name)
 	}
-	assert.Equal(t, "abab-abab-abab-abab-abab-abab-abab-abab", FormatFingerprint(fp))
-	for _, bad := range []string{"", fp[:31], fp + "a", strings.Replace(fp, "a", "g", 1), "abab-abab-abab-abab-abab-abab-abab-abab-", "aba-babab-abab-abab-abab-abab-abab-abab", strings.ReplaceAll(FormatFingerprint(fp), "-", "_")} {
+	assert.Equal(t, "abab-abab-abab-abab-abab-abab-abab-abab", agentkey.Readable(fp))
+	for _, bad := range []string{"", fp[:31], fp + "a", strings.Replace(fp, "a", "g", 1), "abab-abab-abab-abab-abab-abab-abab-abab-", "aba-babab-abab-abab-abab-abab-abab-abab", strings.ReplaceAll(agentkey.Readable(fp), "-", "_")} {
 		_, ok := NormalizeFingerprint(bad)
 		assert.False(t, ok, "%q", bad)
 	}

@@ -10,6 +10,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ginsys/shelly-manager/internal/agentkey"
 )
 
 // keyedSeed makes the key of a test agent from one repeated byte, so no seed or key appears in the source.
@@ -17,15 +19,17 @@ func keyedSeed(b byte) ed25519.PrivateKey { return ed25519.NewKeyFromSeed(bytes.
 
 func keyedPub(priv ed25519.PrivateKey) ed25519.PublicKey { return priv.Public().(ed25519.PublicKey) }
 
-func keyedID(priv ed25519.PrivateKey) string { return KeyedAgentID(KeyFingerprint(keyedPub(priv))) }
+func keyedID(priv ed25519.PrivateKey) string {
+	return agentkey.AgentID(agentkey.Fingerprint(keyedPub(priv)))
+}
 
-// keyedSign answers a challenge as an agent does: a signature over RegisterMessage for its id and the decoded
+// keyedSign answers a challenge as an agent does: a signature over agentkey.RegisterMessage for its id and the decoded
 // challenge bytes.
 func keyedSign(t *testing.T, priv ed25519.PrivateKey, id, challengeHex string) []byte {
 	t.Helper()
 	raw, err := hex.DecodeString(challengeHex)
 	require.NoError(t, err)
-	return ed25519.Sign(priv, RegisterMessage(id, raw))
+	return ed25519.Sign(priv, agentkey.RegisterMessage(id, raw))
 }
 
 // keyedReg is one register by key: unsigned when sig is nil. The token it would issue is "issued-"+tag.
@@ -79,7 +83,7 @@ func checkProvisionerKeyed(t *testing.T, manager *Manager) {
 		assert.Equal(t, EnrolmentPending, got.State())
 		assert.Equal(t, EnrolmentPending, got.Status, "a pending row does not read online")
 		require.NotNil(t, got.Fingerprint)
-		assert.Equal(t, KeyFingerprint(keyedPub(priv)), *got.Fingerprint, "the manager derives the fingerprint")
+		assert.Equal(t, agentkey.Fingerprint(keyedPub(priv)), *got.Fingerprint, "the manager derives the fingerprint")
 		require.NotNil(t, got.PublicKey)
 		assert.Equal(t, hex.EncodeToString(keyedPub(priv)), *got.PublicKey)
 		assert.Equal(t, "host-a", got.Hostname)
@@ -123,7 +127,7 @@ func checkProvisionerKeyed(t *testing.T, manager *Manager) {
 		assert.ErrorIs(t, err, ErrAgentNotFound, "a refused register leaves no row")
 		_, err = s.RegisterKeyed(ctx, keyedReg(first, nil, "d1b", limit), now)
 		assert.NoError(t, err, "a key that waits already is not new")
-		_, _, err = s.PreapproveFingerprint(ctx, KeyFingerprint(keyedPub(third)), now)
+		_, _, err = s.PreapproveFingerprint(ctx, agentkey.Fingerprint(keyedPub(third)), now)
 		require.NoError(t, err, "the operator's pre-approval bypasses the cap")
 		_, err = s.RegisterKeyed(ctx, keyedReg(third, nil, "d3", limit), now)
 		assert.NoError(t, err, "a preapproved key is not a new one")
@@ -152,7 +156,7 @@ func checkProvisionerKeyed(t *testing.T, manager *Manager) {
 	t.Run("a legacy row at the id, and a state this code does not know, are a 409", func(t *testing.T) {
 		legacyKey, unknownKey := keyedSeed(0x78), keyedSeed(0x79)
 		register(t, s, adminActor, keyedID(legacyKey), "tok-keyed-legacy", now.Add(-time.Hour))
-		insertKeyedRow(t, manager, KeyFingerprint(keyedPub(unknownKey)), "something-else", "tok-keyed-unknown", true, now.Add(-time.Hour))
+		insertKeyedRow(t, manager, agentkey.Fingerprint(keyedPub(unknownKey)), "something-else", "tok-keyed-unknown", true, now.Add(-time.Hour))
 		for name, priv := range map[string]ed25519.PrivateKey{"legacy": legacyKey, "unknown": unknownKey} {
 			for _, sig := range [][]byte{nil, bytes.Repeat([]byte{3}, 64)} {
 				_, err := s.RegisterKeyed(ctx, keyedReg(priv, sig, "f", 1000), now)
@@ -185,13 +189,13 @@ func checkProvisionerKeyed(t *testing.T, manager *Manager) {
 
 		// Every column but the two challenge ones is as it was, for a preapproved row as for an approved one.
 		pre := keyedSeed(0x9a)
-		preFP := KeyFingerprint(keyedPub(pre))
+		preFP := agentkey.Fingerprint(keyedPub(pre))
 		_, _, err = s.PreapproveFingerprint(ctx, preFP, now.Add(-time.Hour))
 		require.NoError(t, err)
-		preWas := row(KeyedAgentID(preFP))
+		preWas := row(agentkey.AgentID(preFP))
 		_, err = s.RegisterKeyed(ctx, keyedReg(pre, nil, "g3", 1000), now)
 		require.NoError(t, err)
-		preGot := row(KeyedAgentID(preFP))
+		preGot := row(agentkey.AgentID(preFP))
 		require.NotNil(t, preGot.Challenge)
 		preGot.Challenge, preGot.ChallengeExpiresAt = nil, nil
 		assert.Equal(t, preWas, preGot, "an unsigned register of a preapproved row writes only the challenge")
@@ -239,7 +243,7 @@ func checkProvisionerKeyed(t *testing.T, manager *Manager) {
 		for name, sig := range map[string][]byte{
 			"another key signed it":    keyedSign(t, stranger, id, ch),
 			"for another agent id":     keyedSign(t, priv, "someone-else", ch),
-			"the hex text, not bytes":  ed25519.Sign(priv, RegisterMessage(id, []byte(ch))),
+			"the hex text, not bytes":  ed25519.Sign(priv, agentkey.RegisterMessage(id, []byte(ch))),
 			"a bare challenge":         ed25519.Sign(priv, raw),
 			"a different challenge":    keyedSign(t, priv, id, hex.EncodeToString(bytes.Repeat([]byte{9}, 32))),
 			"a flipped signature byte": append(append([]byte{}, keyedSign(t, priv, id, ch)[:63]...), keyedSign(t, priv, id, ch)[63]^1),
@@ -274,8 +278,8 @@ func checkProvisionerKeyed(t *testing.T, manager *Manager) {
 
 	t.Run("a preapproved row becomes approved by its first good signature and stores the key then", func(t *testing.T) {
 		priv := keyedSeed(0x7f)
-		fp := KeyFingerprint(keyedPub(priv))
-		id := KeyedAgentID(fp)
+		fp := agentkey.Fingerprint(keyedPub(priv))
+		id := agentkey.AgentID(fp)
 		pre, _, err := s.PreapproveFingerprint(ctx, fp, now)
 		require.NoError(t, err)
 		require.Nil(t, pre.PublicKey)
@@ -312,7 +316,7 @@ func checkProvisionerKeyed(t *testing.T, manager *Manager) {
 		id := keyedID(priv)
 		// The row has the id derived from priv, but holds another key's fingerprint (or none): no register
 		// makes that, so a signature must not turn it into an approved row.
-		for name, fp := range map[string]any{"another fingerprint": KeyFingerprint(keyedPub(other)), "no fingerprint": nil} {
+		for name, fp := range map[string]any{"another fingerprint": agentkey.Fingerprint(keyedPub(other)), "no fingerprint": nil} {
 			require.NoError(t, manager.GetDB().Where("agent_id = ?", id).Delete(&ProvisionerAgent{}).Error)
 			state := EnrolmentPreapproved
 			ch := hex.EncodeToString(bytes.Repeat([]byte{0x5c}, 32))
@@ -389,20 +393,20 @@ func TestProvisionerKeyed_SQLite(t *testing.T) {
 
 func TestKeyFingerprint(t *testing.T) {
 	pub := keyedPub(keyedSeed(0x91))
-	fp := KeyFingerprint(pub)
+	fp := agentkey.Fingerprint(pub)
 	assert.Len(t, fp, 32)
-	assert.Equal(t, fp, KeyFingerprint(pub), "the same key has one fingerprint")
-	assert.NotEqual(t, fp, KeyFingerprint(keyedPub(keyedSeed(0x92))))
-	assert.Equal(t, keyedAgentIDPrefix+fp, KeyedAgentID(fp))
-	got, ok := NormalizeFingerprint(FormatFingerprint(fp))
+	assert.Equal(t, fp, agentkey.Fingerprint(pub), "the same key has one fingerprint")
+	assert.NotEqual(t, fp, agentkey.Fingerprint(keyedPub(keyedSeed(0x92))))
+	assert.Equal(t, agentkey.IDPrefix+fp, agentkey.AgentID(fp))
+	got, ok := NormalizeFingerprint(agentkey.Readable(fp))
 	assert.True(t, ok)
 	assert.Equal(t, fp, got, "the readable form round-trips")
 }
 
 func TestRegisterMessage(t *testing.T) {
 	ch := bytes.Repeat([]byte{0xab}, 32)
-	msg := RegisterMessage("agent-x", ch)
+	msg := agentkey.RegisterMessage("agent-x", ch)
 	want := append([]byte("shelly-manager provisioner register v1\x00agent-x\x00"), ch...)
 	assert.Equal(t, want, msg)
-	assert.NotEqual(t, RegisterMessage("agent-y", ch), msg, "the id is part of what is signed")
+	assert.NotEqual(t, agentkey.RegisterMessage("agent-y", ch), msg, "the id is part of what is signed")
 }

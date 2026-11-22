@@ -10,7 +10,7 @@ import (
 	"github.com/ginsys/shelly-manager/internal/config"
 )
 
-// secretVariables are the six variables ApplyToConfig reads, each with the config field it fills.
+// secretVariables are the seven variables ApplyToConfig reads, each with the config field it fills.
 var secretVariables = []struct {
 	name string
 	get  func(*config.Config) *string
@@ -21,6 +21,7 @@ var secretVariables = []struct {
 	{"SHELLY_SECURITY_ADMIN_API_KEY", func(c *config.Config) *string { return &c.Security.AdminAPIKey }},
 	{"SHELLY_SECURITY_AGENT_API_KEY", func(c *config.Config) *string { return &c.Security.AgentAPIKey }},
 	{"SHELLY_API_KEY", func(c *config.Config) *string { return &c.API.Key }},
+	{"SHELLY_PROVISIONING_AGENT_SEED", func(c *config.Config) *string { return &c.Provisioning.AgentSeed }},
 }
 
 // A _FILE variable that is set to a path the process cannot read is an error naming the variable and

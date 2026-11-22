@@ -13,6 +13,8 @@ provisioning:
   auto_provision: false     # automatically provision discovered devices
   max_concurrent: 1         # maximum concurrent provisioning operations
   timeout: 300             # provisioning timeout in seconds
+  enrolment: open           # open (an agent with no seed registers as before) or strict (refuse to start without a seed); see docs/guides/provisioner-status.md
+  # agent_seed: the agent's signing seed. A secret: set SHELLY_PROVISIONING_AGENT_SEED (or its _FILE form) instead of writing it here.
 
 # API client configuration (for agent mode)
 api:

@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ginsys/shelly-manager/internal/agentkey"
 	"github.com/ginsys/shelly-manager/internal/database"
 )
 
@@ -21,7 +22,7 @@ import (
 func kdKey(b byte) ed25519.PrivateKey { return ed25519.NewKeyFromSeed(bytes.Repeat([]byte{b}, 32)) }
 
 func kdID(priv ed25519.PrivateKey) string {
-	return database.KeyedAgentID(database.KeyFingerprint(priv.Public().(ed25519.PublicKey)))
+	return agentkey.AgentID(agentkey.Fingerprint(priv.Public().(ed25519.PublicKey)))
 }
 
 // kdRegister sends a register by key. sig is empty for the unsigned request; id is the agent's own derived id
@@ -49,7 +50,7 @@ func kdSign(t *testing.T, priv ed25519.PrivateKey, id, challengeHex string) stri
 	t.Helper()
 	raw, err := hex.DecodeString(challengeHex)
 	require.NoError(t, err)
-	return hex.EncodeToString(ed25519.Sign(priv, database.RegisterMessage(id, raw)))
+	return hex.EncodeToString(ed25519.Sign(priv, agentkey.RegisterMessage(id, raw)))
 }
 
 func kdRows(t *testing.T, db *database.Manager) int64 {
@@ -76,7 +77,7 @@ func TestKeyedRegister_FormatIsCheckedBeforeAnyRow(t *testing.T) {
 		"an id the key does not derive": {
 			kdID(kdKey(0xa2)), good, "",
 		},
-		"an id that is the fingerprint with another prefix": {"KEY-" + id[4:], good, ""},
+		"an id that is the fingerprint with another prefix": {"KEYED-" + id[len(agentkey.IDPrefix):], good, ""},
 	} {
 		code, _, body := kdRegister(t, srv, priv, c.id, c.key, c.sig)
 		assert.Equal(t, http.StatusBadRequest, code, "%s: %s", name, body)
@@ -122,7 +123,7 @@ func TestKeyedRegister_TheWholeEnrolment(t *testing.T) {
 	assert.Equal(t, "pending", data["status"])
 	assert.Equal(t, id, data["agent_id"])
 	fp, _ := data["fingerprint"].(string)
-	assert.Equal(t, database.FormatFingerprint(database.KeyFingerprint(priv.Public().(ed25519.PublicKey))), fp, "the readable fingerprint")
+	assert.Equal(t, agentkey.Readable(agentkey.Fingerprint(priv.Public().(ed25519.PublicKey))), fp, "the readable fingerprint")
 	assert.NotContains(t, body, "agent_token")
 	assert.NotContains(t, body, "public_key")
 	assert.NotContains(t, body, "token_hash")
@@ -199,7 +200,7 @@ func TestKeyedRegister_PreapprovedKeySignsItsWayIn(t *testing.T) {
 	srv, _ := idServer(t)
 	priv := kdKey(0xa4)
 	id := kdID(priv)
-	fp := database.KeyFingerprint(priv.Public().(ed25519.PublicKey))
+	fp := agentkey.Fingerprint(priv.Public().(ed25519.PublicKey))
 	code, _, body := admCall(t, srv, "POST", "/api/v1/provisioner/enrolments", `{"fingerprint":"`+fp+`"}`, idAdminHdr())
 	require.Equal(t, http.StatusCreated, code, body)
 
@@ -251,11 +252,11 @@ func TestKeyedRegister_PendingCapIsA429(t *testing.T) {
 	assert.Equal(t, http.StatusOK, code, "a key that waits already refreshes at the cap: %s", body)
 
 	code, _, body = admCall(t, srv, "POST", "/api/v1/provisioner/enrolments",
-		`{"fingerprint":"`+database.KeyFingerprint(extra.Public().(ed25519.PublicKey))+`"}`, idAdminHdr())
+		`{"fingerprint":"`+agentkey.Fingerprint(extra.Public().(ed25519.PublicKey))+`"}`, idAdminHdr())
 	assert.Equal(t, http.StatusCreated, code, "the operator's pre-approval bypasses the cap: %s", body)
 }
 
-// The keyless path is untouched: no public key, and a key- id is still refused there.
+// The keyless path is untouched: no public key, and a keyed- id is still refused there.
 func TestKeyedRegister_TheKeylessPathStaysAsItWas(t *testing.T) {
 	srv, _ := idServer(t)
 	code, token, body := idRegister(t, srv, "plain-agent", idAgentHdr(""))
@@ -263,7 +264,7 @@ func TestKeyedRegister_TheKeylessPathStaysAsItWas(t *testing.T) {
 	assert.NotEmpty(t, token)
 	priv := kdKey(0xa6)
 	code, _, body = idRegister2(t, srv, kdID(priv))
-	assert.Equal(t, http.StatusBadRequest, code, "a keyless register of a key- id: %s", body)
+	assert.Equal(t, http.StatusBadRequest, code, "a keyless register of a keyed- id: %s", body)
 }
 
 // idRegister2 is a keyless register that returns the raw answer.
