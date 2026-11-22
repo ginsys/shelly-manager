@@ -164,6 +164,8 @@ func TestApplyDimmerWarmup_SwitchedOffWritesOnlyEnabled(t *testing.T) {
 	assert.True(t, result.ConfigApplied, "verify: %+v", result.VerifyResult)
 	require.Len(t, dev.warmPosts, 1)
 	assert.Equal(t, map[string]interface{}{"enabled": false}, dev.warmPosts[0])
+	assert.Equal(t, 1, result.ApplyResult.SettingsCount, "only the enabled flag was sent")
+	assert.Equal(t, 1, result.ApplyResult.AppliedCount)
 }
 
 func TestApplyDimmerWarmup_EnabledWithBrightnessZeroIsRefusedBeforeAnyWrite(t *testing.T) {

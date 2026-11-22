@@ -64,6 +64,7 @@ func (a *ConfigApplier) applyDimmerEndpoints(ctx context.Context, client ShellyC
 	night, _ := apiConfig["night_mode"].(map[string]interface{})
 	warm, _ := apiConfig["warm_up"].(map[string]interface{})
 	if enabled, ok := warm["enabled"].(bool); ok && !enabled {
+		result.SettingsCount -= len(warm) - 1 // the keys dropped were counted before any section ran
 		warm = map[string]interface{}{"enabled": false}
 	}
 	if len(night) == 0 && len(warm) == 0 {
