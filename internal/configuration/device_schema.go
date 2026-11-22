@@ -125,12 +125,15 @@ func getInputModes(schema map[string]interface{}, deviceType string) map[string]
 // lightSchemaOf narrows the light schema of a supported model to its own keys and words. A template
 // with no model keeps every key.
 func lightSchemaOf(schema map[string]interface{}, deviceType string, supported bool) map[string]interface{} {
-	if !supported {
-		return schema
-	}
 	lights, _ := schemaProperties(schema)["lights"].(map[string]interface{})
 	items := schemaProperties(lights["items"])
 	if items == nil {
+		return schema
+	}
+	if !supported {
+		if button, ok := items["btn_type"].(map[string]interface{}); ok {
+			button["enum"] = append(append([]string{}, gen1LightButtonTypes...), "momentary")
+		}
 		return schema
 	}
 	if deviceType != "SHRGBW2" {

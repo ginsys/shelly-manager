@@ -40,8 +40,8 @@ func checkLightModeBeforeWrite(live json.RawMessage, apiConfig map[string]interf
 		return nil
 	}
 	mode, known := effectiveLightMode(apiConfig, live)
-	if !known {
-		return &refusedBeforeWriteError{fmt.Errorf("%w: %s: the device's mode is neither desired nor reported, so the channel endpoint is unknown and nothing was written", ErrUnsupportedSettings, gen1ModePath)}
+	if !known || (mode != "color" && mode != "white") {
+		return &refusedBeforeWriteError{fmt.Errorf("%w: %s: the device's mode is neither desired nor reported as color or white, so the channel endpoint is unknown and nothing was written", ErrUnsupportedSettings, gen1ModePath)}
 	}
 	var paths []string
 	switch mode {

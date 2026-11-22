@@ -268,3 +268,31 @@ func TestApplyDesiredConfig_Gen1RGBW2RefusesADimmingSection(t *testing.T) {
 	assert.Contains(t, sections, "light")
 	assert.NotContains(t, sections, "relay")
 }
+
+// A reported mode that is neither color nor white (empty, or a word a later firmware adds) leaves the
+// endpoint unknown: nothing is written, not even to /settings/color/<n>.
+func TestApplyDesiredConfig_Gen1RGBW2RefusesAnUnrecognizedReportedMode(t *testing.T) {
+	for _, mode := range []string{"", "bulb"} {
+		t.Run("mode "+mode, func(t *testing.T) {
+			svc, repo := newServiceWithDesiredName(t, "rgbw2")
+			setDesired(t, repo, rgbw2Lights(SingleLightConfig{DefaultState: StringPtr("on")}, SingleLightConfig{DefaultState: StringPtr("on")}))
+			dev := newRGBW2Device("color")
+			dev.settings["mode"] = mode
+
+			_, err := svc.ApplyDesiredConfig(context.Background(), 1, dev, "SHRGBW2")
+
+			require.ErrorIs(t, err, ErrUnsupportedSettings)
+			assert.Contains(t, err.Error(), "mode")
+			dev.nothingWritten(t)
+		})
+	}
+}
+
+// A global or group template can reach any model, so its button-type enum holds every model's words.
+func TestTemplateSchemaButtonTypesHoldEveryModelsWords(t *testing.T) {
+	props := GetTemplateConfigurationSchema()["properties"].(map[string]interface{})["light"].(map[string]interface{})["properties"].(map[string]interface{})["lights"].(map[string]interface{})["items"].(map[string]interface{})["properties"].(map[string]interface{})
+	enum := props["btn_type"].(map[string]interface{})["enum"].([]string)
+
+	assert.Subset(t, enum, gen1LightButtonTypes)
+	assert.Subset(t, enum, gen1RGBW2ButtonTypes)
+}
