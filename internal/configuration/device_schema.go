@@ -50,8 +50,8 @@ func GetDeviceConfigurationSchema(deviceType string) map[string]interface{} {
 	if !supported || converter.hasPowerMetering(deviceType) {
 		sections["power_metering"] = getPowerMeteringSchema()
 	}
-	if !supported || converter.hasLED(deviceType) {
-		sections["led"] = getLEDSchema()
+	if !supported || converter.hasStatusLED(deviceType) {
+		sections["led"] = withoutPowerLEDOfModelsWithoutIt(getLEDSchema(), converter.hasLED(deviceType), supported)
 	}
 	if !supported || hasInputSettings(deviceType) {
 		sections["input"] = getInputModes(getInputSchema(), deviceType)
@@ -64,7 +64,10 @@ func GetDeviceConfigurationSchema(deviceType string) map[string]interface{} {
 	}
 	if !supported || converter.hasLight(deviceType) {
 		sections["light"] = getLightSchema()
-		// The Dimmer's device-level group is stored and not applied yet, so no field of it is applicable.
+	}
+	if !supported || converter.hasDimmerSettings(deviceType) {
+		// Five fields of the Dimmer's device-level group are applied (gen1ApplicablePaths); the rest of
+		// it is stored and not written, so those fields are not applicable.
 		sections["dimming"] = getDimmingSchema()
 	}
 
@@ -207,6 +210,16 @@ func withoutRecoveryOfModelsWithoutIt(sections map[string]interface{}, deviceTyp
 		return
 	}
 	delete(schemaProperties(sections["wifi"]), "recovery_reboot")
+}
+
+// withoutPowerLEDOfModelsWithoutIt drops the led.power_indication leaf (led_power_disable) from the
+// schema of a supported model that has only the status LED, so it is never marked applicable where
+// apply refuses it. An unsupported model keeps it, and so does a template with no model.
+func withoutPowerLEDOfModelsWithoutIt(led map[string]interface{}, hasPowerLED, supported bool) map[string]interface{} {
+	if supported && !hasPowerLED {
+		delete(schemaProperties(led), "power_indication")
+	}
+	return led
 }
 
 // schemaProperties returns the properties map of a schema node, or nil.

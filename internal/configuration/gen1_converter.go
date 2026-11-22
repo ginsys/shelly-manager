@@ -79,6 +79,9 @@ func (c *Gen1Converter) FromAPIConfig(apiJSON json.RawMessage, deviceType string
 	// Convert Light settings (a Dimmer's channels)
 	c.convertLight(gen1, config, deviceType)
 
+	// Convert Dimming settings (a Dimmer's device-level parameters)
+	c.convertDimming(gen1, config, deviceType)
+
 	// Convert PowerMetering settings (device-specific)
 	if err := c.convertPowerMetering(gen1, config, deviceType); err != nil {
 		return nil, fmt.Errorf("failed to convert PowerMetering: %w", err)
@@ -134,6 +137,9 @@ func (c *Gen1Converter) ToAPIConfig(config *DeviceConfiguration, deviceType stri
 
 	// Convert Light settings
 	c.exportLight(config, gen1, deviceType)
+
+	// Convert Dimming settings
+	c.exportDimming(config, gen1, deviceType)
 
 	// Convert PowerMetering settings
 	c.exportPowerMetering(config, gen1, deviceType)
@@ -538,6 +544,33 @@ func (c *Gen1Converter) convertLight(gen1 map[string]interface{}, config *Device
 	config.Light = light
 }
 
+// convertDimming reads a Dimmer's device-level settings, the flat parameters of GET /settings.
+// pulse_mode 1 and 2 are the stored edge; any other value (the page's example shows 0 before the mode
+// is detected) is no value at all.
+func (c *Gen1Converter) convertDimming(gen1 map[string]interface{}, config *DeviceConfiguration, deviceType string) {
+	if !c.hasDimmerSettings(deviceType) {
+		return
+	}
+	dimming := &DimmingConfig{}
+	found := false
+	for key, dst := range map[string]**int{
+		"min_brightness": &dimming.MinBrightness, "fade_rate": &dimming.FadeRate,
+		"transition": &dimming.TransitionTime, "zcross_debounce": &dimming.ZcrossDebounce,
+	} {
+		if n, ok := shelly.WholeNumber(gen1[key]); ok {
+			*dst = IntPtr(n)
+			found = true
+		}
+	}
+	if mode, ok := shelly.WholeNumber(gen1["pulse_mode"]); ok && (mode == gen1DimmerLeadingEdge || mode == gen1DimmerTrailingEdge) {
+		dimming.LeadingEdge = BoolPtr(mode == gen1DimmerLeadingEdge)
+		found = true
+	}
+	if found {
+		config.Dimming = dimming
+	}
+}
+
 func (c *Gen1Converter) convertPowerMetering(gen1 map[string]interface{}, config *DeviceConfiguration, deviceType string) error {
 	if !c.hasPowerMetering(deviceType) {
 		return nil
@@ -587,14 +620,14 @@ func commonChannelMaxPower(gen1 map[string]interface{}) (int, bool) {
 }
 
 func (c *Gen1Converter) convertLED(gen1 map[string]interface{}, config *DeviceConfiguration, deviceType string) error {
-	if !c.hasLED(deviceType) {
+	if !c.hasStatusLED(deviceType) {
 		return nil
 	}
 
 	led := &LEDConfig{}
 	hasData := false
 
-	if ledPowerDisable, ok := gen1["led_power_disable"].(bool); ok {
+	if ledPowerDisable, ok := gen1["led_power_disable"].(bool); ok && c.hasLED(deviceType) {
 		led.PowerIndication = BoolPtr(!ledPowerDisable)
 		hasData = true
 	}
@@ -905,6 +938,29 @@ func (c *Gen1Converter) exportLight(config *DeviceConfiguration, gen1 map[string
 	gen1["lights"] = lights
 }
 
+// exportDimming writes a Dimmer's device-level settings as flat parameters. A field with no Gen1
+// parameter is left out, so the round trip reports it.
+func (c *Gen1Converter) exportDimming(config *DeviceConfiguration, gen1 map[string]interface{}, deviceType string) {
+	if !c.hasDimmerSettings(deviceType) || config.Dimming == nil {
+		return
+	}
+	d := config.Dimming
+	for key, value := range map[string]*int{
+		"min_brightness": d.MinBrightness, "fade_rate": d.FadeRate,
+		"transition": d.TransitionTime, "zcross_debounce": d.ZcrossDebounce,
+	} {
+		if value != nil {
+			gen1[key] = *value
+		}
+	}
+	if d.LeadingEdge != nil {
+		gen1["pulse_mode"] = gen1DimmerTrailingEdge
+		if *d.LeadingEdge {
+			gen1["pulse_mode"] = gen1DimmerLeadingEdge
+		}
+	}
+}
+
 func (c *Gen1Converter) exportPowerMetering(config *DeviceConfiguration, gen1 map[string]interface{}, deviceType string) {
 	if !c.hasPowerMetering(deviceType) {
 		return
@@ -920,8 +976,7 @@ func (c *Gen1Converter) exportPowerMetering(config *DeviceConfiguration, gen1 ma
 }
 
 func (c *Gen1Converter) exportLED(config *DeviceConfiguration, gen1 map[string]interface{}, deviceType string) {
-	// Only plugs have LED ring
-	if !c.hasLED(deviceType) {
+	if !c.hasStatusLED(deviceType) {
 		return
 	}
 
@@ -929,8 +984,9 @@ func (c *Gen1Converter) exportLED(config *DeviceConfiguration, gen1 map[string]i
 		return
 	}
 
-	// Inverted: enabled=false means disable=true
-	if config.LED.PowerIndication != nil {
+	// Inverted: enabled=false means disable=true. A Dimmer has no power LED, so a desired one is not
+	// exported and the round trip refuses it.
+	if config.LED.PowerIndication != nil && c.hasLED(deviceType) {
 		gen1["led_power_disable"] = !*config.LED.PowerIndication
 	}
 	if config.LED.NetworkIndication != nil {
@@ -1221,10 +1277,22 @@ func (c *Gen1Converter) exportRoller(config *DeviceConfiguration, gen1 map[strin
 
 // Device capability helper methods
 
+// hasLED reports whether a model has the power LED, the key led_power_disable. Only plugs do.
 func (c *Gen1Converter) hasLED(deviceType string) bool {
-	// Only plugs have LED ring indicator
 	switch deviceType {
 	case "SHPLG-S", "SHPLG-1":
+		return true
+	default:
+		return false
+	}
+}
+
+// hasStatusLED reports whether a model has the status LED, the key led_status_disable: the plugs
+// and the Dimmers (the Dimmer page lists it, and lists no led_power_disable). It is a list of its
+// own, never derived from hasLight, because another light model may not have it.
+func (c *Gen1Converter) hasStatusLED(deviceType string) bool {
+	switch deviceType {
+	case "SHPLG-S", "SHPLG-1", "SHDM-1", "SHDM-2":
 		return true
 	default:
 		return false
@@ -1251,6 +1319,18 @@ func (c *Gen1Converter) hasRelay(deviceType string) bool {
 		return false
 	default:
 		return true
+	}
+}
+
+// hasDimmerSettings reports whether a model has a Dimmer's device-level settings (the dimming
+// section: flat parameters of POST /settings). It is a list of its own, never derived from hasLight,
+// because another light model (the RGBW2) has light channels and none of these parameters.
+func (c *Gen1Converter) hasDimmerSettings(deviceType string) bool {
+	switch deviceType {
+	case "SHDM-1", "SHDM-2":
+		return true
+	default:
+		return false
 	}
 }
 

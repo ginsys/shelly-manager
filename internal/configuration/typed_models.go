@@ -1584,9 +1584,9 @@ func getDimmingSchema() map[string]interface{} {
 			"min_brightness": map[string]interface{}{
 				"type":        "integer",
 				"title":       "Minimum Brightness",
-				"description": "Minimum brightness level (0-100)",
+				"description": "Minimum brightness level (0-50)",
 				"minimum":     0,
-				"maximum":     100,
+				"maximum":     gen1DimmerMaxMinBrightness,
 			},
 			"max_brightness": map[string]interface{}{
 				"type":        "integer",
@@ -1611,19 +1611,28 @@ func getDimmingSchema() map[string]interface{} {
 			"fade_rate": map[string]interface{}{
 				"type":        "integer",
 				"title":       "Fade Rate",
-				"description": "Dimming transition rate",
-				"minimum":     0,
+				"description": "Brightness change speed when a button is pressed (1-5)",
+				"minimum":     gen1DimmerMinFadeRate,
+				"maximum":     gen1DimmerMaxFadeRate,
 			},
 			"transition": map[string]interface{}{
 				"type":        "integer",
 				"title":       "Transition Time",
-				"description": "Transition time in milliseconds",
+				"description": "Transition time for on and off in milliseconds (0-5000)",
 				"minimum":     0,
+				"maximum":     gen1DimmerMaxTransition,
+			},
+			"zcross_debounce": map[string]interface{}{
+				"type":        "integer",
+				"title":       "Zero-Cross Debounce",
+				"description": "Zero-cross (anti-flickering) debounce in microseconds (50-150)",
+				"minimum":     gen1DimmerMinZcrossDebounce,
+				"maximum":     gen1DimmerMaxZcrossDebounce,
 			},
 			"leading_edge": map[string]interface{}{
 				"type":        "boolean",
 				"title":       "Leading Edge",
-				"description": "Use leading edge dimming (for resistive loads)",
+				"description": "Leading edge dimming (true) or trailing edge (false); written only where the device reports pulse_mode_detected",
 			},
 			"warmup_time": map[string]interface{}{
 				"type":        "integer",

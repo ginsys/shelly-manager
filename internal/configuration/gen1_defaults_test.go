@@ -26,6 +26,8 @@ var gen1NoDocumentedDefault = []string{
 	"light.lights[].default_state", "light.lights[].auto_on", "light.lights[].auto_off",
 	"light.lights[].schedule", "light.lights[].schedule_rules", "light.lights[].btn_type",
 	"light.lights[].btn_debounce", "light.lights[].swap_inputs",
+	"dimming.min_brightness", "dimming.fade_rate", "dimming.transition", "dimming.zcross_debounce",
+	"dimming.leading_edge",
 	"roller.max_open_time", "roller.max_close_time", "roller.motor_direction",
 	"roller.swap_inputs", "roller.input_mode",
 	"roller.button_reverse", "roller.button_type", "roller.default_state", "roller.ends_delay",
