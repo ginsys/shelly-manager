@@ -42,7 +42,7 @@ Flow A. Discover devices and read their configuration
 Flow B. Apply the desired configuration (Gen1 and Gen2)
 
 1. A change to a template or to the overrides of a device calls `RecomputeDesiredConfig`. It merges the template layers, then the device overrides (`merge.go`), and stores the result with `SetDeviceDesiredConfigPending`. The device is now "pending".
-2. `ConfigurationService.ApplyDesiredConfig` picks the Gen1 path or the Gen2 path (`applyPathFor`). It takes a lock for the device. In one server, the lock is in memory. With PostgreSQL or MySQL it is also a database lock, so it holds across server copies. SQLite has one server and no database lock.
+2. `ConfigurationService.ApplyDesiredConfig` picks the Gen1 path or the Gen2 path (`applyPathFor`). It takes a lock for the device. In one server, the lock is in memory. With PostgreSQL or MySQL and more than one connection in the pool, it is also a database lock, so it holds across server copies. SQLite has one server and no database lock.
 3. It refuses a setting that it cannot write, before it sends anything. It compares the MAC address of the device with the stored one. A different MAC means a different device, so nothing is written.
 4. It writes the settings one section at a time, then reads the device back and compares.
 5. It marks the device "applied" only when the read-back matches and the desired configuration did not change meanwhile.
@@ -74,13 +74,13 @@ Export runs the other way: `SyncEngine.Export` loads the data, masks secrets unl
 | Apply writes nothing to a device whose MAC differs. | `TestApplyDesiredConfig_RefusesADeviceWithAnotherMAC` |
 | One apply per device at a time in a server. Across server copies, only with PostgreSQL or MySQL and a pool of more than one connection. | `TestApplyLockProviders_*` in `internal/configuration/apply_lock_test.go` |
 | A device is "applied" only when the read-back matches and nothing changed meanwhile. | `TestApplyDesiredConfig_CloudStaysPendingWhenDeviceKeepsTheOldFlag` (read-back), `TestApplyDesiredConfig_ConfigChangedDuringApplyStaysPending` (change meanwhile) |
-| With an admin key set, a request with no key is refused on every route except the open reads the test lists with a reason. The agent key opens only the agent register and health routes. One key serves every guard. | `TestRouteTable_EveryRouteRequiresTheAdminKey` and `TestRouteTable_AgentKeyOpensOnlyTheAgentRoutes` in `internal/api/route_guards_test.go`, `TestAdminKey_OneKeyForEveryGuard` |
+| With an admin key set, a request with no key is refused on every route except the open reads the test lists with a reason and CORS preflight (`OPTIONS`) requests, which the test skips. The agent key opens only the agent register and health routes. One key serves every guard. | `TestRouteTable_EveryRouteRequiresTheAdminKey` and `TestRouteTable_AgentKeyOpensOnlyTheAgentRoutes` in `internal/api/route_guards_test.go`, `TestAdminKey_OneKeyForEveryGuard` |
 | Every call the UI makes has a registered route. | `TestRouteContract` in `internal/api/route_contract_test.go` |
 | WebSocket message types are the same in Go and TypeScript. | `TestMessageTypeManifestParity` in `internal/metrics/contract_test.go` |
 | A backup cannot be restored through the generic import routes. | `TestImportOfABackupIsRefusedOnBothRoutes` |
 | A package's tests make no call that leaves the host through the default HTTP transport, the default resolver or `netguard`. Raw dials, multicast and database drivers are not covered. | `dialguard.Main` in the package's `TestMain`, and `TestEveryTestPackageCallsMain` in `internal/testutil/dialguard/dialguard_test.go`, which fails when a test package does not call it |
 | TypeScript type errors never go up. | CI job "Frontend Unit Tests": `npm run typecheck:baseline` against `ui/typecheck-baseline.json` |
-| `.go-version` is the one Go version. `go.mod` and the Dockerfiles match it at major and minor, `mise.toml` matches it exactly, and the workflows do not hardcode a version. A different `toolchain` line in `go.mod` only warns. | CI job "Validate Go Version": `scripts/check-go-version.sh` |
+| `.go-version` is the one Go version. `go.mod`, `mise.toml` and the Dockerfiles match it at major and minor, and the workflows do not hardcode a version. A different `toolchain` line in `go.mod` only warns. | CI job "Validate Go Version": `scripts/check-go-version.sh` |
 | Which package may import which. | By review only. The `depguard` linter is off in `.golangci.yml`. |
 
 ## 5. Boundaries
