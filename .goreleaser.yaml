@@ -1,0 +1,45 @@
+# GoReleaser builds and archives the provisioner for the shared Go build workflow of ginsys/.github
+# (build-go.yml, docs/release.md there), in snapshot mode: it publishes nothing, and the Release
+# workflow publishes the archives. RELEASE_VERSION is the release tag with its leading v.
+version: 2
+
+project_name: shelly-provisioner
+dist: dist
+
+# The shared publish workflow makes the release, the notes and SHA256SUMS.
+release:
+  disable: true
+changelog:
+  disable: true
+checksum:
+  disable: true
+
+snapshot:
+  version_template: "{{ .Env.RELEASE_VERSION }}"
+
+builds:
+  - id: shelly-provisioner
+    main: ./cmd/shelly-provisioner
+    binary: shelly-provisioner
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X github.com/ginsys/shelly-manager/internal/version.Version={{ .Env.RELEASE_VERSION }}
+
+# One archive for each platform, named as the release assets always were
+# (shelly-provisioner_<tag>_linux_<arch>.tar.gz, with the LICENSE beside the binary).
+archives:
+  - id: shelly-provisioner
+    formats:
+      - tar.gz
+    name_template: "shelly-provisioner_{{ .Env.RELEASE_VERSION }}_{{ .Os }}_{{ .Arch }}"
+    wrap_in_directory: true
+    files:
+      - LICENSE

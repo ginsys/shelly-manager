@@ -24,7 +24,6 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:
-  workflow_call:
 
 jobs:
   # Fast validation job - runs first, fails fast on Go version issues

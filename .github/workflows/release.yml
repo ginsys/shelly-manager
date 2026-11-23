@@ -1,11 +1,13 @@
 name: Release
 
-# The release runs in the shared workflow of ginsys/.github (docs/release.md there): pick an action and
-# whether it is a dry run (the default). A real run cuts a release pull request, waits for its merge and
-# makes the tag. How to run it: docs/development/RELEASING.md.
+# The release runs in the shared workflows of ginsys/.github (docs/release.md there): pick an action and
+# whether it is a dry run (the default). A real run cuts a release pull request, waits for its merge,
+# makes the tag, then builds the provisioner archives and the images and publishes the GitHub
+# pre-release, all in this one run. How to run it: docs/development/RELEASING.md.
 #
 # This file has one trigger, a dispatch, because it can make a real release. The dry run that proves a
-# change to the release before it merges is release-dry-run.yml.
+# change to the release before it merges is release-dry-run.yml. The tag that the release makes starts
+# no other workflow, so everything after the tag is a job of this run.
 on:
   workflow_dispatch:
     inputs:
@@ -40,3 +42,49 @@ jobs:
     with:
       action: ${{ inputs.action }}
       dry_run: ${{ inputs.dry_run }}
+
+  # The three jobs below run only for an action that makes a tag: the others leave `tag` empty.
+  build:
+    needs: release
+    if: ${{ needs.release.outputs.tag != '' }}
+    permissions:
+      contents: read
+    uses: ginsys/.github/.github/workflows/build-go.yml@31fe25d73f696b3b13d7a728f4d5dd4518d58a86 # 2026-11-23
+    with:
+      tag: ${{ needs.release.outputs.tag }}
+      sha: ${{ needs.release.outputs.sha }}
+      go-version-file: .go-version
+
+  check-binary:
+    needs: [release, build]
+    if: ${{ needs.release.outputs.tag != '' }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/check-provisioner-binary.yml
+    with:
+      tag: ${{ needs.release.outputs.tag }}
+
+  # docker-build.yml pushes the images and has no dry-run mode, so a dry run skips it. It builds the
+  # dispatched commit, the one before the two release commits: the tree is the same apart from
+  # CHANGELOG.md and VERSION, and the release run refuses a main that moved.
+  images:
+    needs: release
+    if: ${{ needs.release.outputs.tag != '' && !inputs.dry_run }}
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/docker-build.yml
+    with:
+      version: ${{ needs.release.outputs.tag }}
+
+  publish:
+    needs: [release, build, check-binary, images]
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.check-binary.result == 'success' && (needs.images.result == 'success' || needs.images.result == 'skipped') }}
+    permissions:
+      contents: write
+    uses: ginsys/.github/.github/workflows/publish-github.yml@31fe25d73f696b3b13d7a728f4d5dd4518d58a86 # 2026-11-23
+    with:
+      tag: ${{ needs.release.outputs.tag }}
+      sha: ${{ needs.release.outputs.sha }}
+      dry_run: ${{ inputs.dry_run }}
+      notes-footer: 'Back up the database before you upgrade. To roll back, restore that backup and pin the previous tag.'
