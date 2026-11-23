@@ -34,7 +34,7 @@ jobs:
     name: Check relevant file changes
     runs-on: ubuntu-latest
     outputs:
-      build_needed: ${{ inputs.version != '' && 'true' || steps.filter.outputs.docker_relevant }}
+      build_needed: ${{ steps.last_build.outputs.sha == '' && 'true' || steps.filter.outputs.docker_relevant }}
     steps:
       - name: Checkout repository at triggering ref
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -43,13 +43,25 @@ jobs:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
 
+      - name: Find the commit of the last image build
+        id: last_build
+        # The change set is everything since the images were last built, not the last commit: a push of
+        # several commits is one Test run on its tip, and a docs tip hides an earlier code commit. No
+        # answer is no base, and then the run builds. A release version skips this and always builds:
+        # a tag has no change set to compare.
+        if: ${{ inputs.version == '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "sha=$(bash scripts/ci/last-built-commit.sh shelly-provisioner)" >> "$GITHUB_OUTPUT"
+
       - name: Detect changes relevant to Docker images
         id: filter
-        # A release version always builds: a tag has no change set to compare.
-        if: ${{ inputs.version == '' }}
+        if: ${{ inputs.version == '' && steps.last_build.outputs.sha != '' }}
         uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          base: ${{ steps.last_build.outputs.sha }}
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
           # What an image is built from, then one exclusion; any other path never matches. The filter is
           # one flat list: a nested `paths:` / `paths-ignore:` mapping is read by the action as change types
           # and matches no file, which kept every build job skipped.
@@ -67,10 +79,13 @@ jobs:
 
       - name: Summarize change detection
         if: ${{ inputs.version == '' }}
+        env:
+          BASE: ${{ steps.last_build.outputs.sha }}
+          RELEVANT: ${{ steps.last_build.outputs.sha == '' && 'true' || steps.filter.outputs.docker_relevant }}
         run: |
-          if [ "${{ steps.filter.outputs.docker_relevant }}" = "true" ]; then
+          if [ "$RELEVANT" = "true" ]; then
             echo "## Docker build eligibility ✅" >> $GITHUB_STEP_SUMMARY
-            echo "Relevant changes detected. Proceeding to build when tests passed." >> $GITHUB_STEP_SUMMARY
+            echo "Relevant changes since ${BASE:-no earlier image build (building)}. Proceeding to build when tests passed." >> $GITHUB_STEP_SUMMARY
           else
             echo "## Docker build skipped ⛔" >> $GITHUB_STEP_SUMMARY
             echo "No relevant changes (or only tests/docs)." >> $GITHUB_STEP_SUMMARY

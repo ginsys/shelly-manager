@@ -23,10 +23,16 @@ func runGuard(t *testing.T, dir string, args ...string) (stdout, stderr string, 
 // runGuardEnv is runGuard with extra environment entries (KEY=value).
 func runGuardEnv(t *testing.T, dir string, env []string, args ...string) (stdout, stderr string, code int) {
 	t.Helper()
+	return runScript(t, "../../scripts/release/publish-guard.sh", dir, env, args...)
+}
+
+// runScript runs a repository script (a path relative to this package) with bash.
+func runScript(t *testing.T, path, dir string, env []string, args ...string) (stdout, stderr string, code int) {
+	t.Helper()
 	if _, err := exec.LookPath("bash"); err != nil {
 		t.Skip("bash is not installed")
 	}
-	script, err := filepath.Abs("../../scripts/release/publish-guard.sh")
+	script, err := filepath.Abs(path)
 	if err != nil {
 		t.Fatal(err)
 	}
