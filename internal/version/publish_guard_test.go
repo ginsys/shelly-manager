@@ -17,6 +17,12 @@ const upgradeParagraph = "Back up the database before you upgrade. " +
 // runGuard runs scripts/release/publish-guard.sh in dir ("" for the package directory).
 func runGuard(t *testing.T, dir string, args ...string) (stdout, stderr string, code int) {
 	t.Helper()
+	return runGuardEnv(t, dir, nil, args...)
+}
+
+// runGuardEnv is runGuard with extra environment entries (KEY=value).
+func runGuardEnv(t *testing.T, dir string, env []string, args ...string) (stdout, stderr string, code int) {
+	t.Helper()
 	if _, err := exec.LookPath("bash"); err != nil {
 		t.Skip("bash is not installed")
 	}
@@ -26,6 +32,7 @@ func runGuard(t *testing.T, dir string, args ...string) (stdout, stderr string, 
 	}
 	cmd := exec.Command("bash", append([]string{script}, args...)...)
 	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), env...)
 	var out, errOut bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errOut
 	runErr := cmd.Run()
@@ -162,5 +169,37 @@ func TestPublishGuardOnMain(t *testing.T) {
 	}
 	if _, stderr, code := runGuard(t, repo, "on-main", tip, "no-such-ref"); code != 1 {
 		t.Errorf("an unknown ref: exit %d, stderr %q, want 1", code, stderr)
+	}
+}
+
+// A tag with a release is refused, and so is an answer that is neither 200 nor 404: a failed read is no proof.
+func TestPublishGuardNoRelease(t *testing.T) {
+	bin := t.TempDir()
+	argsFile := filepath.Join(bin, "args")
+	fake := "#!/bin/sh\necho \"$*\" > '" + argsFile + "'\n" +
+		"[ -n \"$FAKE_STATUS\" ] && echo \"HTTP/2.0 $FAKE_STATUS Fake\"\nexit 1\n"
+	if err := os.WriteFile(filepath.Join(bin, "gh"), []byte(fake), 0o700); err != nil { //nolint:gosec // a fake executable
+		t.Fatal(err)
+	}
+	run := func(status string) (string, int) {
+		env := []string{"PATH=" + bin + string(os.PathListSeparator) + os.Getenv("PATH"),
+			"FAKE_STATUS=" + status, "GITHUB_REPOSITORY=o/r"}
+		_, stderr, code := runGuardEnv(t, "", env, "no-release", "v1.2.3")
+		return stderr, code
+	}
+
+	if stderr, code := run("404"); code != 0 {
+		t.Errorf("404: exit %d, want 0 (%s)", code, stderr)
+	}
+	got, err := os.ReadFile(argsFile)
+	if err != nil || !strings.Contains(string(got), "repos/o/r/releases/tags/v1.2.3") {
+		t.Errorf("gh was called with %q (%v), want the releases/tags path of o/r and v1.2.3", got, err)
+	}
+	for status, want := range map[string]string{
+		"200": "already has a release", "500": "cannot tell", "403": "cannot tell", "": "cannot tell",
+	} {
+		if stderr, code := run(status); code != 1 || !strings.Contains(stderr, want) {
+			t.Errorf("status %q: exit %d, stderr %q, want exit 1 saying %q", status, code, stderr, want)
+		}
 	}
 }

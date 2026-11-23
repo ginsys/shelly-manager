@@ -3,6 +3,7 @@
 # exits 0, or 1 with the reason on stderr.
 #   form <tag>                    the tag is vX.Y.Z or vX.Y.Z-alpha|beta|rc.N
 #   on-main <sha> [<ref>]         the commit is reachable from <ref> (default origin/main)
+#   no-release <tag>              the tag has no GitHub release yet (needs gh, GH_TOKEN, GITHUB_REPOSITORY)
 #   notes <tag> [<CHANGELOG.md>]  the tag's changelog section, then the fixed upgrade paragraph
 set -euo pipefail
 
@@ -21,6 +22,16 @@ on-main)
   sha=${2-}
   ref=${3:-origin/main}
   git merge-base --is-ancestor "$sha" "$ref" 2>/dev/null || fail "commit '$sha' is not on $ref"
+  ;;
+no-release)
+  tag=${2-}
+  out=$(gh api -i "repos/${GITHUB_REPOSITORY:?}/releases/tags/$tag" 2>&1 || true)
+  status=$(sed -n '1s/^HTTP[^ ]* \([0-9]*\).*/\1/p' <<<"$out")
+  case "$status" in
+  404) ;;
+  200) fail "$tag already has a release" ;;
+  *) fail "cannot tell whether $tag has a release (answer: '${status:-none}')" ;;
+  esac
   ;;
 notes)
   tag=${2-}
@@ -45,7 +56,7 @@ notes)
     "Back up the database before you upgrade. To roll back, restore that backup and pin the previous tag."
   ;;
 *)
-  echo "usage: publish-guard.sh form <tag> | on-main <sha> [<ref>] | notes <tag> [<CHANGELOG.md>]" >&2
+  echo "usage: publish-guard.sh form <tag> | on-main <sha> [<ref>] | no-release <tag> | notes <tag> [<CHANGELOG.md>]" >&2
   exit 2
   ;;
 esac
