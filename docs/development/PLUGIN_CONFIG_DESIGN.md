@@ -126,7 +126,7 @@ operator can still export through the API with the config in each request. What 
 do: save the OPNsense host, key and secret, so each OPNsense export carries them again; and learn that
 a credential is wrong before an export fails at
 `failed to connect to OPNSense` (`opnsense.go:235`). No scheduled export exists to need a stored config
-(the repo's project notes record the export scheduling as removed, `.claude/CLAUDE.md:121`). Cost: none.
+(the `Removed` section of `CHANGELOG.md` records the removal of the export scheduling). Cost: none.
 Authorization and OpenAPI: unchanged.
 
 **Option B: a stored singleton per plugin.** One row per plugin name holding the complete config.

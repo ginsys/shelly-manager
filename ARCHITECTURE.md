@@ -70,14 +70,14 @@ Export runs the other way: `SyncEngine.Export` loads the data, masks secrets unl
 
 | Rule | Enforced by |
 |---|---|
-| Apply refuses a setting it cannot write, before it touches the device. | `TestApplyDesiredConfig_RefusesUnsupportedSettingsBeforeWriting`, `TestDeviceSchemaApplicableMatchesApply` |
-| Apply writes nothing to a device whose MAC differs. | `TestApplyDesiredConfig_RefusesADeviceWithAnotherMAC` |
+| Apply refuses a setting it cannot write, before it touches the device. | `TestApplyDesiredConfig_RefusesUnsupportedSettingsBeforeWriting` in `internal/configuration/apply_service_test.go`, `TestDeviceSchemaApplicableMatchesApply` in `internal/configuration/device_schema_test.go` |
+| Apply writes nothing to a device whose MAC differs. | `TestApplyDesiredConfig_RefusesADeviceWithAnotherMAC` in `internal/configuration/apply_identity_test.go` |
 | One apply per device at a time in a server. Across server copies, only with PostgreSQL or MySQL and a pool of more than one connection. | `TestApplyLockProviders_*` in `internal/configuration/apply_lock_test.go` |
-| A device is "applied" only when the read-back matches and nothing changed meanwhile. | `TestApplyDesiredConfig_CloudStaysPendingWhenDeviceKeepsTheOldFlag` (read-back), `TestApplyDesiredConfig_ConfigChangedDuringApplyStaysPending` (change meanwhile) |
-| With an admin key set, a request with no key is refused on every `/api/v1` route except the open reads the test lists with a reason and CORS preflight (`OPTIONS`) requests, which the test skips. The agent key opens only the agent register and health routes. One key serves every guard. | `TestRouteTable_EveryRouteRequiresTheAdminKey` and `TestRouteTable_AgentKeyOpensOnlyTheAgentRoutes` in `internal/api/route_guards_test.go`, `TestAdminKey_OneKeyForEveryGuard` |
+| A device is "applied" only when the read-back matches and nothing changed meanwhile. | `TestApplyDesiredConfig_CloudStaysPendingWhenDeviceKeepsTheOldFlag` (read-back) and `TestApplyDesiredConfig_ConfigChangedDuringApplyStaysPending` (change meanwhile), both in `internal/configuration/apply_service_test.go` |
+| With an admin key set, a request with no key is refused on every `/api/v1` route except the open reads the test lists with a reason and CORS preflight (`OPTIONS`) requests, which the test skips. The agent key opens only the agent register and health routes. One key serves every guard. | `TestRouteTable_EveryRouteRequiresTheAdminKey` and `TestRouteTable_AgentKeyOpensOnlyTheAgentRoutes` in `internal/api/route_guards_test.go`, `TestAdminKey_OneKeyForEveryGuard` in `internal/api/admin_key_holder_test.go` |
 | Every call the UI makes has a registered route. | `TestRouteContract` in `internal/api/route_contract_test.go` |
 | WebSocket message types are the same in Go and TypeScript. | `TestMessageTypeManifestParity` in `internal/metrics/contract_test.go` |
-| A backup cannot be restored through the generic import routes. | `TestImportOfABackupIsRefusedOnBothRoutes` |
+| A backup cannot be restored through the generic import routes. | `TestImportOfABackupIsRefusedOnBothRoutes` in `internal/api/backup_import_refused_test.go` |
 | A package's tests make no call that leaves the host through the default HTTP transport, the default resolver or `netguard`. Raw dials, multicast and database drivers are not covered. | `dialguard.Main` in the package's `TestMain`, and `TestEveryTestPackageCallsMain` in `internal/testutil/dialguard/dialguard_test.go`, which fails when a test package does not call it |
 | TypeScript type errors never go up. | CI job "Frontend Unit Tests": `npm run typecheck:baseline` against `ui/typecheck-baseline.json` |
 | `.go-version` is the one Go version. `go.mod`, `mise.toml` and the Dockerfiles match it at major and minor, and the workflows do not hardcode a version. A different `toolchain` line in `go.mod` only warns. | CI job "Validate Go Version": `scripts/check-go-version.sh` |

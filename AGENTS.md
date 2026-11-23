@@ -9,7 +9,7 @@
 - `bin/`: build output; `data/`: local data like `shelly.db` (ignored).
 - `ARCHITECTURE.md`: the code map, the main flows, the rules the code keeps and its boundaries. Keep ARCHITECTURE.md current: a PR that changes the map, a flow, a rule or a boundary updates it.
 
-Note: Align work with the active roadmap in `./.claude/CLAUDE.md` (Phase 7 backend-frontend integration → Phase 8 frontend modernization). For ongoing work and acceptance criteria, see GitHub Issues and Milestones.
+Note: For ongoing work and acceptance criteria, see GitHub Issues and Milestones.
 
 ## Build, Test, and Development Commands
 - `make build`: build both binaries to `bin/`.
@@ -46,7 +46,7 @@ Note: Align work with the active roadmap in `./.claude/CLAUDE.md` (Phase 7 backe
 - PRs must: describe changes, link issues, include tests for behavior, pass `make test-ci` locally, and update `docs/` when touching APIs/architecture.
 - A PR that makes a code decision carries a Code shape section: the choice, the option rejected and why, and whether `ARCHITECTURE.md` changed.
 - For UI changes in `ui/`, attach screenshots or brief GIFs.
-- Roadmap: state how the change supports priorities in `./.claude/CLAUDE.md` and link to relevant GitHub Issues.
+- Roadmap: link the GitHub Issue or Milestone that the change supports.
 - See `CONTRIBUTING.md` for full branching strategy and PR workflow.
 
 ### Feature Completion & Commit Hygiene
