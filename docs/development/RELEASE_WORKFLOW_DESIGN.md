@@ -1,8 +1,13 @@
 # Design note: a release workflow for shelly-manager
 
-**Build state, 2026-11-23:** slices 1, 2 and 4 are merged; slice 3 (the release script and workflow) is
-built and described in [RELEASING.md](RELEASING.md). No release has been made: the first real run is the
-owner's, after the App of section 6 point 1 exists.
+**Superseded, 2026-11-23:** the release now runs in the shared workflow of ginsys/.github, which this
+repository calls. The release script, the wait script and the changelog scripts described below are
+removed from this repository. This note stays as a record of the reasons. Its file and line references
+point at files that no longer exist. How to cut a release: [RELEASING.md](RELEASING.md).
+
+**Build state, 2026-11-23 (before it was superseded):** slices 1, 2 and 4 are merged; slice 3 (the
+release script and workflow) was built and described in [RELEASING.md](RELEASING.md). No release has
+been made: the first real run is the owner's, after the App of section 6 point 1 exists.
 
 Status: proposal, revision 2. Section 6 lists the points that are still the owner's, one
 recommendation each. Nothing is built, tagged or released by this note, and no workflow file changes
@@ -63,7 +68,7 @@ lists `.git`, but Docker reads that file from the build context root, and a buil
 
 **The changelog is the one part that is ready, and it is a release mechanism already.** Each change
 adds `changelog.d/<issue>-<slug>.md` (149 fragments today: 30 Added, 21 Changed, 3 Removed, 81 Fixed,
-14 Security). `make changelog-assemble VERSION=X.Y.Z` runs `scripts/changelog-assemble.sh --write`
+14 Security). The former `changelog-assemble` target with `VERSION=X.Y.Z` runs `scripts/changelog-assemble.sh --write`
 (`:9-14`): it keeps every line under `## [Unreleased]`, adds the fragment sections, heads the block
 `## [X.Y.Z] - <date>` and deletes the fragments. `VERSION` may carry a pre-release part (`:23`).
 `changelog.d/README.md:17-25` describes it as a **release PR**, which takes the label `no-changelog`
@@ -169,7 +174,7 @@ Bronzeward's pair is `release-create.yml` (guard, wait for CI, tag, call publish
 5 says how. A and B stay as what was weighed, and C's "throws that one away" below no longer holds.*
 
 **A. Release PR, then a dispatched workflow tags and publishes.** The maintainer runs
-`make changelog-assemble VERSION=X.Y.Z` in a branch, opens the release PR, and merges it through the
+the former `changelog-assemble` target with `VERSION=X.Y.Z` in a branch, opens the release PR, and merges it through the
 normal checks. A dispatch on `main` then reads the newest `## [X.Y.Z...]` heading, checks it, tags
 **the head of `main` at the moment of the dispatch** (as bronzeward does, `release-create.yml:113`,
 not necessarily the release PR's merge commit) and publishes. A pull request merged between the two

@@ -108,7 +108,7 @@ jobs:
         env:
           RELEASE_VERSION: ${{ inputs.version }}
         run: |
-          # The value becomes an image tag and a -ldflags string: the form release.sh accepts, nothing else.
+          # The value becomes an image tag and a -ldflags string: vX.Y.Z or vX.Y.Z-alpha|beta|rc.N, nothing else.
           # bash matches the whole value, so a second line cannot ride behind a valid first one (grep tests per line).
           re='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(alpha|beta|rc)\.(0|[1-9][0-9]*))?$'
           if [[ ! $RELEASE_VERSION =~ $re ]]; then

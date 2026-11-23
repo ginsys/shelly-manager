@@ -105,8 +105,8 @@ Internal documentation for contributors:
 - [`development/BULK_APPLY_AND_DOWNLOAD_DESIGN.md`](development/BULK_APPLY_AND_DOWNLOAD_DESIGN.md) - design note: bulk apply and bulk download of device configuration (ginsys/shelly-manager#594, ginsys/shelly-manager#595)
 - [`development/PROVISIONER_REGISTRY_DESIGN.md`](development/PROVISIONER_REGISTRY_DESIGN.md) - proposal: provisioner agents, tokens and tasks in the database, and agent enrolment
 - [`development/PLUGIN_CONFIG_DESIGN.md`](development/PLUGIN_CONFIG_DESIGN.md) - proposal: stored plugin configuration, plugin test and plugin enablement (ginsys/shelly-manager#290)
-- [`development/RELEASING.md`](development/RELEASING.md) - how to cut a release: the Release workflow, its inputs and what to do when it is red (ginsys/shelly-manager#846)
-- [`development/RELEASE_WORKFLOW_DESIGN.md`](development/RELEASE_WORKFLOW_DESIGN.md) - proposal: versioning, artifacts and a release workflow (ginsys/shelly-manager#846)
+- [`development/RELEASING.md`](development/RELEASING.md) - how to cut a release: the Release workflow (a call of the shared ginsys release workflow), its inputs and what to do when it is red (ginsys/shelly-manager#846)
+- [`development/RELEASE_WORKFLOW_DESIGN.md`](development/RELEASE_WORKFLOW_DESIGN.md) - record, superseded by the shared release workflow: versioning, artifacts and a release workflow (ginsys/shelly-manager#846)
 - [`development/DESIRED_CONFIG_ROLLBACK_DESIGN.md`](development/DESIRED_CONFIG_ROLLBACK_DESIGN.md) - design note: roll a device's desired configuration back to an earlier version (ginsys/shelly-manager#775)
 
 ---
