@@ -43,7 +43,8 @@ jobs:
           binary=$(find unpacked -type f -name shelly-provisioner)
           reported=$("$binary" --version)
           echo "$reported"
-          if ! grep -qF -- "$TAG" <<<"$reported"; then
-            echo "::error::the binary reports '$reported', not the tag $TAG"
+          expected="shelly-provisioner version $TAG"
+          if [ "$reported" != "$expected" ]; then
+            echo "::error::the binary reports '$reported', not '$expected'"
             exit 1
           fi
