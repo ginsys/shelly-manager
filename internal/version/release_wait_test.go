@@ -14,14 +14,25 @@ import (
 // waitFakeGH is a `gh` that answers `run list` with list (or fails with listErr) and each `run view` with
 // the next line of view (the last line repeats). A line `ERR:<text>` fails with <text> on stderr, and
 // `EMPTY` answers nothing.
+//
+// It also checks what the script asks for: `run list` must name this repository, the Release Publish
+// workflow, the tag as the branch and the push event, and `run view` must name the run `run list` gave
+// (123). Anything else fails as a bad request, so a wait that watches another tag's run fails the case.
 const waitFakeGH = `#!/usr/bin/env bash
+args=" $* "
+need() { case "$args" in *" $1 "*) ;; *) echo "bad request, missing '$1': gh $*" >&2; exit 1 ;; esac; }
+need "--repo ginsys/shelly-manager"
 case "$1 $2" in
 "run list")
+    need "--workflow release-publish.yml"
+    need "--branch v0.6.0-alpha.1"
+    need "--event push"
     echo x >> "$FAKE_DIR/lists"
     if [ -n "${FAKE_LIST_ERR:-}" ]; then echo "$FAKE_LIST_ERR" >&2; exit 1; fi
     printf '%s' "${FAKE_LIST:-}"
     ;;
 "run view")
+    [ "$3" = 123 ] || { echo "bad request, run $3 is not 123: gh $*" >&2; exit 1; }
     n=$(cat "$FAKE_DIR/n" 2>/dev/null || echo 0)
     n=$((n + 1))
     echo "$n" > "$FAKE_DIR/n"
@@ -72,10 +83,11 @@ func TestWaitPublish(t *testing.T) {
 		{name: "failed reads between good ones", list: "123",
 			view: []string{"in_progress", "ERR:HTTP 502", "in_progress", "ERR:HTTP 502", "in_progress", "ERR:HTTP 502", "success"},
 			env:  fast, wantOut: "completed", wantViews: 7},
-		// A deadline of one second at 0.05 s a read: about 20 reads. A loop that counted reads against
-		// the deadline in seconds would stop after one.
+		// The script counts whole epoch seconds, so a deadline of 2 lasts more than one second whenever it
+		// starts: at 0.05 s a read that is about 20 reads, and at least 5 even on a slow machine. A loop
+		// that counted reads against the deadline in seconds would stop after 2.
 		{name: "a run that never finishes", list: "123", view: []string{"in_progress"},
-			env:      []string{"WAIT_POLL=0.05", "WAIT_START_TRIES=3", "WAIT_MISSES=3", "WAIT_DEADLINE=1"},
+			env:      []string{"WAIT_POLL=0.05", "WAIT_START_TRIES=3", "WAIT_MISSES=3", "WAIT_DEADLINE=2"},
 			wantCode: 1, wantOut: "did not finish", wantViews: 5},
 	}
 	for _, c := range cases {
