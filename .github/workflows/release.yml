@@ -112,32 +112,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.run.outputs.tag }}
-        run: |
-          set -euo pipefail
-          run_id=""
-          for i in $(seq 1 24); do
-            run_id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow release-publish.yml \
-              --branch "$TAG" --event push --json databaseId --limit 1 \
-              --jq '.[0].databaseId // empty' 2>/dev/null || true)
-            [ -n "$run_id" ] && break
-            echo "Attempt $i/24: Release Publish has not started for $TAG, retrying in 5s..."
-            sleep 5
-          done
-          if [ -z "$run_id" ]; then
-            echo "::error::Release Publish did not start within 2 minutes for $TAG. The tag is pushed: see docs/development/RELEASING.md, 'When a run is red'."
-            exit 1
-          fi
-          deadline=$(( $(date +%s) + 90 * 60 ))
-          echo "Watching run $run_id of Release Publish for $TAG..."
-          while [ "$(date +%s)" -lt "$deadline" ]; do
-            conclusion=$(gh run view "$run_id" --repo "$GITHUB_REPOSITORY" --json status,conclusion \
-              --jq 'if .status == "completed" then .conclusion else "in_progress" end' 2>/dev/null || true)
-            case "$conclusion" in
-              success) echo "Release Publish completed for $TAG."; exit 0 ;;
-              in_progress|"") ;;
-              *) echo "::error::Release Publish for $TAG concluded $conclusion. The tag is pushed: see docs/development/RELEASING.md, 'When a run is red'."; exit 1 ;;
-            esac
-            sleep 10
-          done
-          echo "::error::Release Publish did not finish within 90 minutes for $TAG."
-          exit 1
+        run: bash scripts/release/wait-publish.sh "$TAG"
