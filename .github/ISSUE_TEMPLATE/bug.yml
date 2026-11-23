@@ -27,6 +27,6 @@ body:
     id: version
     attributes:
       label: Shelly Manager Version
-      placeholder: e.g. v0.5.5-alpha or commit hash
+      placeholder: e.g. the output of shelly-manager --version, or a commit hash
     validations:
       required: true

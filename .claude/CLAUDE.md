@@ -4,7 +4,7 @@
 Comprehensive Golang Shelly smart home device manager with dual-binary Kubernetes-native architecture.
 
 **Repository Scale**: 165 Go files, 77,770 lines of code, 31 packages, 19 internal modules  
-**Current Version**: v0.5.5-alpha - Production-ready with WebSocket metrics, E2E testing, enhanced UX
+**Current Version**: the root `VERSION` file (the next release; a binary reports the version it was built as, `shelly-manager --version`) - Production-ready with WebSocket metrics, E2E testing, enhanced UX
 
 ## ✅ Current Status - Strategic Modernization Phase
 

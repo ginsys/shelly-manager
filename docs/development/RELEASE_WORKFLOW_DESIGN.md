@@ -42,6 +42,15 @@ the only `ARG` lines are `TARGETPLATFORM` and `BUILDPLATFORM` (`deploy/docker/Do
 | `internal/api/handlers.go:250` | `api_version` is the literal `dev` |
 | image labels, `docker-build.yml:153`, `:168` | the date and sha name |
 
+*2026-11-23, slice 5 of ginsys/shelly-manager#846:* the rows above record what existed. The application version has been one value since
+ginsys/shelly-manager#900 (the two `cmd/` rows above, the provisioner's `0.5.0-alpha` and the manager's `1.0.0`, now read it). This slice changed the
+bug template placeholder (it names `shelly-manager --version`), the chart `appVersion` example (a placeholder naming the root `VERSION`
+file; the chart `version` is the chart's own and stays) and the version line of `.claude/CLAUDE.md`. It left `docs/api/openapi.yaml:14`
+(the version of the API document, kept by hand, now with a comment saying where the application version lives), the kurel README's
+`version: v1.0.0` (a kurel definition's own version), the UI guide's "v0.5.4+" (a floor that is still true) and the example
+`shelly_manager_version: "0.5.1"` in `docs/features/BACKUP_FORMAT_SPECIFICATION.md` and `docs/features/DATABASE_ARCHITECTURE.md`
+(illustrative values of a recorded field). `ui/package.json:4` and `api_version` are code and not part of this slice.
+
 What does carry a build identity is the revision: the server reads `vcs.revision` from the Go build
 information (`internal/api/build_info.go:8-19`) and reports it as `git_sha` (`handlers.go:252`); the UI
 takes `GIT_SHA` or `git rev-parse` (`ui/vite.config.ts:9-13`), and a banner shows when the two differ
