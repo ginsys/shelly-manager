@@ -10,9 +10,9 @@ import (
 	"strings"
 )
 
-// ErrUnsupportedGeneration is returned when the device generation has no
-// configuration converter yet. Only Gen1 devices are supported for apply and
-// verify today.
+// ErrUnsupportedGeneration is returned when the device has no apply path. Gen1 devices and
+// Gen2 or later devices have one, but a Gen2 or later device is refused when its client does not
+// implement Gen2ConfigClient, and so is any generation below 1.
 var ErrUnsupportedGeneration = errors.New("applying configuration is not supported for this device generation")
 
 // ErrUnsupportedSettings is returned when the desired configuration holds settings that apply

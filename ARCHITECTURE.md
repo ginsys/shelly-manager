@@ -36,13 +36,13 @@ Flow A. Discover devices and read their configuration
 1. A user starts discovery in the UI, or runs `shelly-manager discover`. The handler or the command calls `service.DiscoverDevicesReport`.
 2. `discovery.CombinedDiscoveryWith` scans the configured networks over HTTP, and over mDNS when `EnableMDNS` is on.
 3. `service.storeDiscovered` writes each device to the database, or updates its row.
-4. If the request asked for it, the handler calls `ImportDeviceConfig` for each device. That reads the live configuration and stores it.
+4. The handler calls `ImportDeviceConfig` for each device it found. That reads the live configuration and stores it. A request cannot turn this off.
 5. The agent reports devices it found with `POST /api/v1/provisioner/discovered-devices`.
 
 Flow B. Apply the desired configuration (Gen1 and Gen2)
 
 1. A change to a template or to the overrides of a device calls `RecomputeDesiredConfig`. It merges the template layers, then the device overrides (`merge.go`), and stores the result with `SetDeviceDesiredConfigPending`. The device is now "pending".
-2. `ConfigurationService.ApplyDesiredConfig` picks the Gen1 path or the Gen2 path (`applyPathFor`). It takes a lock for the device that works across server copies.
+2. `ConfigurationService.ApplyDesiredConfig` picks the Gen1 path or the Gen2 path (`applyPathFor`). It takes a lock for the device. In one server, the lock is in memory. With PostgreSQL or MySQL it is also a database lock, so it holds across server copies. SQLite has one server and no database lock.
 3. It refuses a setting that it cannot write, before it sends anything. It compares the MAC address of the device with the stored one. A different MAC means a different device, so nothing is written.
 4. It writes the settings one section at a time, then reads the device back and compares.
 5. It marks the device "applied" only when the read-back matches and the desired configuration did not change meanwhile.
@@ -60,9 +60,9 @@ Flow D. Import an SMA archive
 2. It checks the format version, the structure, the record count and the checksum. Any failure refuses the whole archive.
 3. It checks the identity of each record with `sync.ValidateImportIdentities`. A preview and a real import use the same check.
 4. A dry run or a validate-only request stops here and writes nothing.
-5. A real import writes everything in one database transaction. If it fails, nothing is written.
+5. A real import writes the devices, templates and discovered devices in one database transaction. If it fails, nothing is written. Records that already exist stay as they are unless the request sets `force_overwrite`. Network, plugin and system settings in the archive are not restored, and the result says so.
 
-Export runs the other way: `SyncEngine.Export` loads the data, masks secrets, and the plugin writes under the export root. The agent enrolment and notification delivery are not shown here.
+Export runs the other way: `SyncEngine.Export` loads the data, masks secrets unless the request sets `exclude_sensitive` to false, and the plugin writes under the export root. The agent enrolment and notification delivery are not shown here.
 
 ## 4. Rules the code keeps
 
@@ -72,15 +72,15 @@ Export runs the other way: `SyncEngine.Export` loads the data, masks secrets, an
 |---|---|
 | Apply refuses a setting it cannot write, before it touches the device. | `TestApplyDesiredConfig_RefusesUnsupportedSettingsBeforeWriting`, `TestDeviceSchemaApplicableMatchesApply` |
 | Apply writes nothing to a device whose MAC differs. | `TestApplyDesiredConfig_RefusesADeviceWithAnotherMAC` |
-| One apply per device at a time, also across server copies. | `TestApplyLockProviders_*` in `internal/configuration/apply_lock_test.go` |
-| A device is "applied" only when the read-back matches and nothing changed meanwhile. | `TestApplyDesiredConfig_ConfigChangedDuringApplyStaysPending` |
-| With an admin key set, every route needs it, except the routes the test lists with a reason. One key serves every guard. | `TestRouteTable_EveryRouteRequiresTheAdminKey` in `internal/api/route_guards_test.go`, `TestAdminKey_OneKeyForEveryGuard` |
+| One apply per device at a time in a server. Across server copies, only with PostgreSQL or MySQL and a pool of more than one connection. | `TestApplyLockProviders_*` in `internal/configuration/apply_lock_test.go` |
+| A device is "applied" only when the read-back matches and nothing changed meanwhile. | `TestApplyDesiredConfig_CloudStaysPendingWhenDeviceKeepsTheOldFlag` (read-back), `TestApplyDesiredConfig_ConfigChangedDuringApplyStaysPending` (change meanwhile) |
+| With an admin key set, a request with no key is refused on every route except the open reads the test lists with a reason. The agent key opens only the agent register and health routes. One key serves every guard. | `TestRouteTable_EveryRouteRequiresTheAdminKey` and `TestRouteTable_AgentKeyOpensOnlyTheAgentRoutes` in `internal/api/route_guards_test.go`, `TestAdminKey_OneKeyForEveryGuard` |
 | Every call the UI makes has a registered route. | `TestRouteContract` in `internal/api/route_contract_test.go` |
 | WebSocket message types are the same in Go and TypeScript. | `TestMessageTypeManifestParity` in `internal/metrics/contract_test.go` |
 | A backup cannot be restored through the generic import routes. | `TestImportOfABackupIsRefusedOnBothRoutes` |
-| A package's tests make no network call that leaves the host. | `dialguard.Main` in the package's `TestMain`. Nothing forces a new package to use it: by review only. |
+| A package's tests make no call that leaves the host through the default HTTP transport, the default resolver or `netguard`. Raw dials, multicast and database drivers are not covered. | `dialguard.Main` in the package's `TestMain`, and `TestEveryTestPackageCallsMain` in `internal/testutil/dialguard/dialguard_test.go`, which fails when a test package does not call it |
 | TypeScript type errors never go up. | CI job "Frontend Unit Tests": `npm run typecheck:baseline` against `ui/typecheck-baseline.json` |
-| The Go version is the same in every file that names it. | CI job "Validate Go Version": `scripts/check-go-version.sh` |
+| `.go-version` is the one Go version. `go.mod` and the Dockerfiles match it at major and minor, `mise.toml` matches it exactly, and the workflows do not hardcode a version. A different `toolchain` line in `go.mod` only warns. | CI job "Validate Go Version": `scripts/check-go-version.sh` |
 | Which package may import which. | By review only. The `depguard` linter is off in `.golangci.yml`. |
 
 ## 5. Boundaries

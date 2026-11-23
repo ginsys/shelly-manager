@@ -11,7 +11,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the code map, the main flows and the 
 
 - **Dual-binary design**: API server (containerized) + provisioning agent (host-based)
 - **Multi-provider database**: SQLite, PostgreSQL, MySQL
-- **Plugin-based export/import**: SMA, Terraform, Ansible, Kubernetes, Docker Compose, JSON, CSV
+- **Plugin-based export/import**: SMA, JSON, YAML, GitOps, OPNsense, backup
 - **Template engine**: Sprig v3 with security controls and inheritance
 
 ## Features
