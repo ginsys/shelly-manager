@@ -55,7 +55,7 @@ Note: For ongoing work and acceptance criteria, see GitHub Issues and Milestones
   - API docs in `docs/` (and `docs/README.md` index),
   - Root `README.md` usage notes where relevant,
   - a changelog fragment, `changelog.d/<issue>-<slug>.md` (format: `changelog.d/README.md`; never
-    edit `CHANGELOG.md`),
+    add an entry to `CHANGELOG.md`, and keep the two oldest headings as `changelog.d/README.md` says),
   - Any config examples in `configs/*.yaml`.
 - Avoid follow‑up “forgot docs/tests” commits. If necessary during review, squash before merge.
 - Keep unrelated refactors out of feature commits. Submit them separately with clear scope.
