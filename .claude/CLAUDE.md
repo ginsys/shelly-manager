@@ -1,122 +1,16 @@
-# Shelly Manager - SuperClaude Project Memory
+# Shelly Manager
 
-## Project Overview
-Comprehensive Golang Shelly smart home device manager with dual-binary Kubernetes-native architecture.
+Shelly Manager keeps track of Shelly smart-home devices (Gen1 and Gen2) and sets their configuration from one place. It is a Go API server with a Vue web UI, plus a provisioning agent that runs next to new devices.
 
-**Current Version**: the root `VERSION` file (the next release; a binary reports the version it was built as, `shelly-manager --version`) - Production-ready with WebSocket metrics, E2E testing, enhanced UX
+- Code: read [ARCHITECTURE.md](../ARCHITECTURE.md) before you change code. It holds the code map, the main flows, the rules the code keeps and its boundaries.
+- Working rules, build and test commands, commit and pull request rules: [AGENTS.md](../AGENTS.md).
+- Branching and the pull request flow: [CONTRIBUTING.md](../CONTRIBUTING.md).
+- Work is tracked in [GitHub issues](https://github.com/ginsys/shelly-manager/issues) and milestones.
 
-## ✅ Current Status - Strategic Modernization Phase
+## Go version
 
-**Foundation Complete**: Production-ready dual-binary architecture with comprehensive backend functionality
+`.go-version` is the one source of the Go version. Run `make check-go-version` to check every file that names it. Run `make upgrade-go-version VERSION=X.Y.Z` to change it everywhere. CI runs the same check.
 
-**Critical Assessment**:
-- ✅ **Backend Investment**: 138 API endpoints across 6 handler modules, 19 internal packages
-- ⚠️ **Frontend Progress**: API coverage, unreachable pages and open frontend issues are measured in [Frontend Review](../docs/frontend/frontend-review.md)
-- ✅ **Metrics System**: Real-time WebSocket metrics with a contract-enforced Go/TS message protocol, a freshness watchdog (truthful "LIVE"), and REST fallback (#247)
-- ✅ **Export/Import**: Enhanced preview forms with schema-driven UX (API coverage per module: run the command in [Frontend Review](../docs/frontend/frontend-review.md), section 1)
-- ✅ **Strict SMA/Previews**: Registry-backed previews and closed SMA `2026.1`
-  with RFC 8785 integrity, bounded import normalization, and atomic generation
-- ✅ **TypeScript**: Raw `vue-tsc` passes with a zero-error ratchet
-- ⚠️ **Remaining Systems**: Notification, Device Config, Provisioning and Drift Detection have API clients; what is still missing in the UI is listed in [Frontend Review](../docs/frontend/frontend-review.md)
-- ✅ **Technical Debt Reduction**: Enhanced components eliminate major duplication patterns
+## Frontend work
 
-**Security & Testing Achievement**:
-- ✅ **Phase 6.9.2 COMPLETED**: Critical security vulnerabilities resolved
-- ✅ **Database Coverage**: 82.8% (29/31 methods tested, 671-line test suite)
-- ✅ **Plugin Coverage**: 63.3% (up from 0%)
-- ✅ **Security Fixes**: Rate limiting bypass, context propagation, hostname sanitization
-- ✅ **Test Infrastructure**: Comprehensive isolation framework operational
-- ✅ **E2E Testing**: Complete Playwright infrastructure with 195+ scenarios across 5 browsers
-- ✅ **E2E Optimization**: Development config achieved 99.1% performance improvement (23.5s vs 45+ min)
-- ✅ **UI Testing**: WebSocket state management with 16 comprehensive unit tests
-
-## 🎯 Active Development Plan
-
-### Phase 6.9: Security & Testing Foundation ⚡ **COMPLETED**
-- ✅ **Task 6.9.2**: Testing Strategy COMPLETED - All security vulnerabilities resolved
-- ✅ **Task 6.9.4**: E2E Testing Infrastructure COMPLETED - Comprehensive test coverage
-- ✅ **Task 6.9.5**: Metrics WebSocket Integration COMPLETED - Real-time functionality
-- ⚠️ **Task 6.9.1**: Authentication & Authorization Strategy (DEFERRED to Phase 7)
-- ⚠️ **Task 6.9.3**: Resource & Implementation Planning (DEFERRED to Phase 7)
-
-### Phase 7: Backend-Frontend Integration ⚡ **READY TO BEGIN**
-**Business Impact**: Transform to comprehensive infrastructure platform
-
-See [Frontend Review](../docs/frontend/frontend-review.md) for the API coverage command, the pages and open frontend work.
-
-### Phase 8: Vue.js Frontend Modernization ⚡ **STRATEGIC PRIORITY**
-**Technical Impact**: 9,400+ → ~3,500 lines (63% reduction), <5% code duplication  
-**Performance**: <2s load, <500KB bundle, 90+ Lighthouse, WCAG 2.1 AA
-
-## 🏗️ Architecture Status
-
-The code map, the main flows, the rules the code keeps and its boundaries are in [ARCHITECTURE.md](../ARCHITECTURE.md). Read it before changing code.
-
-## 🛠️ Development Standards
-
-**Testing**: Always run `make test-ci` before commits (matches GitHub Actions exactly)
-**Quality**: Run `make fix` to format code and auto-fix lint issues
-**Architecture**: Maintain dual-binary separation, structured logging, comprehensive error handling
-
-**Go Version Management**:
-- `.go-version` is the single source of truth for Go version
-- Run `make check-go-version` to validate consistency across all files
-- Run `make upgrade-go-version VERSION=X.Y.Z` to upgrade Go version everywhere
-- CI validates Go version consistency before running tests
-
-## 📋 Task Management
-
-Project tracking is managed via **GitHub Issues**, **Milestones**, and **Project board**.
-
-- Open issues represent active work items with labels for priority and area
-- Milestones group issues by development phase (Phase 7, Phase 8)
-- Historical tasks are preserved as closed issues for reference
-- Development follows a feature branch workflow — see `CONTRIBUTING.md`
-
-## 🎯 Success Metrics & Targets
-
-### Phase 7 Targets
-See [Frontend Review](../docs/frontend/frontend-review.md) for the current measured state (the old targets table was removed).
-
-### Phase 8 Targets  
-- **Code Reduction**: 9,400+ → ~3,500 lines (63% reduction)
-- **Performance**: <2s load, <500KB bundle, 90+ Lighthouse
-- **Duplication**: 70% → <5% elimination
-
-### Resource Allocation
-- **Phase 7**: Backend Specialist + Full-stack Developer
-- **Phase 8**: Frontend Specialist + Full-stack Developer + QA
-
-## Quick Reference
-
-**Current Priority**: Phase 7 - Device Management API integration and frontend feature expansion  
-**Next Milestone**: Phase 7.2 - Notification system integration  
-**Success Gate**: Authentication framework design (deferred but ready when needed)  
-**Risk Mitigation**: Comprehensive E2E testing, WebSocket reliability, rollback procedures
-
-**Recent Achievements**:
-- ✅ **WebSocket Metrics**: Real-time dashboards with automatic failover
-- ✅ **E2E Testing**: Production-ready test infrastructure across 5 browsers
-- ✅ **Enhanced UX**: Schema-driven forms eliminate major usability barriers
-- ✅ **Export Scope**: Inert export scheduling removed; drift, notification,
-  and device/relay schedules remain separate
-- ✅ **Technical Debt**: Significant reduction in component duplication
-- ✅ **Frontend Review**: Comprehensive API gap analysis documented
-
----
-
-## 📚 Documentation
-
-| Document | Purpose | Keep Updated |
-|----------|---------|--------------|
-| [API Overview](../docs/api/api-overview.md) | Backend API reference (112+ endpoints) | When API changes |
-| [Frontend Review](../docs/frontend/frontend-review.md) | Frontend architecture, API coverage definition and command, open work | After frontend work |
-| [GitHub Issues](https://github.com/ginsys/shelly-manager/issues) | Development task tracking | Continuously |
-| [Phase 8 Plan](../docs/development/PHASE_8_WEB_UI_PLAN.md) | Vue.js SPA modernization plan | On milestone completion |
-
-**Important**: When completing frontend tasks, update `docs/frontend/frontend-review.md` to reflect resolved issues and changed pages. It holds no API coverage figure or other count; run the command it gives (`node ui/scripts/api-coverage/cli.mjs` for API coverage).
-
----
-
-**Last Updated**: 2026-02-14
-**Task Tracking**: GitHub Issues, Milestones, and Project board
+[Frontend Review](../docs/frontend/frontend-review.md) holds the frontend architecture, the API coverage definition and the open frontend work. Update it when you finish frontend work. It holds no counts: run `node ui/scripts/api-coverage/cli.mjs` for API coverage.
