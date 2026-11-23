@@ -1,5 +1,7 @@
 # Shelly Manager Documentation
 
+For how the code is built, start with [ARCHITECTURE.md](../ARCHITECTURE.md).
+
 ## Directory Structure
 
 ```

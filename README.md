@@ -7,6 +7,8 @@ A Golang application for managing Shelly smart home devices. **In development.**
 
 ## Architecture
 
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the code map, the main flows and the rules the code keeps.
+
 - **Dual-binary design**: API server (containerized) + provisioning agent (host-based)
 - **Multi-provider database**: SQLite, PostgreSQL, MySQL
 - **Plugin-based export/import**: SMA, Terraform, Ansible, Kubernetes, Docker Compose, JSON, CSV
