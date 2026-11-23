@@ -109,7 +109,7 @@ Common scopes
 
 ### Changelog fragments
 
-Do not edit `CHANGELOG.md`. Add one file, `changelog.d/<issue>-<slug>.md`, holding your entry, so two PRs
+Do not add an entry to `CHANGELOG.md`. Add one file, `changelog.d/<issue>-<slug>.md`, holding your entry, so two PRs
 never conflict on it. The format is in `changelog.d/README.md`. A release assembles the fragments into
 `CHANGELOG.md`.
 
