@@ -1,0 +1,3 @@
+Fixed
+
+- The main image build has pushed no image since 2025-09-11: its change filter was written as a `paths:` and `paths-ignore:` mapping, which the filter action reads as change types, so it matched no file and every build job was skipped. The filter is now one list of the paths an image is built from (`deploy/docker/`, `go.mod`, `go.sum`, `cmd/`, `internal/`, `configs/`, and `ui/` since the manager image builds the web UI) minus Go test files, so a commit that changes none of them still does not build. The old ignore entries outside those paths are dropped, as they could not match. Refs ginsys/shelly-manager#846.
