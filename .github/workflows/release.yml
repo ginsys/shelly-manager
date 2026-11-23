@@ -1,0 +1,143 @@
+name: Release
+
+# The one manual release workflow: pick an action and whether it is a dry run (the default). A real run
+# is allowed from main only. It tests the dispatched commit, runs scripts/release/release.sh, pushes
+# main and the tag in one atomic push with the release App's token, then waits for the Release Publish
+# run that the tag starts and turns red if it fails. The three actions that only move VERSION make no
+# tag, so they skip Test and the wait. How to run it: docs/development/RELEASING.md. Design:
+# docs/development/RELEASE_WORKFLOW_DESIGN.md section 5.
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'What to do'
+        required: true
+        type: choice
+        default: release
+        options:
+          - release
+          - release-as-beta
+          - release-as-rc
+          - release-as-stable
+          - start-next-minor
+          - start-next-major
+          - skip-prerelease-number
+      dry_run:
+        description: 'Dry run: preview only, change nothing'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+# One release at a time. A second dispatch waits for the first; it is then refused by the tip check,
+# because the first run moved main. GitHub keeps one waiting run per group.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  # No secret and no environment: this is all a dry run does. A real run is refused here for a wrong
+  # branch, a tag collision or an empty changelog before the long Test run.
+  guard:
+    name: Check and preview
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout the dispatched commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Check the branch and the action
+        env:
+          RELEASE_ACTION: ${{ inputs.action }}
+          RELEASE_BRANCH: ${{ github.ref_name }}
+          RELEASE_REF_TYPE: ${{ github.ref_type }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
+        run: bash scripts/release/release.sh --guard
+      - name: Preview the release (changes nothing)
+        env:
+          RELEASE_ACTION: ${{ inputs.action }}
+          RELEASE_BRANCH: ${{ github.ref_name }}
+          RELEASE_REF_TYPE: ${{ github.ref_type }}
+          DRY_RUN: '1'
+        run: bash scripts/release/release.sh
+
+  # Only a real run that makes a tag tests: a dry run and a VERSION-only action skip it.
+  test:
+    name: Test the dispatched commit
+    needs: guard
+    if: ${{ !inputs.dry_run && startsWith(inputs.action, 'release') }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/test.yml
+
+  release:
+    name: Tag, push and wait for Publish
+    needs: [guard, test]
+    if: ${{ !cancelled() && !inputs.dry_run && needs.guard.result == 'success' && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    # The only job that reads the App's secrets, and only on main (the environment's branch rule).
+    environment: release
+    # Publish takes about 50 minutes (Test 24, images 21); the wait below stops at 90.
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Mint the release App token
+        id: app-token
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+      - name: Checkout the commit that passed Test
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          token: ${{ steps.app-token.outputs.token }}
+          fetch-depth: 0
+      - name: Run the release script
+        id: run
+        env:
+          RELEASE_ACTION: ${{ inputs.action }}
+          RELEASE_BRANCH: ${{ github.ref_name }}
+          RELEASE_REF_TYPE: ${{ github.ref_type }}
+          DRY_RUN: '0'
+          CI: 'true'
+        run: bash scripts/release/release.sh
+      # Runs only when a tag was pushed, so a VERSION-only action finishes above.
+      - name: Wait for Release Publish
+        if: ${{ steps.run.outputs.tag != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.run.outputs.tag }}
+        run: |
+          set -euo pipefail
+          run_id=""
+          for i in $(seq 1 24); do
+            run_id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow release-publish.yml \
+              --branch "$TAG" --event push --json databaseId --limit 1 \
+              --jq '.[0].databaseId // empty' 2>/dev/null || true)
+            [ -n "$run_id" ] && break
+            echo "Attempt $i/24: Release Publish has not started for $TAG, retrying in 5s..."
+            sleep 5
+          done
+          if [ -z "$run_id" ]; then
+            echo "::error::Release Publish did not start within 2 minutes for $TAG. The tag is pushed: see docs/development/RELEASING.md, 'When a run is red'."
+            exit 1
+          fi
+          deadline=$(( $(date +%s) + 90 * 60 ))
+          echo "Watching run $run_id of Release Publish for $TAG..."
+          while [ "$(date +%s)" -lt "$deadline" ]; do
+            conclusion=$(gh run view "$run_id" --repo "$GITHUB_REPOSITORY" --json status,conclusion \
+              --jq 'if .status == "completed" then .conclusion else "in_progress" end' 2>/dev/null || true)
+            case "$conclusion" in
+              success) echo "Release Publish completed for $TAG."; exit 0 ;;
+              in_progress|"") ;;
+              *) echo "::error::Release Publish for $TAG concluded $conclusion. The tag is pushed: see docs/development/RELEASING.md, 'When a run is red'."; exit 1 ;;
+            esac
+            sleep 10
+          done
+          echo "::error::Release Publish did not finish within 90 minutes for $TAG."
+          exit 1

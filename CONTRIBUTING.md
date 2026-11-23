@@ -115,9 +115,9 @@ never conflict on it. The format is in `changelog.d/README.md`. A release assemb
 
 - The `changelog-fragment` CI check fails a PR that adds no fragment, or that adds a line to `CHANGELOG.md`.
   Run it locally with `make check-changelog-fragment`.
-- A change that needs no entry (CI, tests, docs only) takes the PR label `no-changelog`. So does the
-  release PR that `make changelog-assemble VERSION=X.Y.Z` makes, since it edits `CHANGELOG.md` and adds
-  no fragment. Dependabot and Renovate branches are skipped by themselves.
+- A change that needs no entry (CI, tests, docs only) takes the PR label `no-changelog`. A release is
+  no PR: the Release workflow assembles `CHANGELOG.md` in its own commit
+  (`docs/development/RELEASING.md`). Dependabot and Renovate branches are skipped by themselves.
 
 ## Security & Secrets
 

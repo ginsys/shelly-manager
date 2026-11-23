@@ -14,12 +14,12 @@ Fixed
 - A malformed database DSN no longer reaches the error text. Fixes ginsys/shelly-manager#587.
 ```
 
-- **A change that needs no entry** (CI, tests, docs only): label the PR `no-changelog`. The release PR
-  (see below) takes the same label. Dependabot and Renovate branches are skipped by themselves.
+- **A change that needs no entry** (CI, tests, docs only): label the PR `no-changelog`. A release is no
+  PR: the Release workflow makes its commit (see `docs/development/RELEASING.md`). Dependabot and Renovate branches are skipped by themselves.
   The label lifts the need for a fragment, not its format: a fragment the PR adds or edits is
   validated either way.
 - **Check a branch:** `make check-changelog-fragment` (against `origin/main`). **Preview a release:**
-  `make changelog-assemble`. **Cut one:** `make changelog-assemble VERSION=X.Y.Z`; it keeps every line
-  under `## [Unreleased]`, adds the fragment sections after them, heads the block `## [X.Y.Z] - <date>`,
-  and removes the fragments.
+  `make changelog-assemble`. **Cut one:** run the Release workflow (`docs/development/RELEASING.md`); it
+  calls `scripts/changelog-assemble.sh --write X.Y.Z`, which keeps every line under `## [Unreleased]`,
+  adds the fragment sections after them, heads the block `## [X.Y.Z] - <date>`, and removes the fragments.
 - Entries written before fragments began stay in `CHANGELOG.md` under `## [Unreleased]` until a release.
