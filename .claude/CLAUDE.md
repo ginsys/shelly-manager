@@ -3,7 +3,6 @@
 ## Project Overview
 Comprehensive Golang Shelly smart home device manager with dual-binary Kubernetes-native architecture.
 
-**Repository Scale**: 165 Go files, 77,770 lines of code, 31 packages, 19 internal modules  
 **Current Version**: the root `VERSION` file (the next release; a binary reports the version it was built as, `shelly-manager --version`) - Production-ready with WebSocket metrics, E2E testing, enhanced UX
 
 ## ✅ Current Status - Strategic Modernization Phase
@@ -51,26 +50,7 @@ See [Frontend Review](../docs/frontend/frontend-review.md) for the API coverage 
 
 ## 🏗️ Architecture Status
 
-**Infrastructure Complete**:
-- ✅ Dual-binary: API server (containerized) + provisioning agent (host-based)
-- ✅ Database: Multi-provider (SQLite, PostgreSQL, MySQL) with 13 provider files
-- ✅ Plugin System: 19 files supporting sync, notification, discovery
-- ✅ Security: Comprehensive framework with vulnerability resolution
-- ✅ Testing: 69 Go test files + comprehensive E2E infrastructure (195+ scenarios)
-- ✅ API: 112+ endpoints with standardized security responses
-- ✅ Real-time Features: WebSocket metrics with automatic failover to REST polling
-- ✅ Enhanced UX: Schema-driven forms with real-time validation and preview
-
-**Key Architecture Files**:
-```
-internal/
-├── api/                    # 6 handler modules, 112+ endpoints
-├── database/              # Multi-provider with 82.8% test coverage  
-├── plugins/               # 19 files, extensible architecture
-├── configuration/         # Typed models, template engine
-├── security/              # Framework with vulnerability resolution
-└── [14 other modules]     # Complete service architecture
-```
+The code map, the main flows, the rules the code keeps and its boundaries are in [ARCHITECTURE.md](../ARCHITECTURE.md). Read it before changing code.
 
 ## 🛠️ Development Standards
 
