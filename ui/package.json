@@ -38,14 +38,14 @@
     "pinia": "^4.0.3",
     "quasar": "^2.35.5",
     "vue": "^3.5.45",
-    "vue-router": "^5.5.0"
+    "vue-router": "^5.5.1"
   },
   "devDependencies": {
     "@pinia/testing": "^2.0.2",
     "@playwright/test": "^1.65.1",
     "@vitejs/plugin-vue": "^6.0.11",
     "@vitest/coverage-v8": "^4.1.12",
-    "@vue/test-utils": "^2.5.1",
+    "@vue/test-utils": "^2.6.0",
     "jsdom": "^31.0.1",
     "terser": "^5.51.2",
     "typescript": "^5.9.3",
