@@ -31,9 +31,9 @@ The file `VERSION` holds the next version: `vX.Y.Z-alpha.N`, `-beta.N` or `-rc.N
 `v0.6.0-alpha.1`. You never type a version into the workflow. Always run it as a dry run first: the
 preview shows the version, the tag and the changelog section.
 
-A pull request that changes `.github/workflows/release.yml`, `.goreleaser.yaml`, `VERSION` or
-`CHANGELOG.md` runs the same workflow as a dry run. It never makes a real run, and it skips the release
-pull request itself.
+A pull request that changes `.github/workflows/release.yml`, `.github/workflows/release-dry-run.yml`,
+`.goreleaser.yaml`, `VERSION` or `CHANGELOG.md` runs a dry run in `release-dry-run.yml`. That file has no
+dispatch and a fixed dry run, so it never makes a release, and it skips the release pull request itself.
 
 ## What a run does
 
