@@ -111,13 +111,13 @@ Common scopes
 
 Do not edit `CHANGELOG.md`. Add one file, `changelog.d/<issue>-<slug>.md`, holding your entry, so two PRs
 never conflict on it. The format is in `changelog.d/README.md`. A release assembles the fragments into
-`CHANGELOG.md` (`make changelog-assemble`).
+`CHANGELOG.md`.
 
 - The `changelog-fragment` CI check fails a PR that adds no fragment, or that adds a line to `CHANGELOG.md`.
-  Run it locally with `make check-changelog-fragment`.
-- A change that needs no entry (CI, tests, docs only) takes the PR label `no-changelog`. A release is
-  no PR: the Release workflow assembles `CHANGELOG.md` in its own commit
-  (`docs/development/RELEASING.md`). Dependabot and Renovate branches are skipped by themselves.
+  It is the shared check of ginsys/.github. There is no local command for it.
+- A change that needs no entry (CI, tests, docs only) takes the PR label `no-changelog`. The release
+  pull request that the Release workflow opens carries the assembled `CHANGELOG.md`
+  (`docs/development/RELEASING.md`). The check skips it, and it skips Dependabot and Renovate branches.
 
 ## Security & Secrets
 

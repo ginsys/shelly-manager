@@ -1158,7 +1158,7 @@ All notable changes to this project are documented here. The project follows Con
   resize on window resize, dispose plus listener removal on unmount. `vue-tsc`
   errors dropped from 38 to 30. (#260)
 
-## [0.5.4] - 2024-01-15
+## [0.5.4] (2024-01-15)
 
 ### 🚀 Major Features Added
 
@@ -1568,5 +1568,5 @@ If issues occur during migration:
 ### CI
 - Ensured `make test-ci` passes (coverage 43.0%, lint green).
 
-## [0.5.4-alpha] - existing baseline
+## [0.5.4-alpha] (existing baseline)
 - Refer to repository history for prior changes.
