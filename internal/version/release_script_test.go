@@ -238,6 +238,20 @@ func TestReleaseScriptDryRun(t *testing.T) {
 			}
 		})
 	}
+	// A runner sets CI=true on every job, the preview's too: a dry run still writes nothing.
+	for _, c := range []releaseCase{releaseCases[0], releaseCases[5]} {
+		t.Run("on a runner, "+c.name, func(t *testing.T) {
+			f := newReleaseFixture(t, c.version)
+			before := f.snapshot()
+			stdout, stderr, code := f.run(f.env(c.action, "1", true, "main"))
+			if code != 0 {
+				t.Fatalf("exit %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
+			}
+			if after := f.snapshot(); after != before {
+				t.Errorf("a dry run with CI=true changed the repositories:\nbefore:\n%s\nafter:\n%s", before, after)
+			}
+		})
+	}
 	t.Run("from another branch", func(t *testing.T) {
 		f := newReleaseFixture(t, "v0.6.0-alpha.1")
 		before := f.snapshot()
@@ -512,6 +526,22 @@ func TestReleaseWorkflowShape(t *testing.T) {
 	}
 	if !waits {
 		t.Error("the release job has no step that runs wait-publish.sh only when a tag was pushed")
+	}
+	// The preview in the guard job runs before Test and for a dry dispatch too: it is a dry run whatever
+	// the input says, and it is the release script without --guard.
+	previews := 0
+	guardSteps, _ := w.Jobs["guard"]["steps"].([]any)
+	for _, s := range guardSteps {
+		step, _ := s.(map[string]any)
+		if run, _ := step["run"].(string); strings.TrimSpace(run) == "bash scripts/release/release.sh" {
+			previews++
+			if env, _ := step["env"].(map[string]any); env["DRY_RUN"] != "1" {
+				t.Errorf("the preview step has DRY_RUN %v, want the literal 1", env["DRY_RUN"])
+			}
+		}
+	}
+	if previews != 1 {
+		t.Errorf("the guard job has %d preview steps, want 1", previews)
 	}
 	// `startsWith(action, 'release')` selects exactly the actions that make a tag.
 	tags := map[string]bool{}
