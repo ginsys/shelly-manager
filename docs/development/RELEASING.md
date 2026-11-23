@@ -65,6 +65,9 @@ A real run that makes a tag (`release` and the three `release-as-*`):
 
 The three actions that only move `VERSION` do steps 1, 3 (the `VERSION` commit only) and 4, then end.
 
+What an operator does with the result, the tags and files a release publishes and how to upgrade and roll
+back, is in [upgrade-and-rollback.md](../guides/upgrade-and-rollback.md).
+
 **One run at a time.** A second dispatch waits for the first. GitHub keeps one waiting run per group,
 so a third dispatch cancels the waiting second one. When the first run ends, the waiting run is
 refused, because `main` has moved.
