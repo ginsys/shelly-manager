@@ -29,6 +29,11 @@ jobs:
         run: bash scripts/release/publish-guard.sh form "$GITHUB_REF_NAME"
       - name: Refuse a commit that is not on main
         run: bash scripts/release/publish-guard.sh on-main "$GITHUB_SHA"
+      # A re-run of a released tag stops here: the images job would push its version tag again.
+      - name: Refuse a tag that already has a release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/release/publish-guard.sh no-release "$GITHUB_REF_NAME"
 
   test:
     name: Test the tagged commit
@@ -56,17 +61,10 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Refuse a tag that already has a release
-        run: |
-          out=$(gh api -i "repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME" 2>&1 || true)
-          status=$(sed -n '1s/^HTTP[^ ]* \([0-9]*\).*/\1/p' <<<"$out")
-          case "$status" in
-            404) echo "No release for $GITHUB_REF_NAME yet." ;;
-            200) echo "::error::$GITHUB_REF_NAME already has a release"; exit 1 ;;
-            *) echo "::error::cannot tell whether $GITHUB_REF_NAME has a release (answer: '${status:-none}')"; exit 1 ;;
-          esac
       - name: Checkout the tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Refuse a tag that has a release by now
+        run: bash scripts/release/publish-guard.sh no-release "$GITHUB_REF_NAME"
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
