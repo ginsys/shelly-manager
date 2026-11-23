@@ -50,29 +50,20 @@ jobs:
         uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          # What an image is built from, then one exclusion; any other path never matches. The filter is
+          # one flat list: a nested `paths:` / `paths-ignore:` mapping is read by the action as change types
+          # and matches no file, which kept every build job skipped.
+          predicate-quantifier: 'some-with-excludes'
           filters: |
             docker_relevant:
-              paths:
-                - 'deploy/docker/**'
-                - 'go.mod'
-                - 'go.sum'
-                - 'cmd/**'
-                - 'internal/**'
-                - 'configs/**'
-              paths-ignore:
-                - '**/*_test.go'
-                - '.github/**'
-                - 'docs/**'
-                - 'deploy/docker-compose/**'
-                - 'ui/**'
-                - 'web/**'
-                - 'AGENTS.md'
-                - 'README.md'
-                - 'CHANGELOG.md'
-                - 'changelog.d/**'
-                - 'TASKS.md'
-                - 'CONTRIBUTING.md'
-                - 'LICENSE'
+              - 'deploy/docker/**'
+              - 'go.mod'
+              - 'go.sum'
+              - 'cmd/**'
+              - 'internal/**'
+              - 'configs/**'
+              - 'ui/**'
+              - '!**/*_test.go'
 
       - name: Summarize change detection
         if: ${{ inputs.version == '' }}
