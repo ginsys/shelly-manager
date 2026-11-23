@@ -17,6 +17,7 @@ import (
 const waitFakeGH = `#!/usr/bin/env bash
 case "$1 $2" in
 "run list")
+    echo x >> "$FAKE_DIR/lists"
     if [ -n "${FAKE_LIST_ERR:-}" ]; then echo "$FAKE_LIST_ERR" >&2; exit 1; fi
     printf '%s' "${FAKE_LIST:-}"
     ;;
@@ -43,6 +44,7 @@ type waitCase struct {
 	env       []string // tunables
 	wantCode  int
 	wantOut   string // in stdout or stderr
+	maxLists  int    // `run list` calls allowed (0 = no limit)
 	maxViews  int    // `run view` calls allowed (0 = no limit)
 	wantViews int    // at least this many (0 = none required)
 }
@@ -57,19 +59,24 @@ func TestWaitPublish(t *testing.T) {
 		{name: "a cancelled Publish", list: "123", view: []string{"cancelled"},
 			env: fast, wantCode: 1, wantOut: "concluded cancelled"},
 		{name: "a run that never starts", list: "", env: fast, wantCode: 1, wantOut: "did not start"},
+		// The start limit is above the miss limit, so only the miss limit can end this run early.
 		{name: "a bad token on the run list", listErr: "HTTP 403: Resource not accessible by integration",
-			env: fast, wantCode: 1, wantOut: "Resource not accessible"},
+			env:      []string{"WAIT_POLL=0.05", "WAIT_START_TRIES=10", "WAIT_MISSES=3", "WAIT_DEADLINE=30"},
+			wantCode: 1, wantOut: "Cannot read the runs", maxLists: 3},
 		{name: "a bad token on the run view", list: "123",
 			view: []string{"ERR:HTTP 403: Resource not accessible by integration"},
 			env:  fast, wantCode: 1, wantOut: "Resource not accessible", maxViews: 3, wantViews: 3},
 		{name: "an empty answer again and again", list: "123", view: []string{"EMPTY"},
 			env: fast, wantCode: 1, wantOut: "empty answer", maxViews: 3, wantViews: 3},
-		{name: "one failed read between good ones", list: "123",
-			view: []string{"in_progress", "ERR:HTTP 502", "in_progress", "ERR:HTTP 502", "success"},
-			env:  fast, wantOut: "completed", wantViews: 5},
+		// Three failed reads in all, against WAIT_MISSES=3, but never two in a row: the count resets.
+		{name: "failed reads between good ones", list: "123",
+			view: []string{"in_progress", "ERR:HTTP 502", "in_progress", "ERR:HTTP 502", "in_progress", "ERR:HTTP 502", "success"},
+			env:  fast, wantOut: "completed", wantViews: 7},
+		// A deadline of one second at 0.05 s a read: about 20 reads. A loop that counted reads against
+		// the deadline in seconds would stop after one.
 		{name: "a run that never finishes", list: "123", view: []string{"in_progress"},
 			env:      []string{"WAIT_POLL=0.05", "WAIT_START_TRIES=3", "WAIT_MISSES=3", "WAIT_DEADLINE=1"},
-			wantCode: 1, wantOut: "did not finish"},
+			wantCode: 1, wantOut: "did not finish", wantViews: 5},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -88,6 +95,13 @@ func TestWaitPublish(t *testing.T) {
 			n := 0 // the `run view` reads the fake counted
 			if b, err := os.ReadFile(filepath.Join(dir, "n")); err == nil {
 				n, _ = strconv.Atoi(strings.TrimSpace(string(b)))
+			}
+			lists := 0 // the `run list` reads the fake counted
+			if b, err := os.ReadFile(filepath.Join(dir, "lists")); err == nil {
+				lists = strings.Count(string(b), "x")
+			}
+			if c.maxLists > 0 && lists > c.maxLists {
+				t.Errorf("%d `run list` reads, want at most %d: the start loop did not stop", lists, c.maxLists)
 			}
 			if c.maxViews > 0 && n > c.maxViews {
 				t.Errorf("%d `run view` reads, want at most %d: the wait did not stop", n, c.maxViews)
