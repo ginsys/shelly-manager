@@ -1,0 +1,96 @@
+name: Release Publish
+
+# Runs when a v* tag is pushed: refuses a bad tag, tests the tagged commit, builds both images
+# through docker-build.yml, then creates a GitHub pre-release (never Latest) holding the provisioner
+# archives, SHA256SUMS and the tag's CHANGELOG.md section. Nothing in it makes a tag.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    name: Check the tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout the tag with the history of main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - name: Refuse a tag that is not vX.Y.Z or vX.Y.Z-alpha|beta|rc.N
+        run: bash scripts/release/publish-guard.sh form "$GITHUB_REF_NAME"
+      - name: Refuse a commit that is not on main
+        run: bash scripts/release/publish-guard.sh on-main "$GITHUB_SHA"
+
+  test:
+    name: Test the tagged commit
+    needs: guard
+    permissions:
+      contents: read
+    uses: ./.github/workflows/test.yml
+
+  images:
+    name: Build and push both images
+    needs: test
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/docker-build.yml
+    with:
+      version: ${{ github.ref_name }}
+
+  release:
+    name: Create the pre-release
+    needs: [guard, test, images]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Refuse a tag that already has a release
+        run: |
+          out=$(gh api -i "repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME" 2>&1 || true)
+          status=$(sed -n '1s/^HTTP[^ ]* \([0-9]*\).*/\1/p' <<<"$out")
+          case "$status" in
+            404) echo "No release for $GITHUB_REF_NAME yet." ;;
+            200) echo "::error::$GITHUB_REF_NAME already has a release"; exit 1 ;;
+            *) echo "::error::cannot tell whether $GITHUB_REF_NAME has a release (answer: '${status:-none}')"; exit 1 ;;
+          esac
+      - name: Checkout the tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: '.go-version'
+          cache: false
+      - name: Build, pack and sum the provisioner for linux amd64 and arm64
+        run: |
+          set -euo pipefail
+          mkdir dist
+          for arch in amd64 arm64; do
+            name="shelly-provisioner_${GITHUB_REF_NAME}_linux_${arch}"
+            mkdir "dist/$name"
+            CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -trimpath \
+              -ldflags "-s -w -X github.com/ginsys/shelly-manager/internal/version.Version=$GITHUB_REF_NAME" \
+              -o "dist/$name/shelly-provisioner" ./cmd/shelly-provisioner
+            cp LICENSE "dist/$name/"
+            tar -C dist -czf "dist/$name.tar.gz" "$name"
+            if [ "$arch" = amd64 ]; then ./"dist/$name/shelly-provisioner" --version | grep -qF "$GITHUB_REF_NAME"; fi
+            rm -r "dist/${name:?}"
+          done
+          (cd dist && sha256sum -- *.tar.gz > SHA256SUMS)
+      - name: Write the notes from CHANGELOG.md
+        run: bash scripts/release/publish-guard.sh notes "$GITHUB_REF_NAME" > dist/notes.md
+      - name: Create the pre-release
+        run: |
+          gh release create "$GITHUB_REF_NAME" --verify-tag --prerelease --latest=false \
+            --title "$GITHUB_REF_NAME" --notes-file dist/notes.md dist/*.tar.gz dist/SHA256SUMS
