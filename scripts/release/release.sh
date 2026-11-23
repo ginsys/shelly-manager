@@ -337,6 +337,9 @@ main() {
             || die "HEAD is detached: set RELEASE_BRANCH to the branch being released."
     fi
     guard
+    # GitHub sets CI=true on every runner, the workflow's dry-run preview included: that is safe only
+    # because setup_ci, the push and set_output each stay off when DRY_RUN=1 (cut_release and
+    # move_version return before them).
     if [ "${CI:-}" = true ] && [ "$DRY_RUN" != 1 ]; then
         setup_ci
     fi

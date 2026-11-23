@@ -59,8 +59,9 @@ A real run that makes a tag (`release` and the three `release-as-*`):
 4. **Push.** `main` and the tag go in **one atomic push** with the App token. If `main` moved during
    the Test wait, or the push is refused, nothing is published.
 5. **Publish.** The tag starts `Release Publish`, which builds both images and makes the pre-release.
-   The run waits for it (at most 90 minutes) and is red if Publish is red. One green run means the
-   version is out.
+   The run waits for it (`scripts/release/wait-publish.sh`, at most 90 minutes) and is red if Publish is
+   red. It is also red, with the `gh` error printed, after about a minute of reads that fail or answer
+   nothing (a bad token, a missing `actions: read`). One green run means the version is out.
 
 The three actions that only move `VERSION` do steps 1, 3 (the `VERSION` commit only) and 4, then end.
 

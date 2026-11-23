@@ -501,6 +501,18 @@ func TestReleaseWorkflowShape(t *testing.T) {
 	if got := jobNeeds(w.Jobs["release"]); strings.Join(got, ",") != "guard,test" {
 		t.Errorf("job release needs %v, want [guard test]", got)
 	}
+	// The wait is the script TestWaitPublish drives, and it runs only when the release script wrote a tag.
+	steps, _ := w.Jobs["release"]["steps"].([]any)
+	waits := false
+	for _, s := range steps {
+		step, _ := s.(map[string]any)
+		if run, _ := step["run"].(string); strings.Contains(run, "scripts/release/wait-publish.sh") {
+			waits = step["if"] == "${{ steps.run.outputs.tag != '' }}"
+		}
+	}
+	if !waits {
+		t.Error("the release job has no step that runs wait-publish.sh only when a tag was pushed")
+	}
 	// `startsWith(action, 'release')` selects exactly the actions that make a tag.
 	tags := map[string]bool{}
 	for _, c := range releaseCases {
