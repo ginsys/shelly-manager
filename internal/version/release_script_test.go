@@ -395,6 +395,21 @@ func TestReleaseScriptAtomicPush(t *testing.T) {
 	}
 }
 
+// jobNeeds is a job's `needs` as a list (the key may hold one name or several).
+func jobNeeds(job map[string]any) []string {
+	switch n := job["needs"].(type) {
+	case string:
+		return []string{n}
+	case []any:
+		var out []string
+		for _, v := range n {
+			out = append(out, v.(string))
+		}
+		return out
+	}
+	return nil
+}
+
 type workflowFile struct {
 	On struct {
 		Dispatch struct {
@@ -464,5 +479,36 @@ func TestReleaseWorkflowShape(t *testing.T) {
 	}
 	if got := w.Jobs["test"]["uses"]; got != "./.github/workflows/test.yml" {
 		t.Errorf("job test uses %v, want ./.github/workflows/test.yml", got)
+	}
+
+	// Test first: the conditions are pinned as written, so a Test that always skips, or a release that
+	// runs after a failed guard or Test, changes this text and fails here. The expressions themselves
+	// are GitHub's to evaluate; what this test ties to the script is which actions the `test` job covers.
+	const (
+		wantTestIf    = "${{ !inputs.dry_run && startsWith(inputs.action, 'release') }}"
+		wantReleaseIf = "${{ !cancelled() && !inputs.dry_run && needs.guard.result == 'success' && " +
+			"(needs.test.result == 'success' || needs.test.result == 'skipped') }}"
+	)
+	if got := w.Jobs["test"]["if"]; got != wantTestIf {
+		t.Errorf("job test: if is %q, want %q", got, wantTestIf)
+	}
+	if got := w.Jobs["release"]["if"]; got != wantReleaseIf {
+		t.Errorf("job release: if is %q, want %q", got, wantReleaseIf)
+	}
+	if got := jobNeeds(w.Jobs["test"]); strings.Join(got, ",") != "guard" {
+		t.Errorf("job test needs %v, want [guard]", got)
+	}
+	if got := jobNeeds(w.Jobs["release"]); strings.Join(got, ",") != "guard,test" {
+		t.Errorf("job release needs %v, want [guard test]", got)
+	}
+	// `startsWith(action, 'release')` selects exactly the actions that make a tag.
+	tags := map[string]bool{}
+	for _, c := range releaseCases {
+		tags[c.action] = c.tag != ""
+	}
+	for _, a := range wantActions {
+		if got := strings.HasPrefix(a, "release"); got != tags[a] {
+			t.Errorf("action %s: the Test condition covers it = %v, but it makes a tag = %v", a, got, tags[a])
+		}
 	}
 }
