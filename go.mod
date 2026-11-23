@@ -8,7 +8,7 @@ require (
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/cyberphone/json-canonicalization v0.0.0-20261011152517-32a48195b9b2
 	github.com/glebarez/sqlite v1.11.0
-	github.com/go-sql-driver/mysql v1.10.1
+	github.com/go-sql-driver/mysql v1.10.2
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
 	github.com/gorilla/websocket v1.5.3
