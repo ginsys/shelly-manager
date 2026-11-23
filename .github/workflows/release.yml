@@ -4,10 +4,8 @@ name: Release
 # whether it is a dry run (the default). A real run cuts a release pull request, waits for its merge and
 # makes the tag. How to run it: docs/development/RELEASING.md.
 #
-# A pull request that changes a release file runs the same workflow as a dry run, so a change to the
-# release is proved before it merges. On that event `inputs.dry_run` is empty, so every dry-run test
-# below uses the one expression `github.event_name == 'pull_request' || inputs.dry_run`. A test that
-# names `inputs.dry_run` alone would read a pull request as a real run.
+# This file has one trigger, a dispatch, because it can make a real release. The dry run that proves a
+# change to the release before it merges is release-dry-run.yml.
 on:
   workflow_dispatch:
     inputs:
@@ -29,26 +27,16 @@ on:
         required: false
         type: boolean
         default: true
-  pull_request:
-    branches: [ main ]
-    paths:
-      - '.github/workflows/release.yml'
-      - '.goreleaser.yaml'
-      - 'VERSION'
-      - 'CHANGELOG.md'
 
 permissions:
   contents: read
 
 jobs:
   release:
-    # The release pull request itself changes VERSION and CHANGELOG.md, and its new section has no tag
-    # until the merge, so the dry run would fail there for a reason that is not a fault.
-    if: ${{ github.event_name != 'pull_request' || !startsWith(github.head_ref, 'release/') }}
     permissions:
       contents: write
       pull-requests: read
     uses: ginsys/.github/.github/workflows/release.yml@31fe25d73f696b3b13d7a728f4d5dd4518d58a86 # 2026-11-23
     with:
-      action: ${{ inputs.action || 'release' }}
-      dry_run: ${{ github.event_name == 'pull_request' || inputs.dry_run }}
+      action: ${{ inputs.action }}
+      dry_run: ${{ inputs.dry_run }}
