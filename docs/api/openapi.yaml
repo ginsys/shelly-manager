@@ -11,6 +11,9 @@ info:
     - Real-time metrics via WebSocket
     - Multi-channel notifications
     - Provisioner agent management
+  # The version of this API document, kept by hand. The application's version is not set here: the root
+  # VERSION file names the next release, and a binary reports the version it was built as
+  # (`shelly-manager --version`, GET /api/v1/version).
   version: 1.0.0
   contact:
     name: Shelly Manager

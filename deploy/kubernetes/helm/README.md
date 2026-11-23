@@ -70,7 +70,7 @@ name: shelly-manager
 description: Smart home device manager for Shelly devices
 type: application
 version: 0.1.0
-appVersion: "0.5.0-alpha"
+appVersion: "<the release version without its v, from the root VERSION file>"
 home: https://github.com/ginsys/shelly-manager
 sources:
 - https://github.com/ginsys/shelly-manager
@@ -90,6 +90,10 @@ dependencies:
   tags:
   - database
 ```
+
+`version` is the chart's own version. `appVersion` is the application version of the release the chart deploys: take it from
+the root `VERSION` file (the next release; a plain build reports it with `-dev` added) and drop the leading `v`, so this page
+carries no number that goes stale at the next release.
 
 ### Default Values (values.yaml)
 ```yaml
