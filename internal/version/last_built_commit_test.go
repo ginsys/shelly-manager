@@ -4,6 +4,8 @@ package version
 // test in that output; this repository's bash fixture tests run in their own workflow.
 
 import (
+	"bytes"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,6 +13,47 @@ import (
 	"strings"
 	"testing"
 )
+
+// runScript runs a repository script (a path relative to this package) with bash.
+func runScript(t *testing.T, path, dir string, env []string, args ...string) (stdout, stderr string, code int) {
+	t.Helper()
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash is not installed")
+	}
+	script, err := filepath.Abs(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("bash", append([]string{script}, args...)...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), env...)
+	var out, errOut bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &out, &errOut
+	runErr := cmd.Run()
+	var exitErr *exec.ExitError
+	switch {
+	case runErr == nil:
+	case errors.As(runErr, &exitErr):
+		code = exitErr.ExitCode()
+	default:
+		t.Fatalf("run %v: %v", args, runErr)
+	}
+	return out.String(), errOut.String(), code
+}
+
+func git(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-c", "commit.gpgsign=false"}, args...)...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
+		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.test",
+		"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.test")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+	return strings.TrimSpace(string(out))
+}
 
 // fakeGH writes a gh that records its arguments, fails when FAKE_FAIL is set, and otherwise applies the
 // --jq expression it is given to FAKE_JSON, as gh does.

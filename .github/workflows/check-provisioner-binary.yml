@@ -1,0 +1,49 @@
+name: Check provisioner binary
+
+# Part of the Release workflow and its dry run: after the shared Go build uploads the archives as the
+# artifact `release-go`, run the linux amd64 provisioner and fail unless it reports the release tag.
+# A build that does not stamp the tag would otherwise ship a binary that says another version.
+# It uploads nothing, so it adds no `release-*` artifact for the publish step.
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: 'The release tag, as the Release workflow outputs it'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  check-binary:
+    name: Check that the binary reports the tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Download the archives
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-go
+          path: dist
+      - name: Run the linux amd64 binary and read its version
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          archives=(dist/shelly-provisioner_*_linux_amd64.tar.gz)
+          if [ "${#archives[@]}" -ne 1 ] || [ ! -f "${archives[0]}" ]; then
+            echo "::error::expected one linux amd64 provisioner archive in dist, found: ${archives[*]}"
+            exit 1
+          fi
+          mkdir unpacked
+          tar -xzf "${archives[0]}" -C unpacked
+          binary=$(find unpacked -type f -name shelly-provisioner)
+          reported=$("$binary" --version)
+          echo "$reported"
+          if ! grep -qF -- "$TAG" <<<"$reported"; then
+            echo "::error::the binary reports '$reported', not the tag $TAG"
+            exit 1
+          fi

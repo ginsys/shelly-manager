@@ -1,9 +1,10 @@
 name: Release dry run
 
-# Proves the release workflow before a change to it merges: a dry run of the shared release workflow on
-# the pull request, with no secret. The dry run is literal (`dry_run: true`) and this file has no
-# dispatch, so it can never make a release. It is not a required check: a pull request from a fork has a
-# read-only token, so the called workflow, which asks for `contents: write`, does not start there.
+# Proves the release workflow before a change to it merges: a dry run of the shared release workflow,
+# the provisioner build and the publish step on the pull request, with no secret. The dry run is
+# literal (`dry_run: true`) and this file has no dispatch and no image job, so it can never make a
+# release or push an image. It is not a required check: a pull request from a fork has a read-only
+# token, so the called workflow, which asks for `contents: write`, does not start there.
 # The real release is release.yml.
 
 on:
@@ -12,6 +13,7 @@ on:
     paths:
       - '.github/workflows/release.yml'
       - '.github/workflows/release-dry-run.yml'
+      - '.github/workflows/check-provisioner-binary.yml'
       - '.goreleaser.yaml'
       - 'VERSION'
       - 'CHANGELOG.md'
@@ -31,3 +33,36 @@ jobs:
     with:
       action: release
       dry_run: true
+
+  build:
+    needs: release
+    if: ${{ needs.release.outputs.tag != '' }}
+    permissions:
+      contents: read
+    uses: ginsys/.github/.github/workflows/build-go.yml@31fe25d73f696b3b13d7a728f4d5dd4518d58a86 # 2026-11-23
+    with:
+      tag: ${{ needs.release.outputs.tag }}
+      sha: ${{ needs.release.outputs.sha }}
+      go-version-file: .go-version
+
+  check-binary:
+    needs: [release, build]
+    if: ${{ needs.release.outputs.tag != '' }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/check-provisioner-binary.yml
+    with:
+      tag: ${{ needs.release.outputs.tag }}
+
+  publish:
+    needs: [release, build, check-binary]
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.check-binary.result == 'success' }}
+    # A dry run reads and previews only, so it needs no write grant.
+    permissions:
+      contents: read
+    uses: ginsys/.github/.github/workflows/publish-github.yml@31fe25d73f696b3b13d7a728f4d5dd4518d58a86 # 2026-11-23
+    with:
+      tag: ${{ needs.release.outputs.tag }}
+      sha: ${{ needs.release.outputs.sha }}
+      dry_run: true
+      notes-footer: 'Back up the database before you upgrade. To roll back, restore that backup and pin the previous tag.'
