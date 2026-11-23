@@ -44,6 +44,7 @@ docs/
 | [sma-format.md](guides/sma-format.md) | SMA (Shelly Manager Archive) format specification |
 | [provisioner-status.md](guides/provisioner-status.md) | What `shelly-provisioner status` reports for the Wi-Fi device, and how a device that cannot scan fails discovery |
 | [database-upgrade.md](guides/database-upgrade.md) | Upgrading an existing database: startup schema repair, and how to resolve a refused upgrade |
+| [upgrade-and-rollback.md](guides/upgrade-and-rollback.md) | Moving a running install to the next release and back: the tags a release publishes, where to pin one, the backup, and the order of a rollback |
 
 ---
 
