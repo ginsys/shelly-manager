@@ -1,5 +1,9 @@
 # Design note: a release workflow for shelly-manager
 
+**Build state, 2026-11-23:** slices 1, 2 and 4 are merged; slice 3 (the release script and workflow) is
+built and described in [RELEASING.md](RELEASING.md). No release has been made: the first real run is the
+owner's, after the App of section 6 point 1 exists.
+
 Status: proposal, revision 2. Section 6 lists the points that are still the owner's, one
 recommendation each. Nothing is built, tagged or released by this note, and no workflow file changes
 with it. The build is cut into slices (section 7) that are briefed after the owner confirms.
