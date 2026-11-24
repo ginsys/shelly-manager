@@ -13,7 +13,8 @@ must exist first:
 
 1. The GitHub App `ginsys-release-bot`, installed on this repository, with no bypass of any ruleset.
 2. An environment named `release`, limited to the branch `main`, with the secrets `RELEASE_APP_ID` and
-   `RELEASE_APP_PRIVATE_KEY`.
+   `RELEASE_APP_PRIVATE_KEY`. `release.yml` passes these two by name to the shared workflow: a called
+   workflow does not see an environment secret its caller does not pass.
 3. Auto-merge allowed in the repository. It is.
 
 A dry run needs none of this. It reads no secret.

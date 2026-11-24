@@ -42,6 +42,11 @@ jobs:
     with:
       action: ${{ inputs.action }}
       dry_run: ${{ inputs.dry_run }}
+    # A called workflow gets an environment secret only when its caller passes it: unpassed, the
+    # secret reads as empty and the App token step fails. Only these two are passed, never `inherit`.
+    secrets:
+      RELEASE_APP_ID: ${{ secrets.RELEASE_APP_ID }}
+      RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
 
   # The three jobs below run only for an action that makes a tag: the others leave `tag` empty.
   build:
