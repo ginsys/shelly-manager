@@ -38,7 +38,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: read
-    uses: ginsys/.github/.github/workflows/release.yml@31fe25d73f696b3b13d7a728f4d5dd4518d58a86 # 2026-11-23
+    uses: ginsys/.github/.github/workflows/release.yml@70de051b078cd89baef547bb7510421f0553d90d # 2026-11-24
     with:
       action: ${{ inputs.action }}
       dry_run: ${{ inputs.dry_run }}
@@ -49,7 +49,7 @@ jobs:
     if: ${{ needs.release.outputs.tag != '' }}
     permissions:
       contents: read
-    uses: ginsys/.github/.github/workflows/build-go.yml@31fe25d73f696b3b13d7a728f4d5dd4518d58a86 # 2026-11-23
+    uses: ginsys/.github/.github/workflows/build-go.yml@70de051b078cd89baef547bb7510421f0553d90d # 2026-11-24
     with:
       tag: ${{ needs.release.outputs.tag }}
       sha: ${{ needs.release.outputs.sha }}
@@ -82,7 +82,7 @@ jobs:
     if: ${{ !cancelled() && needs.build.result == 'success' && needs.check-binary.result == 'success' && (needs.images.result == 'success' || needs.images.result == 'skipped') }}
     permissions:
       contents: write
-    uses: ginsys/.github/.github/workflows/publish-github.yml@31fe25d73f696b3b13d7a728f4d5dd4518d58a86 # 2026-11-23
+    uses: ginsys/.github/.github/workflows/publish-github.yml@70de051b078cd89baef547bb7510421f0553d90d # 2026-11-24
     with:
       tag: ${{ needs.release.outputs.tag }}
       sha: ${{ needs.release.outputs.sha }}
