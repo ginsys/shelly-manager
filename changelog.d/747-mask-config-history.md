@@ -1,2 +1,0 @@
-Security
-- `GET /devices/{id}/config/history` no longer returns saved device secrets. It showed the configuration before and after each change, and the changed values, in clear, so a stored device password was in an admin-route answer. The three fields now follow the rules of `GET /devices/{id}/config`: a value under a secret key is the mask, also inside a changed or removed section. The stored history rows keep the real values. Refs ginsys/shelly-manager#747.

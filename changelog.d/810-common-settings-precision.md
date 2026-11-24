@@ -1,2 +1,0 @@
-Fixed
-- The common-settings answer no longer offers a list whose elements share nothing but their `id`, or a `null` that every device holds, as common settings. A list is kept only when every element keeps something beyond its `id`, otherwise the whole list is left out, and what is left out is counted in the per-section number of differing values. Known limit: a zero-filled field (`color: 0`) still compares equal to an explicit 0, because a stored document does not tell the two apart. Fixes ginsys/shelly-manager#810.

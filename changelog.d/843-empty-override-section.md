@@ -1,2 +1,0 @@
-Fixed
-- An override or template that holds only empty, `false` or `0` plain values, such as `{"system":{"sntp":{"server":""}}}`, no longer leaves an empty section in the desired configuration that apply refuses. The route still answers 200 and stores the override as sent; only the desired configuration has no such section. A device that already holds such a section in its desired configuration applies, verifies and is drift-checked as if the section were not there (ginsys/shelly-manager#863). Fixes ginsys/shelly-manager#843.

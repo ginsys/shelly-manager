@@ -1,2 +1,0 @@
-Added
-- The service can now set a device's desired configuration back to a stored version: the whole version becomes the device's overrides, its templates are detached, and the device stays pending until an apply. A version that a recompute would change, or that the device changed under (an edit in between), is refused and nothing is written; a rollback to what the device already holds writes nothing. Refs ginsys/shelly-manager#775.

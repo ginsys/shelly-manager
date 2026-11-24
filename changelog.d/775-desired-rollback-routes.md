@@ -1,2 +1,0 @@
-Added
-- `POST /api/v1/devices/{id}/config/new/rollback` sets a device's desired configuration back to a stored version, and `GET /api/v1/devices/{id}/desired-config/history` lists the versions. The device is not contacted and stays pending until an apply. A secret is never restored from history: the current one is kept where the place it is sent to is unchanged, and for every other the route answers 409 with the paths and takes the secrets you enter on the retry. Refs ginsys/shelly-manager#775.

@@ -1,2 +1,0 @@
-Fixed
-- A template or override that sets a plain setting, such as the SNTP time server, now reaches the device's desired configuration; the merge used to drop it with no error. A device shows as pending after its next recompute, which saving its template or override again starts, and apply then writes the time server. An empty value in a later layer does not clear an earlier value. The debug, RPC, sleep, UI-data and BLE settings still cannot be applied and are still refused, as before. Fixes ginsys/shelly-manager#839.

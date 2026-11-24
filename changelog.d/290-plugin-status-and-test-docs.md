@@ -1,2 +1,0 @@
-Changed
-- The plugin list (`GET /api/v1/export/plugins`) no longer returns `status.configured`, which was always `true`: plugin configuration is not stored, so there is nothing to report. `status` keeps `available` and `enabled`. A client that reads `configured` finds it absent. The docs now say that testing a plugin means `POST /api/v1/export/preview`, a dry run that does not check OPNsense credentials. Fixes ginsys/shelly-manager#290.

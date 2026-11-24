@@ -1,3 +1,0 @@
-Fixed
-
-- The main image build now compares against the commit the images were last built from, not against the last commit of the push. A push of several commits is one Test run on its tip, so a README tip hid an earlier commit that changed `deploy/docker/**` or Go code, and no image was built. The build reads the commit from the date-sha tag of the newest `latest` image of `shelly-provisioner`, which the build makes from the commit it checked out; if that read fails or names no commit in this history, the run builds. A release call with a `version` is unchanged and always builds. Refs ginsys/shelly-manager#846.

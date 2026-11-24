@@ -1,2 +1,0 @@
-Added
-- The devices list now has a Refresh button in the toolbar and an `R` shortcut that reload the list. The button shows `Refreshing...` and stays off while a load runs, and the shortcut does nothing while you type in a field, hold a modifier key or have a dialog open. A device selection is kept across a refresh. An older list answer that arrives after a newer one is now dropped, so a page change during a refresh no longer shows stale rows. Fixes ginsys/shelly-manager#80.

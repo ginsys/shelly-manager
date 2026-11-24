@@ -1,2 +1,0 @@
-Fixed
-- `shelly-manager discover` says "Added to database" for a device that the run added and "Already in database" for a known one; it printed "Already in database" for every device. `shelly-manager add <ip> [name]` no longer fails with a duplicate key on every call: it reports the device at that address as added, applies the name, or says the device is already known. Fixes ginsys/shelly-manager#585.
