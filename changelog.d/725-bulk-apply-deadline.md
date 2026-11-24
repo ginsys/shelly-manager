@@ -1,2 +1,0 @@
-Fixed
-- `POST /api/v1/config/bulk-apply` no longer ends in a 408 with no result after writing to some devices. The call has a request deadline of 5 minutes (every other route keeps 30 seconds) and a run budget of 4 minutes: when the budget is spent or the client has left, no later device is started, it is reported `skipped` with a reason and has nothing stored, and the device being written is not cut by the client leaving. A 408 on this route can still happen (for example when a device ignores its context), and then the outcome is unknown. Fixes ginsys/shelly-manager#725.

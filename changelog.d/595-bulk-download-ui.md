@@ -1,2 +1,0 @@
-Added
-- The bulk operations dialog has a Download Configuration card. It saves the desired configuration of the picked devices as one JSON file, with every secret masked as `********`, so the file cannot restore a device. No device is contacted, and a device that cannot be read is listed with the reason. The dialog shows the route's own text when it refuses a request, such as more than 10 devices, and the export and backup downloads now show a refusal's reason too. Fixes ginsys/shelly-manager#595.

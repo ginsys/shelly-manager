@@ -1,2 +1,0 @@
-Fixed
-- A provisioner register without a public key that holds a NUL byte in its id, hostname, version, capabilities or metadata is now refused with `400` on every database, before the store is read. On PostgreSQL such an id answered `500`, and on SQLite one that started with `provisioner-` was stored, because the id rule exempts that prefix. An agent row that already holds a NUL in its id (only a hand-made request could have written one on SQLite or MySQL) can no longer register again: the admin removes it. Fixes ginsys/shelly-manager#852.

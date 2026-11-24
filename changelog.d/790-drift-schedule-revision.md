@@ -1,3 +1,0 @@
-Changed
-
-- A drift schedule update now carries the `revision` the caller read. `PUT /api/v1/config/drift-schedules/{id}` writes only if it is still the stored revision; another one is `409` with the current schedule in `error.details` and nothing is written, and a body without `revision` is `400`. Every schedule answer now carries `revision`. A save from an old copy of a schedule can no longer put its old fields back after an edit or a toggle. The Drift schedules page sends the revision it opened and, on a `409`, shows "This schedule changed since you opened it. Close this form and open the schedule again.", turns Save off in that form and keeps the current schedule in the list. Fixes ginsys/shelly-manager#790.

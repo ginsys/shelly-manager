@@ -1,3 +1,0 @@
-Fixed
-
-- The JSON and YAML exports now write their file (plain, gzip or zip) through the opened export directory (`os.Root`), as the SMA and GitOps exports do, so a symbolic link swapped in between the path check and the write can no longer send the write outside the export directory. A link whose target is an absolute path is now refused there too, even one that points inside the directory. A gzip or zip export now closes the archive before it syncs the file and reports a failure of that close (the trailer is written there), so a full disk no longer leaves a truncated archive reported as a success. Refs ginsys/shelly-manager#815.
